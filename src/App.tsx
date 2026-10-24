@@ -66,7 +66,7 @@ function openingBriefing(game: GameView) {
   return [
     `Welcome to Valombre. ${roleBriefing[me.role]}`,
     "The village wins by removing every Werewolf. The Werewolves win when they equal or outnumber everyone else. Nights are private; mornings are for public discussion and a village vote.",
-    `Use the on-screen buttons, or enable Voice Guide and speak naturally. At night, ${nightVoiceExample[me.role]}. During the morning, say ‘Camille, why do you suspect Noémie?’ or ‘tell the village I trust Jules’ to post a public message; the villagers will answer. Say ‘hear the villagers’, ‘begin vote’, ‘vote for Camille’, or ‘what can I do?’ at any time.`,
+    `Your voice companion is already listening after microphone permission. At night, ${nightVoiceExample[me.role]}, or simply say ‘choose Camille’. During the morning, say ‘Camille, why do you suspect Noémie?’ or ‘tell the village I trust Jules’ to post a public message; the villagers will answer. Say ‘hear the villagers’, ‘begin vote’, ‘vote for Camille’, or ‘what can I do?’ at any time.`,
     "For the full hands-free control list, say ‘voice help’. You can also say ‘repeat that’, ‘pause narration’, ‘speak slower’, ‘pause game’, ‘resume game’, or ‘stop voice control’.",
     nextStep,
   ].join(" ");
@@ -98,7 +98,7 @@ function currentActionHelp(game: GameView) {
   if (game.phase === "night") {
     if (me.role === "werewolf")
       return "It is night. Say ‘hunt’ and a living player’s name, or say ‘let the pack decide’.";
-    if (me.role === "seer") return "It is night. Say ‘investigate’ and a living player’s name.";
+    if (me.role === "seer") return "It is night. Say ‘choose’ or ‘investigate’ followed by a living player’s name.";
     if (me.role === "witch")
       return "It is night. Say ‘save’, ‘poison’ and a living player’s name, or ‘pass’.";
     return "It is night. Say ‘wait for dawn’ to continue.";
@@ -106,10 +106,27 @@ function currentActionHelp(game: GameView) {
   if (game.phase === "day")
     return "It is day. Speak to the village naturally, say ‘hear the villagers’, or say ‘begin vote’.";
   if (game.phase === "vote")
-    return "Voting is open. Say ‘vote for’ and a living player’s name. Your vote is final.";
+    return "Voting is open. Say ‘choose’, ‘select’, or ‘vote for’ and a living player’s name. Your vote is final.";
   if (game.phase === "hunter")
     return "You have one final shot. Say ‘shoot’ and a living player’s name.";
   return "Ask the guide to describe the current phase.";
+}
+
+function voiceActionFeedback(game: GameView, command: string) {
+  const normalized = normalizeVoiceText(command);
+  const newestPrivate = [...game.feed].reverse().find((entry) => entry.kind === "private");
+  const newestEvent = [...game.feed].reverse().find((entry) => entry.kind === "event");
+
+  if (/\b(choose|pick|select|investigate|check|inspect|hunt|attack|kill|poison|save|heal)\b/u.test(normalized)) {
+    return `Done. ${newestPrivate?.text ?? newestEvent?.text ?? "Your choice has been recorded."} ${currentActionHelp(game)}`;
+  }
+  if (/\b(vote|eliminate|exile|remove|kick out)\b/u.test(normalized)) {
+    return `Done. ${newestEvent?.text ?? "Your vote has been recorded."} ${currentActionHelp(game)}`;
+  }
+  if (/^(?:say|speak|tell|ask|message)\b/u.test(normalized)) {
+    return `Done. Your message has been sent to the village. ${currentActionHelp(game)}`;
+  }
+  return `Done. ${currentActionHelp(game)}`;
 }
 
 function roleStateSummary(game: GameView) {
@@ -166,7 +183,7 @@ function voiceHelp(game: GameView) {
     currentActionHelp(game),
     "To hear the interface in order, say ‘describe the interface’. Say ‘read my role’, ‘read the players’, ‘who is alive’, ‘read updates’, ‘read all messages’, or ‘what did Camille say?’ to hear game information.",
     "For audio, say ‘repeat that’, ‘stop speaking’, ‘pause narration’, ‘resume narration’, ‘speak slower’, ‘speak faster’, ‘volume up’, ‘volume down’, ‘turn auto read on’, or ‘turn auto read off’.",
-    "Say ‘pause game’, ‘resume game’, ‘pause voice control’, ‘resume listening’, or ‘stop voice control’ whenever you need them.",
+    "For choices, you can say ‘choose Camille’, ‘pick Jules’, ‘select Noémie’, ‘vote for Théo’, ‘choose for me’, ‘continue’, or ‘do nothing’. Say ‘pause game’, ‘resume game’, ‘pause voice control’, or ‘resume listening’ whenever you need them.",
   ].join(" ");
 }
 
@@ -379,6 +396,10 @@ export default function App() {
       if (!response.ok) throw new Error(data.error ?? "That action could not be completed.");
       const game = data as GameView;
       commitGame(game, session.token);
+      if (announceFailure)
+        queueAssistant(voiceActionFeedback(game, String(input.command ?? "")), "local", {
+          instant: true,
+        });
       setSelected([]);
       setMessage("");
       setCommandText("");
@@ -1326,8 +1347,8 @@ export default function App() {
                 </p>
                 {voiceTranscript && <p className="voice-transcript">You said: {voiceTranscript}</p>}
                 <p className="voice-examples">
-                  Say “describe the interface”, “read all messages”, “what are my options?”, “ask
-                  the villagers what they think”, or “vote for Camille”.
+                  Say “choose Camille”, “continue”, “describe the interface”, “read all messages”,
+                  “ask the villagers what they think”, or “vote for Camille”.
                 </p>
                 <details className="voice-command-reference">
                   <summary>Voice command reference</summary>
@@ -1336,9 +1357,9 @@ export default function App() {
                     is alive”, “read updates”, “read all messages”, or “what did Camille say?”.
                   </p>
                   <p>
-                    Controls: “voice help”, “repeat that”, “stop speaking”, “pause narration”,
-                    “speak slower”, “volume up”, “turn auto read on”, “pause game”, or “stop voice
-                    control”.
+                    Controls: “choose Camille”, “continue”, “voice help”, “repeat that”, “stop
+                    speaking”, “pause narration”, “speak slower”, “volume up”, “turn auto read on”,
+                    “pause game”, or “pause voice control”.
                   </p>
                 </details>
                 <form
