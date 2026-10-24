@@ -548,19 +548,21 @@ export function useChessGame({ settings }: UseChessGameOptions) {
       if (!legal) return { ok: false, message: `The move from ${from} to ${to} is not legal.` };
       const fenBefore = game.fen();
       const played = game.move({ from, to, promotion: legal.promotion ? (promotion ?? 'q') : undefined });
+      exitReviewMode();
+      setPendingPromotion(null);
       setSelectedSquare(null);
       setLegalMoves([]);
       updateState();
       afterUserMove(Boolean(played.promotion), fenBefore);
       return { ok: true, message: played.san, move: played };
     },
-    [game, isComputerThinking, updateState, afterUserMove, awaitingStartChoice, gameResult, isPaused]
+    [game, isComputerThinking, updateState, afterUserMove, awaitingStartChoice, gameResult, isPaused, exitReviewMode]
   );
 
   const getHint = useCallback(async () => {
     if (awaitingStartChoice) return { ok: false as const, message: 'Choose Resume or New Game first.' };
     if (gameResult || game.isGameOver()) return { ok: false as const, message: 'The game is already over.' };
-    if (game.turn() !== settingsRef.current.playerColor) {
+    if (settingsRef.current.gameMode === 'computer' && game.turn() !== settingsRef.current.playerColor) {
       return { ok: false as const, message: 'Wait for the computer to finish its move.' };
     }
     const engine = analysisEngineRef.current;
@@ -614,9 +616,13 @@ export function useChessGame({ settings }: UseChessGameOptions) {
   }, [handleNewGame, scheduleComputerMove]);
 
   const resumeGame = useCallback(() => {
+    if (gameResult || gameRef.current.isGameOver()) return { ok: false, message: 'The game is already over. You can review the moves or start a new game.' };
     if (!awaitingStartChoice && !isPaused) {
-      return { ok: false, message: 'The game is already active.' };
+      if (!reviewMode) return { ok: false, message: 'The game is already active.' };
+      exitReviewMode();
+      return { ok: true, message: 'Back at the live board.' };
     }
+    exitReviewMode();
     const current = gameRef.current;
     setAwaitingStartChoice(false);
     setIsPaused(false);
@@ -630,7 +636,7 @@ export function useChessGame({ settings }: UseChessGameOptions) {
       scheduleComputerMove();
     }
     return { ok: true, message: awaitingStartChoice ? 'The saved game is resumed.' : 'The game is resumed.' };
-  }, [awaitingStartChoice, isComputerThinking, isPaused, scheduleComputerMove]);
+  }, [awaitingStartChoice, isComputerThinking, isPaused, scheduleComputerMove, reviewMode, exitReviewMode, gameResult]);
 
   const pauseGame = useCallback(() => {
     if (awaitingStartChoice) return { ok: false, message: 'Choose Resume or New Game first.' };
@@ -730,6 +736,7 @@ export function useChessGame({ settings }: UseChessGameOptions) {
   const resign = useCallback(() => {
     if (awaitingStartChoice) return { ok: false, message: 'Choose Resume or New Game first.' };
     if (gameResult) return { ok: false, message: 'The game is already over.' };
+    if (game.history().length === 0) return { ok: false, message: 'Play at least one move before resigning.' };
     if (computerMoveTimeoutRef.current) {
       clearTimeout(computerMoveTimeoutRef.current);
       computerMoveTimeoutRef.current = null;
@@ -919,4 +926,6 @@ export function useChessGame({ settings }: UseChessGameOptions) {
     displayFen,
   };
 }
+
+export type ChessSession = ReturnType<typeof useChessGame>;
 

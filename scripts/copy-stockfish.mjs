@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const packageRoot = join(root, 'node_modules', 'stockfish');
 const output = join(root, 'public', 'stockfish');
-const required = ['stockfish-19-lite-single.js', 'stockfish-19-lite-single.wasm'];
+const required = ['stockfish-19-lite-single.js', 'stockfish-19-lite-single.wasm', 'Copying.txt'];
 
 async function find(directory, target) {
   for (const entry of await readdir(directory, { withFileTypes: true })) {

@@ -70,5 +70,6 @@ export interface AppSettings {
   soundEnabled: boolean;
   confirmMoves: boolean;
   screenReaderMode: boolean;
+  voiceVolume: number;
 }
 

@@ -1,12 +1,10 @@
-import { useMemo, useState } from 'react';
-import { Chess } from 'chess.js';
-import type { Square as ChessSquare, Color } from 'chess.js';
-import Square from './Square';
-import type { PieceInfo } from './Square';
-import type { BoardOrientation, BoardTheme, PieceSet } from '../../types';
+import { useMemo, useState, type KeyboardEvent } from "react";
+import { Chess, type Square as ChessSquare } from "chess.js";
+import Square from "./Square";
+import type { BoardOrientation, BoardTheme, PieceSet } from "../../types";
 
-const FILES = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'] as const;
-const RANKS = ['8', '7', '6', '5', '4', '3', '2', '1'] as const;
+const FILES = ["a", "b", "c", "d", "e", "f", "g", "h"] as const;
+const RANKS = ["8", "7", "6", "5", "4", "3", "2", "1"] as const;
 
 interface BoardProps {
   game: Chess;
@@ -18,10 +16,8 @@ interface BoardProps {
   pieceSet?: PieceSet;
   isComputerThinking?: boolean;
   lastMove?: { from: string; to: string } | null;
-  kingInCheck?: { square: string; color: 'w' | 'b' } | null;
-  /** When set, Board renders from this FEN instead of the live game */
+  kingInCheck?: { square: string; color: "w" | "b" } | null;
   displayFen?: string | null;
-  /** Inverts the configured orientation when the player presses Flip Board. */
   manualFlip?: boolean;
 }
 
@@ -30,152 +26,81 @@ export default function Board({
   selectedSquare,
   legalMoves,
   onSquareClick,
-  boardOrientation = 'white-bottom',
-  boardTheme = 'classic',
-  pieceSet = 'merida',
+  boardOrientation = "white-bottom",
+  boardTheme = "classic",
+  pieceSet = "merida",
   isComputerThinking = false,
   lastMove = null,
   kingInCheck = null,
   displayFen = null,
   manualFlip = false,
 }: BoardProps) {
-  // When displayFen is provided (review mode), use a separate Chess instance
-  // to render the historical position. Never mutate the live game.
-  const source = useMemo(() => {
-    if (!displayFen) return game;
-    const g = new Chess();
-    try {
-      g.load(displayFen);
-      return g;
-    } catch {
-      return game;
-    }
-  }, [displayFen, game]);
+  const source = useMemo(() => (displayFen ? new Chess(displayFen) : game), [displayFen, game]);
+  const flipped = (boardOrientation === "flip-turn" && source.turn() === "b") !== manualFlip;
+  const ranks = flipped ? [...RANKS].reverse() : RANKS;
+  const files = flipped ? [...FILES].reverse() : FILES;
+  const [focusedSquare, setFocusedSquare] = useState<ChessSquare>("e1");
 
-  const currentTurn: Color = source.turn();
-  const automaticallyFlipped = boardOrientation === 'flip-turn' && currentTurn === 'b';
-  const flipped = automaticallyFlipped !== manualFlip;
-
-  // Display ranks: when flipped, reverse so Black's rank 8 is at bottom
-  const displayRanks = flipped ? [...RANKS].reverse() : RANKS;
-  const displayFiles = flipped ? [...FILES].reverse() : FILES;
-  const [focusedSquare, setFocusedSquare] = useState<ChessSquare>('e1');
-
-  // Which color is on each side
-  const bottomColor: Color = flipped ? 'b' : 'w';
-  const topColor: Color = flipped ? 'w' : 'b';
-
-  const squares: React.ReactNode[] = [];
-
-  displayRanks.forEach((rank, ri) => {
-    displayFiles.forEach((file, fi) => {
-      const square = (file + rank) as ChessSquare;
-      const isLight = (ri + fi) % 2 === 0;
-      const piece = source.get(square) as PieceInfo | null;
-      const isSelected = selectedSquare === square;
-      const isLegalMove = legalMoves.includes(square);
-      const isLastMove = lastMove !== null && (square === lastMove.from || square === lastMove.to);
-      const isCheck = kingInCheck !== null && square === kingInCheck.square;
-
-      // Rank labels on left edge (file a)
-      const rankLabel = fi === 0 ? rank : null;
-      // File labels on bottom edge (last displayed rank)
-      const fileLabel = ri === displayRanks.length - 1 ? file.toUpperCase() : null;
-
-      squares.push(
-        <Square
-          key={square}
-          square={square}
-          piece={piece}
-          isLight={isLight}
-          isSelected={isSelected}
-          isLegalMove={isLegalMove}
-          isLastMove={isLastMove}
-          isCheck={isCheck}
-          rankLabel={rankLabel}
-          fileLabel={fileLabel}
-          onClick={() => onSquareClick(square)}
-          tabIndex={focusedSquare === square ? 0 : -1}
-          onFocus={() => setFocusedSquare(square)}
-          pieceSet={pieceSet}
-        />
-      );
-    });
-  });
-
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    const targetElement = e.target instanceof HTMLElement ? e.target.closest<HTMLElement>('[data-square]') : null;
-    if (targetElement) {
-      const focusedSquare = targetElement.getAttribute('data-square') as ChessSquare | null;
-      if (!focusedSquare) return;
-
-      if (e.key === 'Enter' || e.key === ' ') {
-        e.preventDefault();
-        return;
-      }
-
-      const row = displayRanks.indexOf(focusedSquare[1] as typeof RANKS[number]);
-      const column = displayFiles.indexOf(focusedSquare[0] as typeof FILES[number]);
-      let newRow = row;
-      let newColumn = column;
-      switch (e.key) {
-        case 'ArrowUp':
-          newRow = Math.max(row - 1, 0);
-          break;
-        case 'ArrowDown':
-          newRow = Math.min(row + 1, 7);
-          break;
-        case 'ArrowLeft':
-          newColumn = Math.max(column - 1, 0);
-          break;
-        case 'ArrowRight':
-          newColumn = Math.min(column + 1, 7);
-          break;
-        default:
-          return;
-      }
-
-      e.preventDefault();
-      const targetSquare = `${displayFiles[newColumn]}${displayRanks[newRow]}`;
-      const target = document.querySelector(
-        `[data-square="${targetSquare}"]`
-      );
-      if (target instanceof HTMLElement) target.focus();
-    }
-  };
-
-  const thinkingClass = isComputerThinking ? ' board-computer-thinking' : '';
-  const flipClass = flipped ? ' board-flipped' : '';
+  function handleKeyDown(event: KeyboardEvent<HTMLDivElement>) {
+    const target =
+      event.target instanceof HTMLElement
+        ? event.target.closest<HTMLElement>("[data-square]")
+        : null;
+    const square = target?.dataset.square;
+    if (!square) return;
+    const row = ranks.findIndex((rank) => rank === square[1]);
+    const column = files.findIndex((file) => file === square[0]);
+    const delta = { ArrowUp: [-1, 0], ArrowDown: [1, 0], ArrowLeft: [0, -1], ArrowRight: [0, 1] };
+    if (!(event.key in delta)) return;
+    const change = Object.entries(delta).find(([key]) => key === event.key)?.[1];
+    if (!change) return;
+    event.preventDefault();
+    const nextRow = Math.max(0, Math.min(7, row + change[0]));
+    const nextColumn = Math.max(0, Math.min(7, column + change[1]));
+    event.currentTarget
+      .querySelector<HTMLElement>(`[data-square="${files[nextColumn]}${ranks[nextRow]}"]`)
+      ?.focus();
+  }
 
   return (
-    <div className={'board-wrapper' + flipClass}>
-      {/* Top side: white or black label */}
-      <div className="board-side-label board-side-top">
-        <span className={`side-color-dot side-dot-${topColor}`} />
-        <span className="side-color-name">{topColor === 'w' ? 'White' : 'Black'}</span>
-        {topColor === currentTurn && (
-          <span className="side-turn-dot" title="Current turn to move">●</span>
-        )}
-      </div>
-
+    <div
+      className={`board-wrapper theme-${boardTheme}${isComputerThinking ? " board-computer-thinking" : ""}`}
+    >
       <div
-        className={'board theme-' + boardTheme + thinkingClass}
+        className="board"
         role="grid"
-        aria-label={`Chess board — ${topColor === 'w' ? 'White' : 'Black'} at top, ${bottomColor === 'w' ? 'White' : 'Black'} at bottom`}
+        aria-label={`Chess board, ${flipped ? "Black" : "White"} at bottom`}
+        aria-rowcount={8}
+        aria-colcount={8}
         onKeyDown={handleKeyDown}
       >
-        {squares}
-      </div>
-
-      {/* Bottom side: white or black label */}
-      <div className="board-side-label board-side-bottom">
-        <span className={`side-color-dot side-dot-${bottomColor}`} />
-        <span className="side-color-name">{bottomColor === 'w' ? 'White' : 'Black'}</span>
-        {bottomColor === currentTurn && (
-          <span className="side-turn-dot" title="Current turn to move">●</span>
-        )}
+        {ranks.map((rank, row) => (
+          <div role="row" aria-rowindex={row + 1} className="board-row" key={rank}>
+            {files.map((file, column) => {
+              const square: ChessSquare = `${file}${rank}`;
+              return (
+                <Square
+                  key={square}
+                  square={square}
+                  piece={source.get(square) ?? null}
+                  isLight={(row + column) % 2 === 0}
+                  isSelected={selectedSquare === square}
+                  isLegalMove={legalMoves.includes(square)}
+                  isLastMove={lastMove?.from === square || lastMove?.to === square}
+                  isCheck={kingInCheck?.square === square}
+                  rankLabel={column === 0 ? rank : null}
+                  fileLabel={row === 7 ? file : null}
+                  column={column + 1}
+                  onClick={() => onSquareClick(square)}
+                  tabIndex={focusedSquare === square ? 0 : -1}
+                  onFocus={() => setFocusedSquare(square)}
+                  pieceSet={pieceSet}
+                />
+              );
+            })}
+          </div>
+        ))}
       </div>
     </div>
   );
 }
-

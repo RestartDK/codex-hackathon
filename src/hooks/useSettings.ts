@@ -1,13 +1,10 @@
-import { useState, useCallback, useEffect } from 'react';
-import type { AppSettings, GameMode, BoardOrientation, BoardTheme, PieceSet } from '../types';
-import type { Difficulty } from '../chess/difficulty';
-import { loadSettings, saveSettings } from '../lib/storage';
+import { useState, useCallback, useEffect } from "react";
+import type { AppSettings, GameMode, BoardOrientation, BoardTheme, PieceSet } from "../types";
+import type { Difficulty } from "../chess/difficulty";
+import { loadSettings, saveSettings } from "../lib/storage";
 
 export function useSettings() {
   const [settings, setSettings] = useState<AppSettings>(() => loadSettings());
-  const [settingsOpen, setSettingsOpen] = useState(false);
-
-  // Persist settings on change
   useEffect(() => {
     saveSettings(settings);
   }, [settings]);
@@ -20,7 +17,7 @@ export function useSettings() {
     setSettings((prev: AppSettings) => ({ ...prev, difficulty }));
   }, []);
 
-  const setPlayerColor = useCallback((playerColor: 'w' | 'b') => {
+  const setPlayerColor = useCallback((playerColor: "w" | "b") => {
     setSettings((prev: AppSettings) => ({ ...prev, playerColor }));
   }, []);
 
@@ -30,6 +27,10 @@ export function useSettings() {
 
   const setScreenReaderMode = useCallback((screenReaderMode: boolean) => {
     setSettings((prev: AppSettings) => ({ ...prev, screenReaderMode }));
+  }, []);
+
+  const setVoiceVolume = useCallback((voiceVolume: number) => {
+    setSettings((prev) => ({ ...prev, voiceVolume }));
   }, []);
 
   const setBoardOrientation = useCallback((boardOrientation: BoardOrientation) => {
@@ -48,28 +49,19 @@ export function useSettings() {
     setSettings((prev: AppSettings) => ({ ...prev, soundEnabled }));
   }, []);
 
-  const toggleSettings = useCallback(() => {
-    setSettingsOpen((prev) => !prev);
-  }, []);
-
-  const closeSettings = useCallback(() => {
-    setSettingsOpen(false);
-  }, []);
-
   return {
     settings,
-    settingsOpen,
     setGameMode,
     setDifficulty,
     setPlayerColor,
     setConfirmMoves,
     setScreenReaderMode,
+    setVoiceVolume,
     setBoardOrientation,
     setBoardTheme,
     setPieceSet,
     setSoundEnabled,
-    toggleSettings,
-    closeSettings,
   };
 }
 
+export type Preferences = ReturnType<typeof useSettings>;

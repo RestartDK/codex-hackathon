@@ -62,6 +62,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   soundEnabled: true,
   confirmMoves: true,
   screenReaderMode: false,
+  voiceVolume: 80,
 };
 
 export function loadSettings(): AppSettings {
@@ -83,6 +84,7 @@ export function loadSettings(): AppSettings {
       soundEnabled: typeof parsed.soundEnabled === 'boolean' ? parsed.soundEnabled : DEFAULT_SETTINGS.soundEnabled,
       confirmMoves: typeof parsed.confirmMoves === 'boolean' ? parsed.confirmMoves : DEFAULT_SETTINGS.confirmMoves,
       screenReaderMode: typeof parsed.screenReaderMode === 'boolean' ? parsed.screenReaderMode : DEFAULT_SETTINGS.screenReaderMode,
+      voiceVolume: typeof parsed.voiceVolume === 'number' && Number.isFinite(parsed.voiceVolume) ? Math.min(100, Math.max(0, parsed.voiceVolume)) : DEFAULT_SETTINGS.voiceVolume,
     };
   } catch {
     return { ...DEFAULT_SETTINGS };
