@@ -46,3 +46,13 @@ Replaced particles with a continuous liquid color field. Confirmed six liquid ca
 ## Glacia style revision
 
 The current visual authority is GLACIAL_DIRECTION.md. Reviewed the restyled page at 320–1440px, with no horizontal overflow. Confirmed mobile menu and FAQ suggestions still work, the game preview renders its real Marine board, and the browser reported no errors. The original game was not restyled. Muted colors were checked against the light canvas; frosted panels keep text on controlled surfaces. Physical-device and formal assistive-technology testing remain outstanding.
+
+## Reference motion and rendering quality
+
+A second live inspection of Glacia identified its duplicated hover labels, vertical text exchange, cyan internal loop flare, diagonal blurred light streak, and mobile frosted navigation expansion. These observed behaviors now replace the earlier generic hover lift. Navigation and CTA labels have one accessible name, and keyboard focus receives the same visual exchange. The mobile menu is a full-width top panel with centered links and a text-only Menu/Close control; its height reflects Play by Voice's three links. It supports Escape, selection close, and focus return.
+
+The hero's ice folds are now continuously warped by a local WebGL texture shader. The liquid orb uses a high-precision fragment shader rather than the old 192px CPU bitmap. Large orb buffers are at least 512px and scale with display density and element size; circle clipping happens at the browser's native edge. Small companion avatars retain scalable SVG/CSS. Resize observers refresh buffers, and context failure leaves the SVG/CSS fallback. The shared pause control freezes the background, orbs, and ambient button flare; reduced-motion preferences stop ambient motion and skip text reveals.
+
+Headlines reveal characters in reading order, with semantic heading labels retained. Motion was reconstructed locally from the reference's visible behavior and DOM geometry; no Framer bundle or third-party background source was imported.
+
+Verification: compared two running screenshots and observed changed background/orb pixels; compared two paused screenshots and both regions were pixel-identical. Checked 320, 390, 768, 1024, and 1440px without overflow, mobile menu open/close/Escape, keyboard label exchange, FAQ suggestions, 512px orb buffers, and empty browser error logs. Production build, syntax, formatter, and whitespace checks passed. Native reduced-motion preference changes and physical-device performance were not exercised.

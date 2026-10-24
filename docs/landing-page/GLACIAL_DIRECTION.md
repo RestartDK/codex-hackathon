@@ -20,3 +20,13 @@ The live reference was inspected in a browser. The adopted visual cues are a con
 `public/landing/glacial-theme.css` loads after the earlier styles and controls this revision. New files and edits are confined to landing assets and documentation. No packages, game source, preferences, microphone behavior, or root routes were changed.
 
 Checked widths 1440, 1024, 768, 390, and 320px without horizontal page overflow. Tested the mobile menu and FAQ suggestions; confirmed the real preview's Marine colors and an empty browser error log. Production build, JavaScript syntax, formatting, and whitespace checks passed. Review was in the desktop browser; physical-device and formal screen-reader testing remain outside this check.
+
+## Reference motion and rendering quality
+
+A second live inspection of Glacia identified its duplicated hover labels, vertical text exchange, cyan internal loop flare, diagonal blurred light streak, and mobile frosted navigation expansion. These observed behaviors now replace the earlier generic hover lift. Navigation and CTA labels have one accessible name, and keyboard focus receives the same visual exchange. The mobile menu is a full-width top panel with centered links and a text-only Menu/Close control; its height reflects Play by Voice's three links. It supports Escape, selection close, and focus return.
+
+The hero's ice folds are now continuously warped by a local WebGL texture shader. The liquid orb uses a high-precision fragment shader rather than the old 192px CPU bitmap. Large orb buffers are at least 512px and scale with display density and element size; circle clipping happens at the browser's native edge. Small companion avatars retain scalable SVG/CSS. Resize observers refresh buffers, and context failure leaves the SVG/CSS fallback. The shared pause control freezes the background, orbs, and ambient button flare; reduced-motion preferences stop ambient motion and skip text reveals.
+
+Headlines reveal characters in reading order, with semantic heading labels retained. Motion was reconstructed locally from the reference's visible behavior and DOM geometry; no Framer bundle or third-party background source was imported.
+
+Verification: compared two running screenshots and observed changed background/orb pixels; compared two paused screenshots and both regions were pixel-identical. Checked 320, 390, 768, 1024, and 1440px without overflow, mobile menu open/close/Escape, keyboard label exchange, FAQ suggestions, 512px orb buffers, and empty browser error logs. Production build, syntax, formatter, and whitespace checks passed. Native reduced-motion preference changes and physical-device performance were not exercised.

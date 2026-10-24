@@ -824,3 +824,307 @@ p {
     text-align: left;
   }
 }
+/* Reference motion: rolling labels, cyan loop flare, diagonal hover streak. */
+.orb-liquid {
+  clip-path: circle(50%);
+}
+.ice-liquid {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+.roll-control {
+  position: relative;
+}
+.roll-clip {
+  position: relative;
+  display: inline-grid;
+  overflow: hidden;
+  vertical-align: middle;
+  z-index: 2;
+  height: 1.5em;
+}
+.roll-face {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  white-space: nowrap;
+  opacity: 1;
+  transform: translateY(0);
+  transition:
+    transform 450ms cubic-bezier(0.16, 1, 0.3, 1),
+    opacity 300ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.roll-ghost {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  transform: translateY(115%);
+}
+.button,
+.button-small,
+.footer-play {
+  overflow: hidden;
+  isolation: isolate;
+  border: 2px solid #d9f4ff;
+  background: transparent;
+  box-shadow:
+    inset 10px 10px 24px #f7fdffb3,
+    inset -6px -6px 30px #11baed99,
+    20px 20px 30px #022a3b29;
+}
+.button-secondary {
+  box-shadow:
+    inset 10px 10px 24px #fff9,
+    inset -6px -6px 30px #11baed26,
+    12px 12px 24px #022a3b12;
+}
+.button:before {
+  content: "";
+  position: absolute;
+  inset: -100% 0;
+  z-index: 0;
+  pointer-events: none;
+  background: linear-gradient(181deg, transparent, #11baed66, transparent);
+  filter: blur(10px);
+  animation: button-flare 5s cubic-bezier(0.42, 0, 0.58, 1) infinite alternate;
+}
+.button:after {
+  content: "";
+  position: absolute;
+  left: -65%;
+  top: -40%;
+  width: 32px;
+  height: 180%;
+  z-index: 1;
+  pointer-events: none;
+  background: linear-gradient(90deg, transparent, #ffffffb3, transparent);
+  filter: blur(10px);
+  transform: rotate(-30deg);
+  transition: left 700ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.button:hover,
+.button-small:hover,
+.footer-play:hover,
+.text-link:hover,
+.preview-launch-link:hover,
+.chat-suggestions button:hover {
+  transform: none;
+}
+.button:hover,
+.button-small:hover,
+.footer-play:hover {
+  background: transparent;
+  box-shadow:
+    inset 10px 10px 24px #f7fdffb3,
+    inset -6px -6px 30px #11baed99,
+    20px 20px 30px #022a3b29;
+}
+.roll-control .ui-icon {
+  transform: none !important;
+}
+@keyframes button-flare {
+  from {
+    transform: translateY(-18%);
+  }
+  to {
+    transform: translateY(18%);
+  }
+}
+@media (hover: hover) and (pointer: fine) {
+  .roll-control:hover .roll-face {
+    transform: translateY(-115%);
+    opacity: 0;
+  }
+  .roll-control:hover .roll-ghost {
+    transform: translateY(0);
+    opacity: 1;
+  }
+  .nav-links .roll-control:hover .roll-ghost,
+  .footer-links .roll-control:hover .roll-ghost {
+    color: #3094c2;
+  }
+  .button:hover:after {
+    left: 150%;
+  }
+}
+.roll-control:focus-visible .roll-face {
+  transform: translateY(-115%);
+  opacity: 0;
+}
+.roll-control:focus-visible .roll-ghost {
+  transform: translateY(0);
+  opacity: 1;
+}
+.button:focus-visible:after {
+  left: 150%;
+}
+.motion-paused .button:before,
+.motion-document-hidden .button:before {
+  animation-play-state: paused;
+}
+@media (max-width: 767px) {
+  .nav-wrap {
+    top: 0;
+    left: 0;
+    right: 0;
+    padding: 0;
+    width: 100%;
+  }
+  .nav-pill {
+    width: 100%;
+    max-width: none;
+    min-height: 64px;
+    padding: 14px 20px;
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    border: 0;
+    border-radius: 0;
+    background: #ffffff66;
+    backdrop-filter: blur(8px);
+    box-shadow: none;
+    transition:
+      background-color 500ms cubic-bezier(0.32, 0.72, 0, 1),
+      border-radius 500ms cubic-bezier(0.32, 0.72, 0, 1);
+  }
+  .nav-pill.is-open {
+    border-radius: 0 0 32px 32px;
+    background: #f7fdffcc;
+  }
+  .menu-toggle {
+    border: 2px solid #15baed;
+    color: #3094c2;
+    background: transparent;
+    padding: 6px 12px;
+    min-width: 64px;
+    min-height: 36px;
+    height: 36px;
+    box-shadow: none;
+    font-size: 14px;
+  }
+  .menu-toggle:hover {
+    background: #fff5;
+  }
+  .menu-icon {
+    display: none;
+  }
+  .nav-links {
+    position: static;
+    flex-basis: 100%;
+    width: 100%;
+    margin: 20px 0 0;
+    padding: 0 0 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    align-items: center;
+    border: 0;
+    background: none;
+    box-shadow: none;
+    backdrop-filter: none;
+    border-radius: 0;
+  }
+  .nav-links[hidden] {
+    display: none;
+  }
+  .nav-links > a:not(.button) {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 44px;
+    padding: 8px 16px;
+    font-size: 14px;
+  }
+  .nav-links .button {
+    order: initial;
+    width: auto;
+    min-height: 40px;
+    padding: 8px 20px;
+    margin-top: 12px;
+  }
+  .nav-pill.is-open .nav-links {
+    animation: menu-unfold 500ms cubic-bezier(0.32, 0.72, 0, 1);
+    transform-origin: top;
+  }
+  .nav-pill.is-open .nav-links > a {
+    animation: menu-item-in 600ms cubic-bezier(0.32, 0.72, 0, 1) both;
+  }
+  .nav-pill.is-open .nav-links > a:nth-child(2) {
+    animation-delay: 40ms;
+  }
+  .nav-pill.is-open .nav-links > a:nth-child(3) {
+    animation-delay: 80ms;
+  }
+  .nav-pill.is-open .nav-links > a:nth-child(4) {
+    animation-delay: 120ms;
+  }
+}
+@keyframes menu-unfold {
+  from {
+    opacity: 0;
+    clip-path: inset(0 0 100%);
+  }
+  to {
+    opacity: 1;
+    clip-path: inset(0);
+  }
+}
+@keyframes menu-item-in {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .button:before,
+  .button:after {
+    display: none;
+  }
+  .roll-face,
+  .roll-ghost {
+    transition: none;
+  }
+  .roll-control .roll-face {
+    transform: none !important;
+    opacity: 1 !important;
+  }
+  .roll-control .roll-ghost {
+    display: none;
+  }
+  .nav-pill,
+  .nav-pill.is-open .nav-links,
+  .nav-pill.is-open .nav-links > a {
+    animation: none;
+    transition: none;
+  }
+}
+@media (forced-colors: active) {
+  .ice-liquid,
+  .button:before,
+  .button:after {
+    display: none;
+  }
+}
+.motion-word {
+  display: inline-block;
+  white-space: nowrap;
+}
+.motion-char {
+  display: inline-block;
+}
+@media (prefers-reduced-motion: reduce) {
+  .motion-char {
+    opacity: 1 !important;
+    transform: none !important;
+    filter: none !important;
+  }
+}

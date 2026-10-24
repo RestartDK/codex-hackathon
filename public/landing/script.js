@@ -4,6 +4,8 @@ const links = document.querySelector("#nav-links");
 const compact = window.matchMedia("(max-width: 767px)");
 function closeMenu(returnFocus = false) {
   toggle.setAttribute("aria-expanded", "false");
+  toggle.querySelector(".menu-label").textContent = "Menu";
+  document.querySelector(".nav-pill").classList.remove("is-open");
   links.hidden = compact.matches;
   if (returnFocus) toggle.focus();
 }
@@ -17,6 +19,8 @@ function syncMenu() {
 toggle.addEventListener("click", () => {
   const opening = toggle.getAttribute("aria-expanded") !== "true";
   toggle.setAttribute("aria-expanded", String(opening));
+  toggle.querySelector(".menu-label").textContent = opening ? "Close" : "Menu";
+  document.querySelector(".nav-pill").classList.toggle("is-open", opening);
   links.hidden = !opening;
 });
 links.addEventListener("click", (event) => {
@@ -137,6 +141,7 @@ function askFaq(question, topic = matchFaq(question)) {
     const oldest = faqLog.firstElementChild;
     oldest.querySelectorAll(".brand-orb").forEach((orb) => {
       motionObserver?.unobserve(orb);
+      liquidOrbs.get(orb)?.release();
       liquidOrbs.delete(orb);
     });
     oldest.remove();
@@ -187,7 +192,7 @@ const motionIcon = motionControl.querySelector("use");
 motionControl.hidden = false;
 motionControl.addEventListener("click", () => {
   const paused = document.documentElement.classList.toggle("motion-paused");
-  const label = paused ? "Resume orb animation" : "Pause orb animation";
+  const label = paused ? "Resume animations" : "Pause animations";
   motionControl.setAttribute("aria-label", label);
   motionControl.setAttribute("title", label);
   motionIcon.setAttribute("href", `./assets/icons.svg#${paused ? "play" : "pause"}`);
@@ -221,81 +226,191 @@ const reducedOrbMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
 let orbFrame = 0;
 let orbLastFrame = 0;
 function prepareLiquidOrb(orb) {
-  if (liquidOrbs.has(orb)) return;
+  if (liquidOrbs.has(orb) || orb.classList.contains("brand-orb")) return;
+  const sky = orb.classList.contains("hero-sky");
   const canvas = document.createElement("canvas");
-  canvas.className = "orb-liquid";
+  canvas.className = sky ? "ice-liquid" : "orb-liquid";
   canvas.setAttribute("aria-hidden", "true");
   orb.append(canvas);
-  const context = canvas.getContext("2d");
-  if (!context) {
+  const gl = canvas.getContext("webgl", {
+    alpha: false,
+    antialias: true,
+    depth: false,
+    powerPreference: "low-power",
+  });
+  if (!gl) {
+    canvas.remove();
+    return;
+  } // Scalable SVG and CSS are the fallback.
+  const vertex = `attribute vec2 position; void main(){gl_Position=vec4(position,0.,1.);}`;
+  const fragment = `
+    precision highp float;
+    uniform vec2 resolution;
+    uniform float time;
+    uniform float green;
+    uniform float sky;
+    uniform sampler2D scene;
+    void main(){
+      if(sky>.5){
+        vec2 p=gl_FragCoord.xy/resolution;
+        p.y=1.-p.y;
+        float t=time*.12;
+        vec2 bend=vec2(sin(p.y*5.+t)+sin(p.x*3.-t*.7),cos(p.x*4.+t*.8));
+        p=(p-.5)*.90+.5+bend*.025;
+        float aspect=resolution.x/resolution.y;
+        p=(p-.5)*vec2(min(1.,aspect/1.333333),min(1.,1.333333/aspect))+.5;
+        vec3 color=texture2D(scene,p).rgb;
+        float light=sin(p.x*4.+p.y*3.-t)*.012;
+        gl_FragColor=vec4(clamp(color+light,0.,1.),1.);
+        return;
+      }
+      vec2 uv=gl_FragCoord.xy/resolution*2.-1.;
+      uv.y=-uv.y;
+      float r=dot(uv,uv);
+      float depth=sqrt(max(0.,1.-r));
+      float t=time*.36;
+      float x=uv.x+.38*sin(uv.y*3.2+t)+.12*cos(uv.x*4.-t*.6);
+      float y=uv.y+.32*sin(uv.x*3.5-t*.8);
+      float wave=.5+.5*sin(y*4.6+x*2.4-t*1.1);
+      float fold=.5+.5*cos(x*3.8-y*2.2+t*.7);
+      float pearl=pow(max(0.,sin(y*2.4+x*2.1+t*.5)),4.);
+      vec4 w=vec4(.24+pearl*.8,wave*.8,(1.-wave)*fold*.8,(1.-fold)*.35);
+      vec3 a=mix(vec3(229.,246.,255.),vec3(240.,248.,212.),green);
+      vec3 b=mix(vec3(111.,178.,238.),vec3(162.,192.,105.),green);
+      vec3 c=mix(vec3(148.,143.,221.),vec3(109.,151.,74.),green);
+      vec3 d=mix(vec3(232.,192.,224.),vec3(211.,231.,166.),green);
+      vec3 color=(a*w.x+b*w.y+c*w.z+d*w.w)/(w.x+w.y+w.z+w.w)/255.;
+      float highlight=exp(-dot(uv+vec2(.4,.45),uv+vec2(.4,.45))*4.)*.24;
+      color=mix(color*(.85+depth*.15),vec3(1.),highlight);
+      gl_FragColor=vec4(color,1.);
+    }`;
+  function shader(type, source) {
+    const value = gl.createShader(type);
+    gl.shaderSource(value, source);
+    gl.compileShader(value);
+    if (!gl.getShaderParameter(value, gl.COMPILE_STATUS)) {
+      gl.deleteShader(value);
+      return null;
+    }
+    return value;
+  }
+  const vs = shader(gl.VERTEX_SHADER, vertex),
+    fs = shader(gl.FRAGMENT_SHADER, fragment);
+  if (!vs || !fs) {
     canvas.remove();
     return;
   }
-  const small = orb.classList.contains("brand-orb");
-  const size = small ? 48 : 192;
-  canvas.width = canvas.height = size;
+  const program = gl.createProgram();
+  gl.attachShader(program, vs);
+  gl.attachShader(program, fs);
+  gl.linkProgram(program);
+  gl.deleteShader(vs);
+  gl.deleteShader(fs);
+  if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+    gl.deleteProgram(program);
+    canvas.remove();
+    return;
+  }
+  gl.useProgram(program);
+  const buffer = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+  gl.bufferData(
+    gl.ARRAY_BUFFER,
+    new Float32Array([-1, -1, 1, -1, -1, 1, -1, 1, 1, -1, 1, 1]),
+    gl.STATIC_DRAW,
+  );
+  const position = gl.getAttribLocation(program, "position");
+  gl.enableVertexAttribArray(position);
+  gl.vertexAttribPointer(position, 2, gl.FLOAT, false, 0, 0);
+  const texture = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, texture);
+  gl.texImage2D(
+    gl.TEXTURE_2D,
+    0,
+    gl.RGBA,
+    1,
+    1,
+    0,
+    gl.RGBA,
+    gl.UNSIGNED_BYTE,
+    new Uint8Array([232, 244, 249, 255]),
+  );
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
   const state = {
-    context,
-    size,
-    green: orb.classList.contains("orb-demo"),
+    sky,
+    texture,
+    skyUniform: gl.getUniformLocation(program, "sky"),
+    gl,
+    canvas,
+    program,
+    buffer,
     time: 0,
-    pixels: context.createImageData(size, size),
+    green: orb.classList.contains("orb-demo"),
+    resolution: gl.getUniformLocation(program, "resolution"),
+    clock: gl.getUniformLocation(program, "time"),
+    palette: gl.getUniformLocation(program, "green"),
   };
   liquidOrbs.set(orb, state);
-  drawLiquidOrb(state);
-}
-function drawLiquidOrb({ context, size, green, time, pixels }) {
-  const data = pixels.data;
-  // Domain-warped gradients make broad, continuous folds rather than a moving object.
-  const palette = green
-    ? [
-        [240, 248, 212],
-        [162, 192, 105],
-        [109, 151, 74],
-        [211, 231, 166],
-      ]
-    : [
-        [229, 246, 255],
-        [111, 178, 238],
-        [148, 143, 221],
-        [232, 192, 224],
-      ];
-  const t = time * 0.36;
-  for (let y = 0; y < size; y++) {
-    const v = (y / (size - 1) - 0.5) * 2;
-    for (let x = 0; x < size; x++) {
-      const u = (x / (size - 1) - 0.5) * 2;
-      const radius = u * u + v * v;
-      const i = (y * size + x) * 4;
-      if (radius > 1) {
-        data[i + 3] = 0;
-        continue;
-      }
-      const depth = Math.sqrt(1 - radius);
-      const warpedX = u + 0.38 * Math.sin(v * 3.2 + t) + 0.12 * Math.cos(u * 4 - t * 0.6);
-      const warpedY = v + 0.32 * Math.sin(u * 3.5 - t * 0.8);
-      const wave = 0.5 + 0.5 * Math.sin(warpedY * 4.6 + warpedX * 2.4 - t * 1.1);
-      const fold = 0.5 + 0.5 * Math.cos(warpedX * 3.8 - warpedY * 2.2 + t * 0.7);
-      const pearl = Math.max(0, Math.sin(warpedY * 2.4 + warpedX * 2.1 + t * 0.5)) ** 4;
-      const w0 = 0.24 + pearl * 0.8;
-      const w1 = wave * 0.8;
-      const w2 = (1 - wave) * fold * 0.8;
-      const w3 = (1 - fold) * 0.35;
-      const total = w0 + w1 + w2 + w3;
-      const highlight = Math.exp(-((u + 0.4) ** 2 + (v + 0.45) ** 2) * 4) * 0.24;
-      for (let channel = 0; channel < 3; channel++) {
-        const color =
-          (palette[0][channel] * w0 +
-            palette[1][channel] * w1 +
-            palette[2][channel] * w2 +
-            palette[3][channel] * w3) /
-          total;
-        data[i + channel] = color * (0.85 + depth * 0.15) * (1 - highlight) + 255 * highlight;
-      }
-      data[i + 3] = Math.min(1, ((1 - radius) * size) / 2) * 245;
+  function resize() {
+    const ratio = Math.min(devicePixelRatio || 1, 2);
+    const width = sky
+      ? Math.min(2560, Math.ceil(orb.clientWidth * ratio))
+      : Math.min(2048, Math.max(512, Math.ceil(orb.clientWidth * ratio)));
+    const height = sky ? Math.ceil((width * orb.clientHeight) / orb.clientWidth) : width;
+    if (canvas.width !== width || canvas.height !== height) {
+      canvas.width = width;
+      canvas.height = height;
     }
+    drawLiquidOrb(state);
   }
-  context.putImageData(pixels, 0, 0);
+  if ("ResizeObserver" in window) {
+    state.resize = new ResizeObserver(resize);
+    state.resize.observe(orb);
+  }
+  window.addEventListener("resize", resize);
+  state.release = () => {
+    state.resize?.disconnect();
+    window.removeEventListener("resize", resize);
+    gl.deleteTexture(texture);
+    gl.deleteBuffer(buffer);
+    gl.deleteProgram(program);
+  };
+  canvas.addEventListener("webglcontextlost", (event) => {
+    event.preventDefault();
+    canvas.style.visibility = "hidden";
+  });
+  canvas.addEventListener("webglcontextrestored", () => {
+    state.release();
+    liquidOrbs.delete(orb);
+    canvas.remove();
+    prepareLiquidOrb(orb);
+    syncLiquidMotion();
+  });
+  resize();
+  if (sky) {
+    const image = new Image();
+    image.onload = () => {
+      if (!canvas.isConnected || gl.isContextLost()) return;
+      gl.bindTexture(gl.TEXTURE_2D, texture);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
+      drawLiquidOrb(state);
+    };
+    image.src = "./assets/ice-flow.svg";
+  }
+}
+function drawLiquidOrb(state) {
+  const { gl, canvas } = state;
+  if (gl.isContextLost()) return;
+  gl.viewport(0, 0, canvas.width, canvas.height);
+  gl.useProgram(state.program);
+  gl.uniform2f(state.resolution, canvas.width, canvas.height);
+  gl.uniform1f(state.clock, state.time);
+  gl.uniform1f(state.palette, state.green ? 1 : 0);
+  gl.uniform1f(state.skyUniform, state.sky ? 1 : 0);
+  gl.drawArrays(gl.TRIANGLES, 0, 6);
 }
 function liquidMotionAllowed() {
   return (
@@ -315,6 +430,7 @@ function runLiquidFrame(timestamp) {
   let visible = false;
   for (const [orb, state] of liquidOrbs) {
     if (!orb.isConnected) {
+      state.release();
       liquidOrbs.delete(orb);
       continue;
     }
@@ -329,7 +445,10 @@ function runLiquidFrame(timestamp) {
 function syncLiquidMotion() {
   if (liquidMotionAllowed() && !orbFrame) orbFrame = requestAnimationFrame(runLiquidFrame);
 }
-document.querySelectorAll(".orb, .brand-orb").forEach(prepareLiquidOrb);
+document.querySelectorAll(".orb").forEach(prepareLiquidOrb);
+const heroSky = document.querySelector(".hero-sky");
+prepareLiquidOrb(heroSky);
+registerAnimatedOrb(heroSky);
 motionControl.addEventListener("click", syncLiquidMotion);
 document.addEventListener("visibilitychange", syncLiquidMotion);
 reducedOrbMotion.addEventListener("change", () => {
@@ -371,7 +490,90 @@ if ("IntersectionObserver" in window && !reducedOrbMotion.matches) {
   );
   document
     .querySelectorAll(
-      ".section-heading,.library-game,.steps li,.voice-copy,.turn-story,.accessibility-visual,.accessibility-copy,.faq-chat,.footer-invitation",
+      ".library-game,.steps li,.voice-copy,.turn-story,.accessibility-visual,.accessibility-copy,.faq-chat,.footer-invitation",
     )
     .forEach((element) => reveals.observe(element));
+}
+
+// Reference-style rolling labels retain a single accessible name.
+document
+  .querySelectorAll(
+    ".button,.text-link,.preview-launch-link,.nav-links>a:not(.button),.footer-links>a,.chat-suggestions button",
+  )
+  .forEach((control) => {
+    const label = control.textContent.trim().replace(/\s+/g, " ");
+    if (!control.hasAttribute("aria-label")) control.setAttribute("aria-label", label);
+    const clip = document.createElement("span");
+    clip.className = "roll-clip";
+    clip.setAttribute("aria-hidden", "true");
+    const face = document.createElement("span");
+    face.className = "roll-face";
+    while (control.firstChild) face.append(control.firstChild);
+    const ghost = face.cloneNode(true);
+    ghost.className = "roll-face roll-ghost";
+    clip.append(face, ghost);
+    control.append(clip);
+    control.classList.add("roll-control");
+  });
+
+// The reference reveals headline characters in reading order.
+if ("IntersectionObserver" in window && !reducedOrbMotion.matches) {
+  const headlines = new IntersectionObserver(
+    (entries) => {
+      for (const entry of entries) {
+        if (!entry.isIntersecting) continue;
+        headlines.unobserve(entry.target);
+        if (reducedOrbMotion.matches) continue;
+        entry.target.querySelectorAll(".motion-char").forEach((letter, index) => {
+          const animation = letter.animate(
+            [
+              { opacity: 0, transform: "translateY(12px)", filter: "blur(6px)" },
+              { opacity: 1, transform: "translateY(0)", filter: "blur(0)" },
+            ],
+            {
+              duration: 800,
+              delay: index * 16,
+              easing: "cubic-bezier(.16,1,.3,1)",
+              fill: "backwards",
+            },
+          );
+          const stop = () => {
+            if (reducedOrbMotion.matches) animation.cancel();
+          };
+          reducedOrbMotion.addEventListener("change", stop);
+          animation.finished
+            .catch(() => {})
+            .finally(() => reducedOrbMotion.removeEventListener("change", stop));
+        });
+      }
+    },
+    { threshold: 0.2 },
+  );
+  document.querySelectorAll(".hero h1,.section-heading h2").forEach((heading) => {
+    heading.setAttribute("aria-label", heading.innerText.replace(/\s+/g, " ").trim());
+    const walker = document.createTreeWalker(heading, NodeFilter.SHOW_TEXT);
+    const nodes = [];
+    while (walker.nextNode()) nodes.push(walker.currentNode);
+    nodes.forEach((node) => {
+      const fragment = document.createDocumentFragment();
+      node.textContent.split(/(\s+)/).forEach((word) => {
+        if (!word.trim()) {
+          fragment.append(document.createTextNode(word));
+          return;
+        }
+        const span = document.createElement("span");
+        span.className = "motion-word";
+        span.setAttribute("aria-hidden", "true");
+        for (const character of word) {
+          const letter = document.createElement("span");
+          letter.className = "motion-char";
+          letter.textContent = character;
+          span.append(letter);
+        }
+        fragment.append(span);
+      });
+      node.replaceWith(fragment);
+    });
+    headlines.observe(heading);
+  });
 }
