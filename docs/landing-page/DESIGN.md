@@ -14,12 +14,12 @@ The actual repository, product screens, supported commands, game availability, s
 
 All four uploaded reference images were visually inspected. Local copies are retained for the implementation handoff:
 
-| Reference | Apply | Leave behind |
-| --- | --- | --- |
-| [Scenic hero](references/01-scenic-hero.png) | Floating white pill navigation, centered hierarchy, scenery framing a clear central area | Sales badges, busy peripheral UI, lead-generation copy |
-| [Product showcase](references/02-product-showcase.png) | Generous white space, one large environment framing a real product screen | Red palette, trust logos, testimonials, screen-recording content |
-| [AI chat](references/03-ai-chat-faq.png) | Large translucent conversation panel inside an atmospheric scene; this is the user's requested FAQ direction | Third-party branding, fake working chat input, hard-to-read text on glass |
-| [Sunset landscape](references/04-sunset-landscape.png) | Immersive environment, calm horizon, bold centered type, pill actions | Fundraising badge, unrelated mountains or literal imitation |
+| Reference                                              | Apply                                                                                                        | Leave behind                                                              |
+| ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------- |
+| [Scenic hero](references/01-scenic-hero.png)           | Floating white pill navigation, centered hierarchy, scenery framing a clear central area                     | Sales badges, busy peripheral UI, lead-generation copy                    |
+| [Product showcase](references/02-product-showcase.png) | Generous white space, one large environment framing a real product screen                                    | Red palette, trust logos, testimonials, screen-recording content          |
+| [AI chat](references/03-ai-chat-faq.png)               | Large translucent conversation panel inside an atmospheric scene; this is the user's requested FAQ direction | Third-party branding, fake working chat input, hard-to-read text on glass |
+| [Sunset landscape](references/04-sunset-landscape.png) | Immersive environment, calm horizon, bold centered type, pill actions                                        | Fundraising badge, unrelated mountains or literal imitation               |
 
 The user called the AI-chat image the “second image.” Identify it by its content rather than attachment order.
 
@@ -39,27 +39,27 @@ Voice: plain, welcoming, concrete. Use “speak,” “listen,” “choose,” 
 
 Use semantic variables, scoped to the landing page to protect existing game themes. All colors below are exact defaults; retain a proven product accent only if discovery demonstrates an established brand system, then document the mapping.
 
-| Token | Value | Role |
-| --- | --- | --- |
-| `--pv-canvas` | `#FAF9F6` | Warm page background |
-| `--pv-surface` | `#FFFFFF` | Cards, text panels, controls |
-| `--pv-surface-soft` | `#F1F0F5` | Quiet rows, FAQ chips, hover fills |
-| `--pv-ink` | `#20212B` | Headings, primary copy, primary button fill |
-| `--pv-muted` | `#5C5E6D` | Supporting copy; never lower opacity for body text |
-| `--pv-line` | `#DFDFE7` | Decorative dividers; not sufficient as sole input boundary |
-| `--pv-control-line` | `#7B7D8D` | Required control outlines on light surfaces |
-| `--pv-accent` | `#5945A5` | Text links, active states, small meaningful accents |
-| `--pv-accent-hover` | `#48358C` | Link hover/pressed state |
-| `--pv-focus` | `#4F46B8` | Keyboard focus on light backgrounds |
-| `--pv-sky` | `#D9EAF7` | Atmospheric sky only |
-| `--pv-lavender` | `#D8CFF0` | Orb and scene middle tones |
-| `--pv-pink` | `#F1C9DD` | Orb and cloud highlights |
-| `--pv-peach` | `#F5D5BF` | Warm horizon and final CTA |
-| `--pv-night` | `#25293A` | Optional FAQ dark panel solid fallback |
-| `--pv-on-dark` | `#F9F9FC` | Copy on dark panels |
-| `--pv-muted-on-dark` | `#D5D8E3` | Secondary text on dark panels |
-| `--pv-success` | `#25624A` | Confirmed positive status, always accompanied by text |
-| `--pv-error` | `#A1293D` | Errors on white, always accompanied by text |
+| Token                | Value     | Role                                                       |
+| -------------------- | --------- | ---------------------------------------------------------- |
+| `--pv-canvas`        | `#FAF9F6` | Warm page background                                       |
+| `--pv-surface`       | `#FFFFFF` | Cards, text panels, controls                               |
+| `--pv-surface-soft`  | `#F1F0F5` | Quiet rows, FAQ chips, hover fills                         |
+| `--pv-ink`           | `#20212B` | Headings, primary copy, primary button fill                |
+| `--pv-muted`         | `#5C5E6D` | Supporting copy; never lower opacity for body text         |
+| `--pv-line`          | `#DFDFE7` | Decorative dividers; not sufficient as sole input boundary |
+| `--pv-control-line`  | `#7B7D8D` | Required control outlines on light surfaces                |
+| `--pv-accent`        | `#5945A5` | Text links, active states, small meaningful accents        |
+| `--pv-accent-hover`  | `#48358C` | Link hover/pressed state                                   |
+| `--pv-focus`         | `#4F46B8` | Keyboard focus on light backgrounds                        |
+| `--pv-sky`           | `#D9EAF7` | Atmospheric sky only                                       |
+| `--pv-lavender`      | `#D8CFF0` | Orb and scene middle tones                                 |
+| `--pv-pink`          | `#F1C9DD` | Orb and cloud highlights                                   |
+| `--pv-peach`         | `#F5D5BF` | Warm horizon and final CTA                                 |
+| `--pv-night`         | `#25293A` | Optional FAQ dark panel solid fallback                     |
+| `--pv-on-dark`       | `#F9F9FC` | Copy on dark panels                                        |
+| `--pv-muted-on-dark` | `#D5D8E3` | Secondary text on dark panels                              |
+| `--pv-success`       | `#25624A` | Confirmed positive status, always accompanied by text      |
+| `--pv-error`         | `#A1293D` | Errors on white, always accompanied by text                |
 
 Atmospheric colors are decorative, not text colors. Put text over a sufficiently opaque surface or calm light zone. Do not assume contrast from an average background color; check the actual pixels behind text in every state.
 
@@ -73,15 +73,15 @@ Preserve an existing readable product font where possible. Otherwise use **Manro
 
 No dependency on remote font requests. No display serif, gradient text, all-caps body copy, or novelty futuristic font. Use weight and scale for hierarchy; reserve uppercase for short optional labels.
 
-| Role | Wide ≥1024px | Medium 768–1023px | Small <768px | Weight / leading / tracking |
-| --- | --- | --- | --- | --- |
-| Hero H1 | 80px | 64px | 44px | 600 / 1.04 / -0.045em |
-| Section H2 | 52px | 44px | 34px | 600 / 1.10 / -0.035em |
-| Card H3 | 30px | 28px | 26px | 600 / 1.18 / -0.025em |
-| Lead copy | 20px | 20px | 18px | 400 / 1.55 / -0.01em |
-| Body | 16px | 16px | 16px | 400 / 1.65 / 0 |
-| Navigation / action | 14px | 14px | 14px | 600 / 1.4 / 0 |
-| Caption / eyebrow | 13px | 13px | 13px | 500 / 1.5 / 0.02em |
+| Role                | Wide ≥1024px | Medium 768–1023px | Small <768px | Weight / leading / tracking |
+| ------------------- | ------------ | ----------------- | ------------ | --------------------------- |
+| Hero H1             | 80px         | 64px              | 44px         | 600 / 1.04 / -0.045em       |
+| Section H2          | 52px         | 44px              | 34px         | 600 / 1.10 / -0.035em       |
+| Card H3             | 30px         | 28px              | 26px         | 600 / 1.18 / -0.025em       |
+| Lead copy           | 20px         | 20px              | 18px         | 400 / 1.55 / -0.01em        |
+| Body                | 16px         | 16px              | 16px         | 400 / 1.65 / 0              |
+| Navigation / action | 14px         | 14px              | 14px         | 600 / 1.4 / 0               |
+| Caption / eyebrow   | 13px         | 13px              | 13px         | 500 / 1.5 / 0.02em          |
 
 Interpolate within bands if useful; do not fall below the small values. At 320px allow headline wrapping naturally. Hero headline max width 800px; section headlines 760px; leads 600px; reading columns 64ch. Use `text-wrap: balance` as progressive enhancement. Avoid hard-coded `<br>` that breaks at mobile widths. Exactly one H1; H2 per section; H3 for game titles.
 
@@ -180,15 +180,9 @@ Stack as a semantic ordered list on small screens. Numbers are visual anchors, n
 H2: **Your move, in your words.**
 Lead: **A short example of a turn in Chess.**
 
-One orb and an ordered example transcript in an open composition. Remove the enclosing rectangular card, border, and shadow. Assistant responses sit freely beside small orb avatars; player responses use fully rounded, lightly floating bubbles. Keep the heading and caption free of panel dividers. At ≥1024px use orb left / conversation right; below, center orb above transcript. Do not scatter speech bubbles around the page or reorder transcript visually.
+Use a compact ordered three-step turn beside a single Chess-colored orb. The stages are “Hear where you are”, “Say your next move”, and “You have the final say”. Use small numbered circles and subtle connecting lines, with role labels and readable quoted dialogue. A single pale rounded reply holds “Yes, play it.” followed by the confirmed result. Avoid an enclosing transcript card, repeated avatar rows, and large gaps between chat bubbles. At ≥1024px use copy/orb left and the turn right; below, center the orb above the ordered turn.
 
-- **Play by Voice:** “You’re playing white. It’s your turn.”
-- **You:** “Move pawn from E2 to E4.”
-- **Play by Voice:** “Pawn moved to E4. Black moves E7 to E5.”
-
-Always mark this **Example conversation** unless it reflects a verified recording/session. This script illustrates an exchange; its wording is not a promise of supported command syntax.
-
-Default hackathon version: readable transcript with an optional user-triggered “Play example” only when a real audio asset exists. Provide play/pause, restart, duration, and transcript. Never autoplay. Without audio use “Read example” linking to the transcript, or omit the extra action.
+Label it “An illustrative Chess conversation. No microphone needed.” Never imply this is a live session or play audio without a real recording and explicit action.
 
 A live microphone demo is a separate enhancement only when the repo already supplies a working flow. Explain permission before requesting it; expose idle, requesting, listening, processing, speaking, stopped, denied, and unavailable states in text. Include Stop, error recovery, and a text alternative. Denied permission must not break the landing page. Never animate “Listening” without an active microphone session.
 
@@ -207,7 +201,7 @@ The landing page itself must satisfy the requirements in section 11 regardless o
 
 H2: **A few things you might be wondering.**
 
-Follow the original AI-chat reference literally in its interaction pattern: a large scenic blue/gray environment, a dark translucent conversation panel, right-aligned dark question bubbles, left-aligned assistant responses with the orb, suggested questions, and a working pill-shaped text composer with send action. Do not use accordion rows.
+Follow the original AI-chat reference literally in its interaction pattern: a large scenic blue/gray environment, a white conversation panel, right-aligned pale neutral question bubbles, left-aligned assistant responses with the orb, suggested questions, and a working pill-shaped text composer with send action. Do not use accordion rows.
 
 The current implementation is a local product FAQ guide, visibly identified as **Product guide** / **Answers from our product FAQ**. It uses curated factual answers, with no API, recording, or persistence. Support typed questions and suggested-question buttons. Unknown topics receive an honest scope explanation and a route to the project documentation. Never pretend this is an unrestricted AI assistant.
 
@@ -215,7 +209,7 @@ Provide verified answers about available games, getting started, typed/keyboard 
 
 The composer has an accessible label, Enter submission, disabled empty submission, and 300-character limit. Render all messages using text nodes. Keep a bounded in-memory transcript and an accessible, keyboard-scrollable log with polite announcements. Reveal controls only after enhancement so the initial conversation and documentation link remain useful without JavaScript. No decorative microphone control unless it really works.
 
-Exact colors: scene top `#627E8E`, middle `#8C9BA5`, horizon `#C3B5B0`, base `#5B6C78`; panel `#243943` at 93% opacity; question `#14232D`; composer `#182D37`; text `#F9F9FC`; muted text `#D5D8E3`. Keep text on reliably opaque surfaces. Do not apply these colors to unrelated landing sections.
+Exact colors: scene uses pale sky `#DFE9F0`, lavender-gray `#E9E8EF`, and white; panel and composer white; question bubbles `#F3F4F6`; text `#111111`; muted text `#6B7280`; send control `#DFEDEF`. The composer border is `#87939D`. Use opaque readable surfaces and fine, restrained grain. These current values supersede earlier dark FAQ specifications.
 
 ### 8.8 Final invitation and footer
 
@@ -225,13 +219,13 @@ Only use real links: Games, How it works, GitHub, and Back to top. Do not invent
 
 ## 9. Responsive rules
 
-| Width | Layout behavior |
-| --- | --- |
-| 320–479px | 16px gutters, one column, 44px H1, stacked full-width hero actions, compact orb, menu disclosure |
-| 480–767px | 20px gutters, one column, actions may share a row when labels fit, menu disclosure |
-| 768–1023px | 32px gutters, two game cards, 64px H1, full navigation; voice demo remains stacked |
-| 1024–1279px | 32px gutters, full two-column compositions, 80px H1 |
-| ≥1280px | 48px gutters, max-width containers, no endlessly stretching text or scenes |
+| Width       | Layout behavior                                                                                  |
+| ----------- | ------------------------------------------------------------------------------------------------ |
+| 320–479px   | 16px gutters, one column, 44px H1, stacked full-width hero actions, compact orb, menu disclosure |
+| 480–767px   | 20px gutters, one column, actions may share a row when labels fit, menu disclosure               |
+| 768–1023px  | 32px gutters, two game cards, 64px H1, full navigation; voice demo remains stacked               |
+| 1024–1279px | 32px gutters, full two-column compositions, 80px H1                                              |
+| ≥1280px     | 48px gutters, max-width containers, no endlessly stretching text or scenes                       |
 
 At 768px verify wordmark, nav, and CTA fit; if measured content exceeds available width, retain the compact menu until it fits. Never clip nav labels to force the breakpoint.
 
@@ -241,13 +235,13 @@ No horizontal page scrolling at 320px or at 200% text size. Permit vertical grow
 
 Motion suggests a calm voice presence. It does not compete with comprehension.
 
-| Motion | Specification |
-| --- | --- |
-| Control hover | 160ms ease-out; fill/shadow, translate at most 1px |
-| Disclosure | Native instant open/close is acceptable; no height animation required |
+| Motion         | Specification                                                                      |
+| -------------- | ---------------------------------------------------------------------------------- |
+| Control hover  | 160ms ease-out; fill/shadow, translate at most 1px                                 |
+| Disclosure     | Native instant open/close is acceptable; no height animation required              |
 | Section reveal | Optional 420ms `cubic-bezier(.22,1,.36,1)`, opacity and translateY 12px; once only |
-| Orb entrance | One gentle 700ms settle from scale .97 to 1; no essential information |
-| Message demo | Only on explicit Play action; follow actual audio timing when audio exists |
+| Orb entrance   | One gentle 700ms settle from scale .97 to 1; no essential information              |
+| Message demo   | Only on explicit Play action; follow actual audio timing when audio exists         |
 
 Default orb rests after entry. Continuous floating or breathing, if added, needs an obvious pause control because it persists beyond five seconds. Prefer the static version for the hackathon. No parallax, scroll hijacking, looping typewriter, flashes, racing waveform, or cursor-following orb.
 
@@ -271,7 +265,7 @@ Target WCAG 2.2 AA for the landing page; do not publish a conformance claim with
 
 ## 12. Performance and resilient delivery
 
-For the showcase, use a cool sky-blue environment instead of peach/lavender, and neutralize the captured Chess screen with a CSS grayscale filter to remove the green/lime clash. Preserve the original image and product styles.
+For the showcase, use a cool sky-blue environment and a crisp inert HTML capture of the existing game UI. Apply Marine board colors only inside the preview; preserve the original game files and preferences. Keep the preview explicitly static and provide a real launch link.
 
 Use the existing framework, router, styling approach, icon set, and image pipeline. No UI framework migration. Scope selectors/tokens to the landing page and avoid restyling actual game screens accidentally.
 
@@ -281,18 +275,22 @@ Use one local font family; only required weights. Avoid adding animation, 3D, au
 
 ## 13. Do / don't
 
-| Do | Don't |
-| --- | --- |
-| Make one scene or interface the focal point | Fill every gap with badges, icons, and floating cards |
-| Keep headlines dark and sharply readable | Use gradient text, neon glows, or hairline light text |
-| Repeat the orb as the brand signature | Scatter sparkles, robot icons, and arbitrary waveforms |
-| Use actual game UI or clearly labeled examples | Fabricate dashboards, usage counts, testimonials, or sponsors |
-| Give the FAQ a conversation aesthetic with real disclosure controls | Present a nonfunctional AI chat box |
-| Use a few atmospheric moments separated by white space | Cover the whole page in purple gradients and glass |
-| Preserve product routes, screens, and established state | Replace the app to make a landing page easier |
-| State prototype limitations plainly | Claim complete voice access, privacy, or browser support without evidence |
-| Show the start of a growing game collection | Present two games as the whole product |
+| Do                                                                  | Don't                                                                     |
+| ------------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| Make one scene or interface the focal point                         | Fill every gap with badges, icons, and floating cards                     |
+| Keep headlines dark and sharply readable                            | Use gradient text, neon glows, or hairline light text                     |
+| Repeat the orb as the brand signature                               | Scatter sparkles, robot icons, and arbitrary waveforms                    |
+| Use actual game UI or clearly labeled examples                      | Fabricate dashboards, usage counts, testimonials, or sponsors             |
+| Give the FAQ a conversation aesthetic with real disclosure controls | Present a nonfunctional AI chat box                                       |
+| Use a few atmospheric moments separated by white space              | Cover the whole page in purple gradients and glass                        |
+| Preserve product routes, screens, and established state             | Replace the app to make a landing page easier                             |
+| State prototype limitations plainly                                 | Claim complete voice access, privacy, or browser support without evidence |
+| Show the start of a growing game collection                         | Present two games as the whole product                                    |
 
 ## 14. Definition of done
 
 Eight sections appear in the specified order, the orb is consistent, real product assets are retained, and mobile composition is deliberate. Every action has a valid destination or implemented behavior. FAQ works with keyboard; demo is honest; no audio starts automatically. Actual product capabilities govern the final wording. Desktop and small-screen screenshots have been inspected, routes still work, and repository-required checks pass. See the implementation brief for the detailed delivery checklist.
+
+## Current orb motion
+
+Keep sphere outlines fixed. Animate two softly blended internal gradient fields with continuous 14–19 second curves, plus subtle movement inside small companion avatars. Use an icon-only 44px pause control with an accessible action label and tooltip; change to play when paused. Pause offscreen orbs and hidden documents. Reduced-motion preferences remove animation and hide the unnecessary control. Never imply the ambient animation is listening or processing.

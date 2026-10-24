@@ -36,3 +36,7 @@ Ambient animation is decorative and does not imply an active microphone. It runs
 ## Figma correction: game color is not the global brand
 
 The later Figma review supersedes the earlier global green-primary mapping above. See [FIGMA_REVIEW.md](FIGMA_REVIEW.md) for source frames and final roles. Generic primary actions are black/white; site accents and the FAQ send action use blue-gray. Keep the existing button geometry, but confine green to Chess, amber to Loups-Garous, and violet to Tic-Tac-Toe. The user's requested softer icons intentionally replace pointed game polygons and Unicode arrows with a local rounded SVG set.
+
+## Motion and turn-story refinement — 25 October
+
+Orbs retain fixed silhouettes with softly moving inner gradient fields, rather than rotating or bouncing the whole object. A 44px icon-only pause control exposes its next action to assistive technology and switches to play while paused. Offscreen/hidden-document motion stops; reduced-motion users see static orbs. The voice example is now an ordered three-stage turn with one compact player confirmation, replacing the long alternating transcript. The current audit is in DESIGN_AUDIT.md.

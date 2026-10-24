@@ -115,6 +115,7 @@ function appendFaqMessage(text, fromPlayer) {
     const orb = document.createElement("span");
     orb.className = "brand-orb";
     orb.setAttribute("aria-hidden", "true");
+    registerAnimatedOrb(orb);
     const content = document.createElement("div");
     const speaker = document.createElement("span");
     speaker.className = "chat-speaker";
@@ -131,7 +132,11 @@ function askFaq(question, topic = matchFaq(question)) {
   question = question.trim().slice(0, 300);
   if (!question) return;
   // Bound this in-memory transcript; no questions are persisted.
-  while (faqLog.children.length >= 20) faqLog.firstElementChild.remove();
+  while (faqLog.children.length >= 20) {
+    const oldest = faqLog.firstElementChild;
+    oldest.querySelectorAll(".brand-orb").forEach((orb) => motionObserver?.unobserve(orb));
+    oldest.remove();
+  }
   appendFaqMessage(question, true);
   const answer = topic
     ? faqAnswers[topic].answer
@@ -172,24 +177,34 @@ if ("ResizeObserver" in window) {
   window.addEventListener("resize", scaleProductPreview);
 }
 
-// Ambient decorative motion has a visible pause control and runs only on visible orbs.
+// Ambient motion lives inside fixed spheres. The icon button names its next action.
 const motionControl = document.querySelector("#orb-motion-toggle");
+const motionIcon = motionControl.querySelector("use");
 motionControl.hidden = false;
 motionControl.addEventListener("click", () => {
   const paused = document.documentElement.classList.toggle("motion-paused");
-  motionControl.setAttribute("aria-pressed", String(paused));
-  motionControl.textContent = paused ? "Resume orb animation" : "Pause orb animation";
+  const label = paused ? "Resume orb animation" : "Pause orb animation";
+  motionControl.setAttribute("aria-label", label);
+  motionControl.setAttribute("title", label);
+  motionIcon.setAttribute("href", `./assets/icons.svg#${paused ? "play" : "pause"}`);
 });
-const animatedOrbs = document.querySelectorAll(".orb, .brand-orb");
-if ("IntersectionObserver" in window) {
-  const orbObserver = new IntersectionObserver(
-    (entries) => {
-      for (const entry of entries)
-        entry.target.classList.toggle("orb-motion-visible", entry.isIntersecting);
-    },
-    { rootMargin: "32px" },
-  );
-  animatedOrbs.forEach((orb) => orbObserver.observe(orb));
-} else {
-  animatedOrbs.forEach((orb) => orb.classList.add("orb-motion-visible"));
+const motionObserver =
+  "IntersectionObserver" in window
+    ? new IntersectionObserver(
+        (entries) => {
+          for (const entry of entries)
+            entry.target.classList.toggle("orb-motion-visible", entry.isIntersecting);
+        },
+        { rootMargin: "32px" },
+      )
+    : null;
+function registerAnimatedOrb(orb) {
+  if (motionObserver) motionObserver.observe(orb);
+  else orb.classList.add("orb-motion-visible");
 }
+document.querySelectorAll(".orb, .brand-orb").forEach(registerAnimatedOrb);
+function syncPageMotion() {
+  document.documentElement.classList.toggle("motion-document-hidden", document.hidden);
+}
+document.addEventListener("visibilitychange", syncPageMotion);
+syncPageMotion();
