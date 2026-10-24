@@ -139,6 +139,8 @@ export function useVoiceCompanion(
     if (audioRef.current) audioRef.current.srcObject = null;
     audioRef.current = null;
     handledCalls.current.clear();
+    setCaption("");
+    transcriptSource.current = null;
     if (disconnectTimeout.current !== null) clearTimeout(disconnectTimeout.current);
     disconnectTimeout.current = null;
     if (connectionTimeout.current !== null) clearTimeout(connectionTimeout.current);
