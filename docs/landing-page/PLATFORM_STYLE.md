@@ -40,3 +40,7 @@ The later Figma review supersedes the earlier global green-primary mapping above
 ## Motion and turn-story refinement — 25 October
 
 Orbs retain fixed silhouettes with softly moving inner gradient fields, rather than rotating or bouncing the whole object. A 44px icon-only pause control exposes its next action to assistive technology and switches to play while paused. Offscreen/hidden-document motion stops; reduced-motion users see static orbs. The voice example is now an ordered three-stage turn with one compact player confirmation, replacing the long alternating transcript. The current audit is in DESIGN_AUDIT.md.
+
+## Particle-water refinement — 25 October
+
+The large orbs now contain a canvas particle field following continuous rippling spherical bands, with depth-based opacity and perspective. Small brand orbs use a lower particle count. Static gradient art remains the fallback. The shared pause control freezes both particle time and gradient motion; reduced-motion users receive a fixed field. Only visible orbs render frames, hidden documents stop work, and removed FAQ avatars release their particle state. Hero sky gradients now fade through an opacity mask to fully transparent over white before the section boundary.

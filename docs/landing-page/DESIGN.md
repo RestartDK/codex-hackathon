@@ -294,3 +294,7 @@ Eight sections appear in the specified order, the orb is consistent, real produc
 ## Current orb motion
 
 Keep sphere outlines fixed. Animate two softly blended internal gradient fields with continuous 14–19 second curves, plus subtle movement inside small companion avatars. Use an icon-only 44px pause control with an accessible action label and tooltip; change to play when paused. Pause offscreen orbs and hidden documents. Reduced-motion preferences remove animation and hide the unnecessary control. Never imply the ambient animation is listening or processing.
+
+## Particle-water refinement — 25 October
+
+The large orbs now contain a canvas particle field following continuous rippling spherical bands, with depth-based opacity and perspective. Small brand orbs use a lower particle count. Static gradient art remains the fallback. The shared pause control freezes both particle time and gradient motion; reduced-motion users receive a fixed field. Only visible orbs render frames, hidden documents stop work, and removed FAQ avatars release their particle state. Hero sky gradients now fade through an opacity mask to fully transparent over white before the section boundary.

@@ -116,6 +116,7 @@ function appendFaqMessage(text, fromPlayer) {
     orb.className = "brand-orb";
     orb.setAttribute("aria-hidden", "true");
     registerAnimatedOrb(orb);
+    prepareParticleOrb(orb);
     const content = document.createElement("div");
     const speaker = document.createElement("span");
     speaker.className = "chat-speaker";
@@ -134,7 +135,10 @@ function askFaq(question, topic = matchFaq(question)) {
   // Bound this in-memory transcript; no questions are persisted.
   while (faqLog.children.length >= 20) {
     const oldest = faqLog.firstElementChild;
-    oldest.querySelectorAll(".brand-orb").forEach((orb) => motionObserver?.unobserve(orb));
+    oldest.querySelectorAll(".brand-orb").forEach((orb) => {
+      motionObserver?.unobserve(orb);
+      particleOrbs.delete(orb);
+    });
     oldest.remove();
   }
   appendFaqMessage(question, true);
@@ -192,8 +196,10 @@ const motionObserver =
   "IntersectionObserver" in window
     ? new IntersectionObserver(
         (entries) => {
-          for (const entry of entries)
+          for (const entry of entries) {
             entry.target.classList.toggle("orb-motion-visible", entry.isIntersecting);
+            if (entry.isIntersecting) syncParticleMotion();
+          }
         },
         { rootMargin: "32px" },
       )
@@ -208,3 +214,104 @@ function syncPageMotion() {
 }
 document.addEventListener("visibilitychange", syncPageMotion);
 syncPageMotion();
+
+// Fine particles follow rippling spherical bands, with no microphone or audio state.
+const particleOrbs = new Map();
+const reducedOrbMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+let orbFrame = 0;
+let orbLastFrame = 0;
+function prepareParticleOrb(orb) {
+  if (particleOrbs.has(orb)) return;
+  const canvas = document.createElement("canvas");
+  canvas.className = "orb-particles";
+  canvas.setAttribute("aria-hidden", "true");
+  orb.append(canvas);
+  const context = canvas.getContext("2d");
+  if (!context) {
+    canvas.remove();
+    return;
+  }
+  const small = orb.classList.contains("brand-orb");
+  const size = small ? 96 : 640;
+  canvas.width = canvas.height = size;
+  const state = { context, size, small, green: orb.classList.contains("orb-demo"), time: 0 };
+  particleOrbs.set(orb, state);
+  drawParticleOrb(state);
+}
+function drawParticleOrb({ context: ctx, size, small, green, time }) {
+  ctx.clearRect(0, 0, size, size);
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(size / 2, size / 2, size * 0.495, 0, Math.PI * 2);
+  ctx.clip();
+  const rows = small ? 14 : 28;
+  const columns = small ? 25 : 64;
+  const rotation = time * 0.12;
+  const color = green ? "83, 121, 49" : "48, 111, 184";
+  for (let row = 0; row < rows; row++) {
+    const latitude = -Math.PI / 2 + ((row + 0.5) / rows) * Math.PI;
+    for (let col = 0; col < columns; col++) {
+      const angle = (col / columns) * Math.PI * 2 + rotation + row * 0.027;
+      const ripple = Math.sin(angle * 3 + latitude * 5 - time * 0.75);
+      const radius = 0.83 + ripple * 0.07 + Math.cos(angle * 2 - time * 0.5) * 0.035;
+      const x = Math.cos(latitude) * Math.cos(angle) * radius;
+      const z = Math.cos(latitude) * Math.sin(angle) * radius;
+      const y =
+        Math.sin(latitude) * radius + Math.sin(angle * 2 + time * 0.65 + latitude * 4) * 0.055;
+      const perspective = 1 / (1.18 - z * 0.18);
+      const px = size * (0.5 + x * 0.51 * perspective);
+      const py = size * (0.5 + y * 0.51 * perspective);
+      const depth = (z + 1) / 2;
+      ctx.fillStyle = `rgba(${color},${0.1 + depth * 0.55})`;
+      ctx.beginPath();
+      ctx.arc(px, py, size * (small ? 0.008 : 0.00165) * (0.65 + depth * 0.65), 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+  ctx.restore();
+}
+function particleMotionAllowed() {
+  return (
+    !reducedOrbMotion.matches &&
+    !document.hidden &&
+    !document.documentElement.classList.contains("motion-paused")
+  );
+}
+function runParticleFrame(timestamp) {
+  orbFrame = 0;
+  if (!particleMotionAllowed()) {
+    orbLastFrame = 0;
+    return;
+  }
+  const elapsed = orbLastFrame ? Math.min((timestamp - orbLastFrame) / 1000, 0.05) : 0;
+  orbLastFrame = timestamp;
+  let visible = false;
+  for (const [orb, state] of particleOrbs) {
+    if (!orb.isConnected) {
+      particleOrbs.delete(orb);
+      continue;
+    }
+    if (!orb.classList.contains("orb-motion-visible")) continue;
+    visible = true;
+    state.time += elapsed;
+    drawParticleOrb(state);
+  }
+  if (visible) orbFrame = requestAnimationFrame(runParticleFrame);
+  else orbLastFrame = 0;
+}
+function syncParticleMotion() {
+  if (particleMotionAllowed() && !orbFrame) orbFrame = requestAnimationFrame(runParticleFrame);
+}
+document.querySelectorAll(".orb, .brand-orb").forEach(prepareParticleOrb);
+motionControl.addEventListener("click", syncParticleMotion);
+document.addEventListener("visibilitychange", syncParticleMotion);
+reducedOrbMotion.addEventListener("change", () => {
+  if (reducedOrbMotion.matches) {
+    for (const state of particleOrbs.values()) {
+      state.time = 0;
+      drawParticleOrb(state);
+    }
+  }
+  syncParticleMotion();
+});
+syncParticleMotion();

@@ -34,3 +34,7 @@ The current page is visually coherent: a neutral white/black shell, blue-gray at
 ## Remaining limits
 
 This was a visual and keyboard review in the desktop browser at responsive viewport sizes. It was not a formal accessibility certification, native screen-reader session, physical-phone test, low-power animation benchmark, or live-voice test. The small-screen product showcase remains a labeled visual preview with a direct link to the full game. Planned games remain clearly marked Coming soon.
+
+## Follow-up particle check
+
+Added visible wave-like particle motion inside the landing orbs. Compared screenshots of the same orb crop: paused frames were pixel-identical; the resumed frame changed. Checked the updated page at 390px without overflow and an empty browser error log. Verified the final sky boundary reaches white with no color jump. Reduced-motion behavior remains implemented in source, without a native preference-emulation test.
