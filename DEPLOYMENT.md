@@ -4,7 +4,7 @@ This guide describes deployment but does not publish the project.
 
 ## 1. Verify locally
 
-From `chess-companion`:
+From the repository root:
 
 ```powershell
 npm install
@@ -17,7 +17,7 @@ Confirm that `public/stockfish/stockfish-19-lite-single.js` and its matching `.w
 
 ## 2. Create the Vercel project
 
-Import this repository into Vercel and set the root directory to `chess-companion`. The checked-in `vercel.json` selects the Nitro Vercel preset. Use:
+Import this repository into Vercel and leave the root directory at the repository root. The checked-in `vercel.json` selects the Nitro Vercel preset. Use:
 
 - Install command: `npm install`
 - Build command: `npm run build`

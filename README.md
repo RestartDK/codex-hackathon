@@ -15,7 +15,7 @@ This is an early implementation. It needs testing with blind and low-vision play
 - Automatic move narration, captions, keyboard board navigation, screen-reader live-region mode, and typed commands
 - Local game persistence, undo, resignation, review, visual themes, and sound controls
 
-The full product and engineering plan is in [`../plan.md`](../plan.md). Upstream attribution is in [`UPSTREAM.md`](UPSTREAM.md).
+The full product and engineering plan is in [`plan.md`](plan.md). Upstream attribution is in [`UPSTREAM.md`](UPSTREAM.md).
 
 ## Requirements
 
@@ -27,7 +27,7 @@ The full product and engineering plan is in [`../plan.md`](../plan.md). Upstream
 ## Run locally on Windows PowerShell
 
 ```powershell
-cd .\chess-companion
+cd .\codex-hackathon
 npm install
 Copy-Item .env.example .env
 ```
