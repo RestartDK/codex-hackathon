@@ -77,3 +77,7 @@ The entire landing now uses the platform's Arial/Helvetica type, white/black fou
 The current landing uses the exact `.pill-button` and `.pill-button.primary` values from the app, a white FAQ, lighter blue scenic backgrounds, greatly reduced fine grain, and scalable animated SVG orbs. The showcase is now an inert HTML capture of the real Chess interface rather than an enlarged screenshot. Its Marine board theme and restrained glow are landing-only preview styles. Original product sources and saved preferences remain unchanged. The earlier screenshot remains a no-JavaScript fallback.
 
 New assets: `orb-blue.svg`, `orb-green.svg`, `chess-preview.html`, and `product-preview.css`. Motion includes pause/resume, viewport visibility gating, and reduced-motion support. See PLATFORM_STYLE.md for exact final mappings, source provenance, and snapshot refresh guidance.
+
+## Figma color and icon correction
+
+Reviewed the actual Figma home and audio-settings frames. Global green actions were a Chess-color leak. The landing now uses neutral primary actions and blue-gray accents; each game retains its own palette. Pointed game symbols and thin Unicode glyphs are replaced by rounded SVG icons. See FIGMA_REVIEW.md for source references, exact color roles, and the deliberate icon changes requested by the user. Original product files remain untouched.

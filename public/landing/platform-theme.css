@@ -876,3 +876,192 @@ h3,
     linear-gradient(180deg, transparent 25%, #172018b8 75%),
     url("./assets/grain.svg") repeat;
 }
+
+/* Figma review: platform-wide colors are neutral/blue; green belongs to Chess.
+   Sources: home 1:4 and settings 17:304 in the DevDay Hackathon design. */
+:root {
+  --pv-accent: #36576a;
+  --pv-soft: #f5f6f3;
+  --platform-accent: #dfedef;
+  --platform-brand-fill: #111;
+  --platform-brand-on-fill: #fff;
+}
+.button,
+.button-small,
+.footer-play {
+  background: #111;
+  color: #fff;
+  border-color: #111;
+}
+.button:hover,
+.button-small:hover,
+.footer-play:hover {
+  background: #303030;
+  border-color: #303030;
+}
+.button:active,
+.button-small:active,
+.footer-play:active {
+  background: #000;
+  border-color: #000;
+}
+.button-secondary,
+.library-future .button {
+  background: #fff;
+  border-color: #e5e7eb;
+  color: #111;
+}
+.button-secondary:hover,
+.library-future .button:hover {
+  background: #f3f5f6;
+  border-color: #d9e2e9;
+}
+.button-secondary:active,
+.library-future .button:active {
+  background: #e7eef2;
+}
+.nav-links > a:not(.button):hover,
+.text-link,
+.footer-links a:hover {
+  color: #36576a;
+}
+.library-intro > span {
+  color: #6b7280;
+}
+.small-signal {
+  background: #6b9baf;
+  box-shadow: 0 0 0 4px #cfeafa66;
+}
+.chat-send {
+  background: #dfedef;
+  color: #111;
+}
+.chat-send:hover:not(:disabled) {
+  background: #cfe3e8;
+}
+.chat-send:disabled {
+  background: #f1f4f5;
+  color: #7b8790;
+  opacity: 0.7;
+}
+.chat-suggestions button,
+.motion-button {
+  border-color: #e5e7eb;
+}
+.chat-suggestions button:hover,
+.motion-button:hover {
+  background: #f3f5f6;
+}
+.ui-icon {
+  display: inline-block;
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  vertical-align: middle;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  overflow: visible;
+}
+.button > span,
+.text-link > span,
+.scroll-note > span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.chat-send .ui-icon {
+  width: 20px;
+  height: 20px;
+  stroke-width: 1.8;
+}
+.sound-mark .ui-icon {
+  width: 28px;
+  height: 28px;
+  stroke-width: 1.5;
+}
+.menu-icon {
+  width: 18px;
+  height: 18px;
+  stroke-width: 1.8;
+  transition: transform 160ms ease;
+}
+.menu-toggle[aria-expanded="true"] .menu-icon {
+  transform: rotate(90deg);
+}
+.game-emblem {
+  width: 108px;
+  height: 108px;
+  display: grid;
+  place-items: center;
+  border-radius: 38px;
+  background: #ffffff1f;
+  border: 1px solid #ffffff45;
+  box-shadow:
+    inset 0 2px 3px #ffffff18,
+    0 12px 28px #11111108;
+  color: #fff;
+}
+.game-emblem .ui-icon {
+  width: 52px;
+  height: 52px;
+  stroke-width: 1.55;
+}
+.capabilities li > span .ui-icon {
+  width: 18px;
+  height: 18px;
+  stroke-width: 1.75;
+}
+@media (max-width: 767px) {
+  .game-emblem {
+    width: 96px;
+    height: 96px;
+    border-radius: 34px;
+  }
+  .game-emblem .ui-icon {
+    width: 46px;
+    height: 46px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .menu-icon {
+    transition: none;
+  }
+}
+@media (forced-colors: active) {
+  .button,
+  .button-small,
+  .footer-play,
+  .button-secondary,
+  .chat-send {
+    background: ButtonFace;
+    color: ButtonText;
+    border-color: ButtonText;
+  }
+  .game-emblem {
+    background: Canvas;
+    color: CanvasText;
+    border-color: CanvasText;
+  }
+}
+.capabilities li > span {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  flex: none;
+  border-radius: 12px;
+  background: #edf3f7;
+  color: #36576a;
+  line-height: 1;
+  margin-top: 2px;
+}
+@media (forced-colors: active) {
+  .capabilities li > span {
+    background: Canvas;
+    color: CanvasText;
+    border: 1px solid CanvasText;
+  }
+}

@@ -32,3 +32,7 @@ The snapshot was captured from the real `.app-shell` Chess view, then paired wit
 ## Motion and accessibility
 
 Ambient animation is decorative and does not imply an active microphone. It runs only while orbs are near the viewport. A visible Pause/Resume orb animation button pauses all orb motion. `prefers-reduced-motion` removes animation and hides that unnecessary control. Forced colors retains readable controls; no audio starts automatically. Preserve the local FAQ's truthful answer scope and keyboard behavior.
+
+## Figma correction: game color is not the global brand
+
+The later Figma review supersedes the earlier global green-primary mapping above. See [FIGMA_REVIEW.md](FIGMA_REVIEW.md) for source frames and final roles. Generic primary actions are black/white; site accents and the FAQ send action use blue-gray. Keep the existing button geometry, but confine green to Chess, amber to Loups-Garous, and violet to Tic-Tac-Toe. The user's requested softer icons intentionally replace pointed game polygons and Unicode arrows with a local rounded SVG set.
