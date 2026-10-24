@@ -8,15 +8,17 @@
     "build": "tsc -b && vp build",
     "check": "vp check",
     "typecheck": "tsc -b",
+    "test": "vp test run --config vitest.config.ts",
     "lint": "vp lint",
     "fmt": "vp fmt",
     "preview": "vp preview",
-    "start": "node .output/server/index.mjs",
+    "start": "node --env-file-if-exists=.env .output/server/index.mjs",
     "smoke": "node scripts/smoke.mjs"
   },
   "dependencies": {
     "react": "^19.3.1",
-    "react-dom": "^19.3.1"
+    "react-dom": "^19.3.1",
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@types/node": "^26",

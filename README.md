@@ -1,49 +1,75 @@
-# codex-hackathon
+# Loups-Garous
 
-React and TypeScript frontend with a Nitro API, built together with Vite+ into one `.output/` directory.
+A single-player, browser-based social deduction game. You receive one secret role and play with NPC villagers. The interface stays intentionally small: a village roster, a private role panel, available actions, and the village journal.
+
+The project uses the supplied React, Vite+, and Nitro application. Vite+ builds the browser app and Nitro API into `.output/`.
 
 ## Run locally
 
-Use Node 26.12.1, pinned in `.node-version`, and Bun 1.4.4. Vite+ selects the declared Bun version for its package-management commands.
+Use the Bun version in `package.json` (`bun@1.4.4`):
 
 ```sh
 bun install
 bun run dev
 ```
 
-Open http://localhost:3000. The starter includes a React counter and a link to `GET /api/health`, which returns `{ "status": "ok" }`.
+Open http://localhost:3000. Games run without a provider key; the guide responds from local game rules and NPCs use deterministic bots. To enable model-driven guide and NPC replies, copy `.env.example` to `.env` and set `OPENAI_API_KEY`. The configured defaults are `OPENAI_VOICE_MODEL=gpt-live-1`, `OPENAI_DELEGATION_MODEL=gpt-6-luna`, and `OPENAI_NPC_MODEL=gpt-6-luna`. Provider credentials are read only by Nitro and are never sent to the browser.
 
-## Check and build
+## Checks and production
 
 ```sh
 bun run check
 bun run typecheck
+bun run test
 bun run build
-```
-
-`check` runs Vite+ formatting, lint, and type checks. `typecheck` checks the frontend, Vite configuration, and server routes with TypeScript. `build` also runs TypeScript before producing the frontend and server.
-
-## Run the production server
-
-```sh
 bun run start
 ```
 
-The server listens on http://localhost:3000. Set `PORT` to use another port. The generated `.output/` directory contains the server and static assets.
+The production server listens on port 3000 by default. `bun run smoke http://127.0.0.1:3000` checks the app shell, browser entry, and health route.
 
-With the server running, verify the HTML, frontend module responses, and Nitro API from another terminal:
+## Rules
 
-```sh
-bun run smoke http://127.0.0.1:3000
-```
+The standard village size is 4–12 players. The game assigns a balanced default role mix with at least one Werewolf. A village contains one human and NPCs. Cupid chooses two lovers at the start when present; the surviving lover dies when their partner does. At night the pack hunts, the Seer investigates, and the Witch may use one healing and one poison potion over the full game. During the day, villagers discuss and vote. A tied vote follows the selected no-exile or random-among-tied rule. A Hunter eliminated from the game gets one final shot, including after a lover-chain death.
 
-The same smoke check works against the development server or `bun run preview` when you pass its URL.
+The village wins when no Werewolves remain. Werewolves win when they equal or outnumber all other living players. Cross-faction lovers win if they are the only two living players. Roles remain private until the game ends. The server filters private findings, wolf teammates, and Witch night information for each authorized view.
 
-## Add application code
+## Sessions and model agents
 
-- `src/` contains the React frontend.
-- `server/api/` contains API routes. `health.get.ts` handles `GET /api/health`.
-- `vite.config.ts` combines the React and Nitro plugins with Vite+ lint and formatting settings.
-- `scripts/smoke.mjs` checks that the frontend and API share one working server.
+Creating a game returns a cryptographically random session token once. Read and action requests require that token in `X-Game-Session`. Action writes also require a UUID `X-Request-Id`; successful retries return the saved result. Game state is held in memory and is cleared when the server restarts.
 
-Nitro is pinned to `3.0.260903-beta`. This uses the Nitro 3 Vite plugin, not the older Nitro 2 `nitropack` setup. The `vite` dependency and override intentionally point to the matching Vite+ core package so plugins share one Vite instance.
+The player-facing guide uses the Responses API with a player-scoped view of the game. It can explain rules, the current phase, and strategy, but has no action route and cannot alter a game. Missing credentials or a provider failure show a labeled local guide response. The browser can optionally speak those text responses with its local speech feature.
+
+The browser exposes one **Enable voice guide** control. A spoken briefing begins every game before the public story line, covering the player's role, win condition, phase flow, and voice examples. The Start action primes browser speech while its click is active; the private guide also has a **Replay briefing** control and understands “repeat the guide.” When credentials are configured, narration uses the authenticated server-side OpenAI TTS route with the `marin` voice and falls back to browser speech if the provider is unavailable. After microphone permission, persistent browser transcription handles game commands, public morning conversation, and private guide questions in the same session. During the day, natural messages such as “Camille, why do you suspect Noémie?” and “tell the village I trust Jules” become public village speech and prompt NPC replies. Say “voice help” for the complete phase-aware command list, including role actions, public conversation, voting, narration controls, game pause/resume, and voice-control pause/resume. A human Werewolf can say “let the pack decide,” “pass,” or “do nothing” to delegate the target and move the game into dawn. Commands still use the validated action route; guide questions use the player-scoped assistant route and are read by the same narrator voice. If a browser reports that its transcription network is unavailable during a game, this same control switches to the `gpt-live-1` WebRTC guide backed by `gpt-6-luna`, rather than showing an endless reconnect message or a second microphone control. Its caption stream uses the same command router after the player pauses briefly, so game actions remain validated server-side.
+
+NPC agents are separate from the guide and voice configuration. They use `OPENAI_NPC_MODEL` only when their controller is `agent`; local `bot` players never call a model. Every NPC target remains validated against the deterministic game rules. Missing credentials, timeout, provider errors, or malformed NPC output use the local fallback.
+
+## Story and audio
+
+A new normal game begins with a short Valombre prologue. Each NPC has a public background, personality, visual portrait, and introduction. The player can begin the first night whenever they are ready. Returning players skip the prologue after starting it once; the quick-test game also skips it so it opens directly on a playable night.
+
+One player-facing assistant queues and reads public narration, NPC dialogue, and guide replies, always naming the speaker before their original text. It highlights the active speaker and provides automatic-reading, mute, volume, speech speed, pause/resume, repeat, and stop controls. If speech synthesis is unavailable, every line remains in the village history.
+
+For a provider/ML handoff, read [the voice-system guide](docs/voice-system.md). It separates browser narration, microphone transcription, real-time guide audio, and NPC text generation, and identifies the safe integration point for a neural TTS provider.
+
+NPCs retain short public-conversation memories and build suspicions from accusations and public votes. They open each new day with an automatic public exchange. The model prompt receives only their role-safe information, profile, memories, and public discussion; the deterministic engine validates each game action. Once Voice Guide is enabled, persistent browser transcription routes spoken questions to the private guide and spoken game commands to the same validated action interface used by typed commands. The private guide never takes actions on the player's behalf.
+
+## Game modules
+
+The API is shared by registered game modules. `GET /api/games` returns the game catalog; `POST /api/games` accepts a `gameType` (defaults to `loups-garous`) and the selected module's create options. Session reads and action writes use the same authenticated routes for every registered game. A failed action runs against a private state copy and is discarded; successful actions are committed once and can be safely retried with the same request ID.
+
+To add a game, create a module under `server/game/modules/` that implements `GameModule<State, CreateInput, ActionInput, PublicView>`, then register it in `server/game/registry.ts`. Each module owns its state, validates its create/action inputs, applies its rules, and returns a player-safe view. The shared API handles game lookup, sessions, action locking, request IDs, and catalog discovery. Add a matching frontend renderer for that module's view shape; the current browser screen is still Loups-Garous-specific.
+
+Modules can advertise typed/voice-command and undo support. A module can implement `parseCommand` to translate typed text or a speech transcript into one of its validated actions; the shared action route accepts `{ "command": "..." }` and applies the resulting action transactionally. Loups-Garous supports commands such as “investigate Camille”, “hear the villagers”, “I accuse Camille”, “vote Camille”, “pause game”, and “say …”. The single Voice Guide button enables persistent commands and spoken guide questions, while typed controls remain available. Undo remains unsupported in Loups-Garous; another module can expose an `undoAction` hook.
+
+The default store is still in-memory and single-process: games and session tokens are cleared on server restart, and the store is not suitable for multi-instance deployment. `GameRepository` isolates that storage choice, so a durable database adapter can be added without rewriting game rules. The existing request lock and receipt cache also live in memory, so multi-instance deployments must move those into shared storage too.
+
+## Project structure
+
+- `src/` — browser setup and gameplay interface
+- `server/api/` — Nitro game catalog, session, action, and health endpoints
+- `server/game/engine.ts` — deterministic game rules and player views
+- `server/game/module.ts` and `registry.ts` — typed module contract and game catalog
+- `server/game/modules/` — individual game implementations
+- `server/game/agents.ts` — LLM provider and fallback decisions
+- `server/game/prepare.ts` — NPC phase setup
+- `server/game/store.ts` — in-memory state, sessions, request receipts, and locks
