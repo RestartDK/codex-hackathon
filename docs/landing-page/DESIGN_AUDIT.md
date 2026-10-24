@@ -38,3 +38,7 @@ This was a visual and keyboard review in the desktop browser at responsive viewp
 ## Follow-up particle check
 
 Added visible wave-like particle motion inside the landing orbs. Compared screenshots of the same orb crop: paused frames were pixel-identical; the resumed frame changed. Checked the updated page at 390px without overflow and an empty browser error log. Verified the final sky boundary reaches white with no color jump. Reduced-motion behavior remains implemented in source, without a native preference-emulation test.
+
+## Current gradient and button refinement
+
+Replaced particles with a continuous liquid color field. Confirmed six liquid canvases and no particle canvases in the page, a fixed outer sphere, and paused gradient state after using the pause control. Desktop and 390px layouts render without overflow. Verified custom button transition styles in the browser; hover rules are gated to fine pointers, disabled send buttons do not move, and reduced-motion styles remove transforms. Production build, JavaScript syntax, formatting, and whitespace checks passed. The earlier particle screenshot comparison describes the superseded experiment.

@@ -116,7 +116,7 @@ function appendFaqMessage(text, fromPlayer) {
     orb.className = "brand-orb";
     orb.setAttribute("aria-hidden", "true");
     registerAnimatedOrb(orb);
-    prepareParticleOrb(orb);
+    prepareLiquidOrb(orb);
     const content = document.createElement("div");
     const speaker = document.createElement("span");
     speaker.className = "chat-speaker";
@@ -137,7 +137,7 @@ function askFaq(question, topic = matchFaq(question)) {
     const oldest = faqLog.firstElementChild;
     oldest.querySelectorAll(".brand-orb").forEach((orb) => {
       motionObserver?.unobserve(orb);
-      particleOrbs.delete(orb);
+      liquidOrbs.delete(orb);
     });
     oldest.remove();
   }
@@ -198,7 +198,7 @@ const motionObserver =
         (entries) => {
           for (const entry of entries) {
             entry.target.classList.toggle("orb-motion-visible", entry.isIntersecting);
-            if (entry.isIntersecting) syncParticleMotion();
+            if (entry.isIntersecting) syncLiquidMotion();
           }
         },
         { rootMargin: "32px" },
@@ -215,15 +215,15 @@ function syncPageMotion() {
 document.addEventListener("visibilitychange", syncPageMotion);
 syncPageMotion();
 
-// Fine particles follow rippling spherical bands, with no microphone or audio state.
-const particleOrbs = new Map();
+// Continuous color fields bend like water inside fixed spheres; no dots or audio state.
+const liquidOrbs = new Map();
 const reducedOrbMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
 let orbFrame = 0;
 let orbLastFrame = 0;
-function prepareParticleOrb(orb) {
-  if (particleOrbs.has(orb)) return;
+function prepareLiquidOrb(orb) {
+  if (liquidOrbs.has(orb)) return;
   const canvas = document.createElement("canvas");
-  canvas.className = "orb-particles";
+  canvas.className = "orb-liquid";
   canvas.setAttribute("aria-hidden", "true");
   orb.append(canvas);
   const context = canvas.getContext("2d");
@@ -232,86 +232,113 @@ function prepareParticleOrb(orb) {
     return;
   }
   const small = orb.classList.contains("brand-orb");
-  const size = small ? 96 : 640;
+  const size = small ? 48 : 192;
   canvas.width = canvas.height = size;
-  const state = { context, size, small, green: orb.classList.contains("orb-demo"), time: 0 };
-  particleOrbs.set(orb, state);
-  drawParticleOrb(state);
+  const state = {
+    context,
+    size,
+    green: orb.classList.contains("orb-demo"),
+    time: 0,
+    pixels: context.createImageData(size, size),
+  };
+  liquidOrbs.set(orb, state);
+  drawLiquidOrb(state);
 }
-function drawParticleOrb({ context: ctx, size, small, green, time }) {
-  ctx.clearRect(0, 0, size, size);
-  ctx.save();
-  ctx.beginPath();
-  ctx.arc(size / 2, size / 2, size * 0.495, 0, Math.PI * 2);
-  ctx.clip();
-  const rows = small ? 14 : 28;
-  const columns = small ? 25 : 64;
-  const rotation = time * 0.12;
-  const color = green ? "83, 121, 49" : "48, 111, 184";
-  for (let row = 0; row < rows; row++) {
-    const latitude = -Math.PI / 2 + ((row + 0.5) / rows) * Math.PI;
-    for (let col = 0; col < columns; col++) {
-      const angle = (col / columns) * Math.PI * 2 + rotation + row * 0.027;
-      const ripple = Math.sin(angle * 3 + latitude * 5 - time * 0.75);
-      const radius = 0.83 + ripple * 0.07 + Math.cos(angle * 2 - time * 0.5) * 0.035;
-      const x = Math.cos(latitude) * Math.cos(angle) * radius;
-      const z = Math.cos(latitude) * Math.sin(angle) * radius;
-      const y =
-        Math.sin(latitude) * radius + Math.sin(angle * 2 + time * 0.65 + latitude * 4) * 0.055;
-      const perspective = 1 / (1.18 - z * 0.18);
-      const px = size * (0.5 + x * 0.51 * perspective);
-      const py = size * (0.5 + y * 0.51 * perspective);
-      const depth = (z + 1) / 2;
-      ctx.fillStyle = `rgba(${color},${0.1 + depth * 0.55})`;
-      ctx.beginPath();
-      ctx.arc(px, py, size * (small ? 0.008 : 0.00165) * (0.65 + depth * 0.65), 0, Math.PI * 2);
-      ctx.fill();
+function drawLiquidOrb({ context, size, green, time, pixels }) {
+  const data = pixels.data;
+  // Domain-warped gradients make broad, continuous folds rather than a moving object.
+  const palette = green
+    ? [
+        [240, 248, 212],
+        [162, 192, 105],
+        [109, 151, 74],
+        [211, 231, 166],
+      ]
+    : [
+        [229, 246, 255],
+        [111, 178, 238],
+        [148, 143, 221],
+        [232, 192, 224],
+      ];
+  const t = time * 0.36;
+  for (let y = 0; y < size; y++) {
+    const v = (y / (size - 1) - 0.5) * 2;
+    for (let x = 0; x < size; x++) {
+      const u = (x / (size - 1) - 0.5) * 2;
+      const radius = u * u + v * v;
+      const i = (y * size + x) * 4;
+      if (radius > 1) {
+        data[i + 3] = 0;
+        continue;
+      }
+      const depth = Math.sqrt(1 - radius);
+      const warpedX = u + 0.38 * Math.sin(v * 3.2 + t) + 0.12 * Math.cos(u * 4 - t * 0.6);
+      const warpedY = v + 0.32 * Math.sin(u * 3.5 - t * 0.8);
+      const wave = 0.5 + 0.5 * Math.sin(warpedY * 4.6 + warpedX * 2.4 - t * 1.1);
+      const fold = 0.5 + 0.5 * Math.cos(warpedX * 3.8 - warpedY * 2.2 + t * 0.7);
+      const pearl = Math.max(0, Math.sin(warpedY * 2.4 + warpedX * 2.1 + t * 0.5)) ** 4;
+      const w0 = 0.24 + pearl * 0.8;
+      const w1 = wave * 0.8;
+      const w2 = (1 - wave) * fold * 0.8;
+      const w3 = (1 - fold) * 0.35;
+      const total = w0 + w1 + w2 + w3;
+      const highlight = Math.exp(-((u + 0.4) ** 2 + (v + 0.45) ** 2) * 4) * 0.24;
+      for (let channel = 0; channel < 3; channel++) {
+        const color =
+          (palette[0][channel] * w0 +
+            palette[1][channel] * w1 +
+            palette[2][channel] * w2 +
+            palette[3][channel] * w3) /
+          total;
+        data[i + channel] = color * (0.85 + depth * 0.15) * (1 - highlight) + 255 * highlight;
+      }
+      data[i + 3] = Math.min(1, ((1 - radius) * size) / 2) * 245;
     }
   }
-  ctx.restore();
+  context.putImageData(pixels, 0, 0);
 }
-function particleMotionAllowed() {
+function liquidMotionAllowed() {
   return (
     !reducedOrbMotion.matches &&
     !document.hidden &&
     !document.documentElement.classList.contains("motion-paused")
   );
 }
-function runParticleFrame(timestamp) {
+function runLiquidFrame(timestamp) {
   orbFrame = 0;
-  if (!particleMotionAllowed()) {
+  if (!liquidMotionAllowed()) {
     orbLastFrame = 0;
     return;
   }
   const elapsed = orbLastFrame ? Math.min((timestamp - orbLastFrame) / 1000, 0.05) : 0;
   orbLastFrame = timestamp;
   let visible = false;
-  for (const [orb, state] of particleOrbs) {
+  for (const [orb, state] of liquidOrbs) {
     if (!orb.isConnected) {
-      particleOrbs.delete(orb);
+      liquidOrbs.delete(orb);
       continue;
     }
     if (!orb.classList.contains("orb-motion-visible")) continue;
     visible = true;
     state.time += elapsed;
-    drawParticleOrb(state);
+    drawLiquidOrb(state);
   }
-  if (visible) orbFrame = requestAnimationFrame(runParticleFrame);
+  if (visible) orbFrame = requestAnimationFrame(runLiquidFrame);
   else orbLastFrame = 0;
 }
-function syncParticleMotion() {
-  if (particleMotionAllowed() && !orbFrame) orbFrame = requestAnimationFrame(runParticleFrame);
+function syncLiquidMotion() {
+  if (liquidMotionAllowed() && !orbFrame) orbFrame = requestAnimationFrame(runLiquidFrame);
 }
-document.querySelectorAll(".orb, .brand-orb").forEach(prepareParticleOrb);
-motionControl.addEventListener("click", syncParticleMotion);
-document.addEventListener("visibilitychange", syncParticleMotion);
+document.querySelectorAll(".orb, .brand-orb").forEach(prepareLiquidOrb);
+motionControl.addEventListener("click", syncLiquidMotion);
+document.addEventListener("visibilitychange", syncLiquidMotion);
 reducedOrbMotion.addEventListener("change", () => {
   if (reducedOrbMotion.matches) {
-    for (const state of particleOrbs.values()) {
+    for (const state of liquidOrbs.values()) {
       state.time = 0;
-      drawParticleOrb(state);
+      drawLiquidOrb(state);
     }
   }
-  syncParticleMotion();
+  syncLiquidMotion();
 });
-syncParticleMotion();
+syncLiquidMotion();

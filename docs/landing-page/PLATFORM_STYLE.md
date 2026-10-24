@@ -44,3 +44,9 @@ Orbs retain fixed silhouettes with softly moving inner gradient fields, rather t
 ## Particle-water refinement — 25 October
 
 The large orbs now contain a canvas particle field following continuous rippling spherical bands, with depth-based opacity and perspective. Small brand orbs use a lower particle count. Static gradient art remains the fallback. The shared pause control freezes both particle time and gradient motion; reduced-motion users receive a fixed field. Only visible orbs render frames, hidden documents stop work, and removed FAQ avatars release their particle state. Hero sky gradients now fade through an opacity mask to fully transparent over white before the section boundary.
+
+## Current liquid gradient — 25 October
+
+The particle experiment is superseded. Orbs use continuous blue/lavender/pink color fields (green tones only for the Chess example), warped into slowly flowing liquid folds. There are no dots. The fixed spherical outline, pause control, visibility gating, and reduced-motion support remain. Buttons use a 700ms custom easing curve, a small hover lift and shadow, directional arrow motion, and a 120ms pressed response; touch devices avoid sticky hover and reduced motion removes transforms.
+
+The user-supplied `elayadesign/ai-design-skills` landing-page-design skill was installed and consulted for motion. Existing platform typography, atmospheric backgrounds, and the agreed page structure take precedence over conflicting generic skill defaults. No new dependencies or changes to game files were needed.
