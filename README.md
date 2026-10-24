@@ -2,7 +2,7 @@
 
 A single-player, browser-based social deduction game. You receive one secret role and play with NPC villagers. The interface stays intentionally small: a village roster, a private role panel, available actions, and the village journal.
 
-The project uses the supplied React, Vite+, and Nitro application. Vite+ builds the browser app and Nitro API into `.output/`.
+The project uses the supplied React, Vite+, and Nitro application. Vite+ builds the browser app and Nitro API into `.output/` for a regular Node server.
 
 ## Run locally
 
@@ -26,6 +26,12 @@ bun run start
 ```
 
 The production server listens on port 3000 by default. `bun run smoke http://127.0.0.1:3000` checks the app shell, browser entry, and health route.
+
+## Deploy to Netlify
+
+The included `netlify.toml` runs the production build with Nitro's Netlify preset. It publishes the browser app from `dist/` and packages the Nitro API as Netlify Functions, so the frontend and `/api` routes deploy together.
+
+Connect the repository to Netlify and deploy the branch you want to serve. The build configuration supplies `NITRO_PRESET=netlify`; add `OPENAI_API_KEY` in the site's environment variables for model-driven guide, NPC, and voice features. The game still runs with its local guide and bot fallbacks if that variable is unavailable.
 
 ## Rules
 
