@@ -1,304 +1,290 @@
-import { useMemo, useState, useEffect } from 'react';
-import { Chess } from 'chess.js';
-import Board from '../components/Board/Board';
-import GamePanel from '../components/GamePanel/GamePanel';
-import PromotionDialog from '../components/PromotionDialog/PromotionDialog';
-import SettingsPanel from '../components/Settings/SettingsPanel';
-import PlayerPanel from '../components/PlayerPanel/PlayerPanel';
-import GameEndModal from '../components/GameEndModal/GameEndModal';
-import VoiceCompanion from '../components/VoiceCompanion/VoiceCompanion';
-import ConfirmDialog from '../components/ConfirmDialog/ConfirmDialog';
-import type { GameMode } from '../types';
-import { useChessGame } from '../hooks/useChessGame';
-import { useSettings } from '../hooks/useSettings';
-import { isDebugEnabled, getDebugInfo, type EngineDebugInfo } from '../chess/engineDebug';
-import './App.css';
-import '../components/GamePanel/GamePanel.css';
-import '../components/Settings/SettingsPanel.css';
-import '../components/VoiceCompanion/VoiceCompanion.css';
+import { useEffect, useState } from "react";
+import type { Color } from "chess.js";
+import type { GameMode } from "../types";
+import { useChessGame, type GameResult } from "../hooks/useChessGame";
+import { useSettings } from "../hooks/useSettings";
+import { useChessCompanion } from "../voice/useChessCompanion";
+import type { AvailableDestination } from "../voice/navigation";
+import GamePicker from "../components/PlayByVoice/GamePicker";
+import ChessView from "../components/PlayByVoice/ChessView";
+import AudioSettings from "../components/PlayByVoice/AudioSettings";
+import Help from "../components/PlayByVoice/Help";
+import CompanionDock from "../components/PlayByVoice/CompanionDock";
+import ConfirmDialog from "../components/ConfirmDialog/ConfirmDialog";
+import PromotionDialog from "../components/PromotionDialog/PromotionDialog";
+import GameEndModal from "../components/GameEndModal/GameEndModal";
+import "./App.css";
+
+type View =
+  | { kind: "home" }
+  | { kind: "loading" }
+  | { kind: "chess" }
+  | { kind: "audio" | "help"; returnTo: "home" | "chess" };
+type PreferenceChange = { kind: "color"; value: Color } | { kind: "mode"; value: GameMode };
 
 export default function App() {
-  const {
-    settings,
-    settingsOpen,
-    setGameMode,
-    setDifficulty,
-    setPlayerColor,
-    setConfirmMoves,
-    setScreenReaderMode,
-    setBoardOrientation,
-    setBoardTheme,
-    setPieceSet,
-    setSoundEnabled,
-    toggleSettings,
-    closeSettings,
-  } = useSettings();
+  const preferences = useSettings();
+  const { settings } = preferences;
+  const session = useChessGame({ settings });
+  const [view, setView] = useState<View>({ kind: "home" });
+  const [preferenceChange, setPreferenceChange] = useState<PreferenceChange | null>(null);
+  const [dismissedResult, setDismissedResult] = useState<GameResult>(null);
+  const result = session.gameResult;
+  const resultMessage = result
+    ? result.winner
+      ? `${result.winner === "w" ? "White" : "Black"} wins by ${result.reason === "resign" ? "resignation" : result.reason}. The game is over.`
+      : "The game is a draw."
+    : null;
 
-  const {
-    game,
-    history,
-    status,
-    selectedSquare,
-    legalMoves,
-    pendingPromotion,
-    isComputerThinking,
-    gameResult,
-    awaitingStartChoice,
-    isPaused,
-    reviewMode,
-    reviewIndex,
-    selectSquare,
-    makeMove,
-    getHint,
-    promote,
-    cancelPromotion,
-    newGame,
-    resumeGame,
-    pauseGame,
-    undoMove,
-    resign,
-    capturedPieces,
-    enterReviewMode,
-    exitReviewMode,
-    goToMove,
-    displayFen,
-    stockfishStatus,
-    stockfishError,
-    stockfishProgress,
-    retryStockfish,
-    moveFeedback,
-  } = useChessGame({ settings });
-
-  const [engineDebug, setEngineDebug] = useState<Partial<EngineDebugInfo> | null>(null);
-  const [requestedMode, setRequestedMode] = useState<GameMode | null>(null);
-  const [manualBoardFlip, setManualBoardFlip] = useState(false);
-
-  useEffect(() => {
-    if (!isDebugEnabled()) return;
-    const interval = setInterval(() => {
-      const info = getDebugInfo();
-      if (info) setEngineDebug(info);
-    }, 500);
-    return () => clearInterval(interval);
-  }, [isComputerThinking, history]);
-
-  const captured = useMemo(() => capturedPieces(), [capturedPieces]);
-
-  const materialAdvantage = useMemo(() => {
-    const values = { q: 9, r: 5, b: 3, n: 3, p: 1 };
-    let score = 0;
-    for (const p of captured.white) score += values[p as keyof typeof values] || 0;
-    for (const p of captured.black) score -= values[p as keyof typeof values] || 0;
-    return score;
-  }, [captured]);
-
-  const canUndo = history.length > 0 && !awaitingStartChoice;
-  const canResign = !awaitingStartChoice && !gameResult && !game.isGameOver() && history.length > 0;
-
-  const requestGameMode = (mode: GameMode) => {
-    if (mode === settings.gameMode) return;
-    if (history.length > 0) {
-      setRequestedMode(mode);
-      closeSettings();
-      return;
-    }
-    setGameMode(mode);
-  };
-
-  // ── Display game for review mode (never mutates live game) ──
-  const displayGame = useMemo(() => {
-    if (!displayFen) return null;
-    const g = new Chess();
-    try { g.load(displayFen); } catch { return null; }
-    return g;
-  }, [displayFen]);
-
-  // ── Last move & check highlighting ──
-  const lastMove = useMemo(() => {
-    if (reviewMode && reviewIndex >= 0 && reviewIndex < history.length) {
-      const uci = history[reviewIndex];
-      if (uci && uci.length >= 4) {
-        return { from: uci.substring(0, 2), to: uci.substring(2, 4) };
+  function navigate(destination: AvailableDestination): string {
+    setPreferenceChange(null);
+    switch (destination) {
+      case "chess":
+        if (view.kind !== "chess") setView({ kind: "loading" });
+        if (session.awaitingStartChoice)
+          return `Chess is open. A saved game with ${session.history.length} moves is waiting. Would you like to resume or start a new game?`;
+        if (session.isPaused)
+          return "Chess is open. Your position is saved. Say resume to continue.";
+        if (resultMessage)
+          return `Chess is open. ${resultMessage} You can review the moves or request a new game.`;
+        return `Chess is ready. ${settings.gameMode === "local" ? "This is a local two-player game." : `You play ${settings.playerColor === "w" ? "White" : "Black"}.`} ${session.history.length > 0 ? "Ask about the current board or request your next move." : "Would you like a quick spoken guide, or do you already know the rules?"}`;
+      case "home":
+        setView({ kind: "home" });
+        return `You are back at the game picker. ${session.history.length > 0 ? "Your chess position is saved. Say play chess to return." : "Say play chess to begin."} Loups-Garous and Tic-Tac-Toe are coming soon.`;
+      case "audio":
+      case "help": {
+        const returnTo =
+          view.kind === "chess" || view.kind === "loading"
+            ? "chess"
+            : view.kind === "home"
+              ? "home"
+              : view.returnTo;
+        setView({ kind: destination, returnTo });
+        return destination === "audio"
+          ? "Audio settings are open. Adjust narrator volume, game sounds, or chess preferences. Say play chess to return to the board."
+          : "Help is open. Ask about chess rules or commands, or say play chess to begin.";
       }
     }
-    const verbose = game.history({ verbose: true });
-    if (verbose.length === 0) return null;
-    const last = verbose[verbose.length - 1];
-    return { from: last.from, to: last.to };
-  }, [game, history, reviewMode, reviewIndex]);
-
-  function findKingSquare(src: Chess, color: 'w' | 'b'): string | null {
-    const board = src.board();
-    for (let r = 0; r < 8; r++) {
-      for (let c = 0; c < 8; c++) {
-        const p = board[r][c];
-        if (p && p.type === 'k' && p.color === color) {
-          return 'abcdefgh'[c] + (8 - r);
-        }
-      }
-    }
-    return null;
   }
 
-  const kingInCheck = useMemo(() => {
-    const src = displayGame ?? game;
-    if (!src.isCheck()) return null;
-    const turn = src.turn() as 'w' | 'b';
-    const square = findKingSquare(src, turn);
-    if (!square) return null;
-    return { square, color: turn };
-  }, [game, displayGame, history, reviewMode, reviewIndex]);
+  const companion = useChessCompanion(
+    {
+      game: session.game,
+      history: session.history,
+      playerColor: settings.gameMode === "local" ? session.game.turn() : settings.playerColor,
+      view: view.kind,
+      navigate,
+      awaitingStartChoice: session.awaitingStartChoice,
+      isTerminated: Boolean(result),
+      isPaused: session.isPaused,
+      confirmMoves: settings.confirmMoves,
+      makeMove: session.makeMove,
+      getHint: session.getHint,
+      newGame: () => {
+        session.newGame();
+        setView({ kind: "chess" });
+      },
+      resumeGame: session.resumeGame,
+      pauseGame: session.pauseGame,
+      undoMove: session.undoMove,
+      resign: session.resign,
+    },
+    settings.screenReaderMode,
+    settings.voiceVolume,
+    resultMessage,
+  );
 
-  const pieceSetClass = 'piece-set-active-' + settings.pieceSet;
-  const boardThinkingClass = isComputerThinking ? ' board-computer-thinking' : '';
+  useEffect(() => {
+    if (view.kind !== "loading") return;
+    if (
+      settings.gameMode === "computer" &&
+      (session.stockfishStatus === "loading" || session.stockfishStatus === "unloaded")
+    )
+      return;
+    const frame = requestAnimationFrame(() => setView({ kind: "chess" }));
+    return () => cancelAnimationFrame(frame);
+  }, [view.kind, session.stockfishStatus, settings.gameMode]);
+
+  useEffect(() => {
+    window.scrollTo(0, 0);
+    document.getElementById("page-heading")?.focus({ preventScroll: true });
+  }, [view.kind]);
+
+  const pendingDialog =
+    companion.pending && companion.pending.kind !== "move" ? companion.pending : null;
+  const showResult =
+    view.kind === "chess" &&
+    result &&
+    result !== dismissedResult &&
+    !session.reviewMode &&
+    !pendingDialog &&
+    !preferenceChange;
+  const hasDialog = Boolean(
+    pendingDialog ||
+    preferenceChange ||
+    (view.kind === "chess" && session.pendingPromotion) ||
+    showResult,
+  );
+  const chessVisible = view.kind === "chess";
+
+  useEffect(() => {
+    if (!hasDialog) return;
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previous;
+    };
+  }, [hasDialog]);
 
   return (
-    <div className={'app ' + pieceSetClass}>
-      <a href="#main-content" className="skip-link">
-        Skip to main content
-      </a>
-
-      <header className="app-header">
-        <h1>Voice Chess Companion</h1>
-        <span className="piece-set-badge" title="Active piece set">
-          {settings.pieceSet}
-        </span>
-      </header>
-
-      <main id="main-content" className="app-main">
-        <VoiceCompanion
-          game={game}
-          history={history}
-          playerColor={settings.playerColor}
-          awaitingStartChoice={awaitingStartChoice}
-          isTerminated={Boolean(gameResult)}
-          isPaused={isPaused}
-          makeMove={makeMove}
-          getHint={getHint}
-          newGame={newGame}
-          resumeGame={resumeGame}
-          pauseGame={pauseGame}
-          undoMove={undoMove}
-          resign={resign}
-          confirmMoves={settings.confirmMoves}
+    <>
+      <div
+        className={`app-shell page-${view.kind}${chessVisible ? " theme-green" : ""}`}
+        inert={hasDialog || undefined}
+      >
+        <a href="#main-content" className="skip-link">
+          Skip to main content
+        </a>
+        <header className="site-header">
+          <button
+            className="brand"
+            onClick={() => {
+              void companion.navigate("home");
+            }}
+            aria-label="Play by Voice, game picker"
+          >
+            Play by Voice
+          </button>
+          {(chessVisible || view.kind === "loading") && (
+            <span className="header-game">
+              <span aria-hidden="true">•</span> Chess
+            </span>
+          )}
+          <nav aria-label="Main navigation">
+            <button
+              aria-current={view.kind === "audio" ? "page" : undefined}
+              onClick={() => {
+                void companion.navigate("audio");
+              }}
+            >
+              Audio Settings
+            </button>
+            <button
+              aria-current={view.kind === "help" ? "page" : undefined}
+              onClick={() => {
+                void companion.navigate("help");
+              }}
+            >
+              Help
+            </button>
+          </nav>
+        </header>
+        <main id="main-content" className="main-content">
+          {view.kind === "home" && <GamePicker companion={companion} />}
+          {view.kind === "loading" && (
+            <section className="loading-page" aria-labelledby="page-heading">
+              <div className="loading-center" role="status">
+                <span className="game-shape triangle rotating-shape" aria-hidden="true" />
+                <h1 id="page-heading" tabIndex={-1}>
+                  Loading
+                </h1>
+                <p>Getting your chessboard ready.</p>
+              </div>
+              <button
+                className="loading-back"
+                onClick={() => {
+                  void companion.navigate("home");
+                }}
+              >
+                Go back to main
+              </button>
+            </section>
+          )}
+          {view.kind === "chess" && (
+            <ChessView session={session} settings={settings} companion={companion} />
+          )}
+          {view.kind === "audio" && (
+            <AudioSettings
+              preferences={preferences}
+              onBack={() => {
+                void companion.navigate(view.returnTo);
+              }}
+              onColorChange={(value) => {
+                if (value !== settings.playerColor) setPreferenceChange({ kind: "color", value });
+              }}
+              onModeChange={(value) => {
+                if (value !== settings.gameMode) setPreferenceChange({ kind: "mode", value });
+              }}
+            />
+          )}
+          {view.kind === "help" && (
+            <Help
+              companion={companion}
+              onBack={() => {
+                void companion.navigate(view.returnTo);
+              }}
+            />
+          )}
+        </main>
+        <CompanionDock
+          companion={companion}
+          green={chessVisible}
           screenReaderMode={settings.screenReaderMode}
-          onPlayerColorChange={setPlayerColor}
-          onConfirmMovesChange={setConfirmMoves}
-          onScreenReaderModeChange={setScreenReaderMode}
         />
-        <button className="settings-toggle-btn" onClick={toggleSettings} aria-label="Open settings">
-          &#9881; Settings
-        </button>
-        <div className="game-layout" aria-label="Chess game layout">
-          <aside className="game-column game-column-left" aria-label="Player information">
-            <PlayerPanel
-              whiteCaptured={captured.white}
-              blackCaptured={captured.black}
-              gameMode={settings.gameMode}
-              turn={game.turn() as 'w' | 'b'}
-              status={status}
-              materialAdvantage={materialAdvantage}
-            />
-          </aside>
-
-          <section className={'board-section' + boardThinkingClass} aria-label="Chess board">
-            <Board
-              game={game}
-              selectedSquare={selectedSquare}
-              legalMoves={legalMoves}
-              onSquareClick={selectSquare}
-              boardOrientation={settings.boardOrientation}
-              boardTheme={settings.boardTheme}
-              pieceSet={settings.pieceSet}
-              isComputerThinking={isComputerThinking}
-              lastMove={lastMove}
-              kingInCheck={kingInCheck}
-              displayFen={displayFen}
-              manualFlip={manualBoardFlip}
-            />
-          </section>
-
-          <GamePanel
-            status={status}
-            gameMode={settings.gameMode}
-            difficulty={settings.difficulty}
-            isComputerThinking={isComputerThinking}
-            stockfishStatus={stockfishStatus}
-            stockfishError={stockfishError}
-            stockfishProgress={stockfishProgress}
-            onRetryEngine={retryStockfish}
-            history={history}
-            reviewMode={reviewMode}
-            reviewIndex={reviewIndex}
-            moveFeedback={moveFeedback}
-            onGoToMove={goToMove}
-            onEnterReview={enterReviewMode}
-            onExitReview={exitReviewMode}
-            onNewGame={newGame}
-            onUndo={undoMove}
-            onResign={resign}
-            isPaused={isPaused}
-            canPause={!awaitingStartChoice && !gameResult}
-            onPause={pauseGame}
-            onResume={resumeGame}
-            canUndo={canUndo}
-            canResign={canResign}
-            onFlipBoard={() => setManualBoardFlip((flipped) => !flipped)}
-          />
-        </div>
-      </main>
-
-      {pendingPromotion && (
-        <PromotionDialog
-          color={game.turn()}
-          onPromote={promote}
-          onCancel={cancelPromotion}
-        />
-      )}
-
-      <GameEndModal
-        result={gameResult}
-        onNewGame={newGame}
-        onEnterReview={enterReviewMode}
-      />
-
-      <SettingsPanel
-        settings={settings}
-        isOpen={settingsOpen}
-        onClose={toggleSettings}
-        onGameModeChange={requestGameMode}
-        onDifficultyChange={setDifficulty}
-        onBoardOrientationChange={setBoardOrientation}
-        onBoardThemeChange={setBoardTheme}
-        onPieceSetChange={setPieceSet}
-        onSoundEnabledChange={setSoundEnabled}
-      />
-      {requestedMode && (
+      </div>
+      {pendingDialog && (
         <ConfirmDialog
-          title="Change Game Mode"
-          message="Changing game mode starts a new game and clears the current board. Continue?"
-          confirmLabel="Change Mode"
+          title={pendingDialog.kind === "navigation" ? "Leave the game?" : "Confirm your action"}
+          message={
+            pendingDialog.kind === "navigation"
+              ? "Your current game will be saved. You can resume it when you return."
+              : pendingDialog.description + "."
+          }
+          confirmLabel={pendingDialog.kind === "navigation" ? "Leave game" : "Confirm"}
+          cancelLabel={pendingDialog.kind === "navigation" ? "Stay in game" : "Cancel"}
           onConfirm={() => {
-            setGameMode(requestedMode);
-            setRequestedMode(null);
+            void companion.runCommand("yes");
           }}
-          onCancel={() => setRequestedMode(null)}
+          onCancel={() => {
+            void companion.runCommand("cancel");
+          }}
         />
       )}
-      {engineDebug && (
-        <div style={{
-          position: 'fixed', bottom: 8, left: 8,
-          fontSize: '11px', fontFamily: 'monospace',
-          background: 'rgba(0,0,0,0.75)', color: '#0f0',
-          padding: '6px 10px', borderRadius: 4, zIndex: 999,
-          maxWidth: 300, lineHeight: 1.4
-        } as React.CSSProperties}>
-          {engineDebug.difficulty} | depth {engineDebug.depthReached}/{engineDebug.maxDepth} |
-          {' '}{engineDebug.nodesSearched} nodes | score {engineDebug.bestScore}cp |
-          {' '}{engineDebug.openingBookHit ? '??' : ''} {engineDebug.quiescenceUsed ? '??' : ''} {engineDebug.transpositionTableUsed ? '???' : ''}
-        </div>
+      {preferenceChange && (
+        <ConfirmDialog
+          title="Start a new game?"
+          message={`Changing ${preferenceChange.kind === "color" ? "your side" : "your opponent"} clears the current position. Your other preferences will stay the same.`}
+          confirmLabel="Change and start again"
+          onConfirm={() => {
+            companion.cancelPending();
+            if (preferenceChange.kind === "color")
+              preferences.setPlayerColor(preferenceChange.value);
+            else preferences.setGameMode(preferenceChange.value);
+            setPreferenceChange(null);
+          }}
+          onCancel={() => setPreferenceChange(null)}
+        />
       )}
-    </div>
+      {view.kind === "chess" && session.pendingPromotion && (
+        <PromotionDialog
+          color={session.game.turn()}
+          onPromote={session.promote}
+          onCancel={session.cancelPromotion}
+        />
+      )}
+      {showResult && (
+        <GameEndModal
+          result={result}
+          onNewGame={() => {
+            companion.cancelPending();
+            session.newGame();
+          }}
+          onEnterReview={() => {
+            setDismissedResult(result);
+            session.enterReviewMode();
+          }}
+        />
+      )}
+    </>
   );
 }
-

@@ -6,6 +6,7 @@
     "module": "esnext",
     "types": ["node"],
     "skipLibCheck": true,
+    "strict": true,
 
     /* Bundler mode */
     "moduleResolution": "bundler",
@@ -22,4 +23,3 @@
   },
   "include": ["vite.config.ts", "nitro.config.ts", "server/**/*.ts"]
 }
-

@@ -1,30 +1,9 @@
-import type { Square as ChessSquare } from 'chess.js';
-import Piece from '../Piece/Piece';
-import type { PieceSet } from '../../types';
+import type { Piece as ChessPiece, Square as ChessSquare } from "chess.js";
+import Piece from "../Piece/Piece";
+import type { PieceSet } from "../../types";
 
-export interface PieceInfo {
-  color: 'w' | 'b';
-  type: string;
-}
-
-const PIECE_TYPE_NAMES: Record<string, string> = {
-  k: 'king',
-  q: 'queen',
-  r: 'rook',
-  b: 'bishop',
-  n: 'knight',
-  p: 'pawn',
-};
-
-function getSquareAriaLabel(
-  piece: PieceInfo | null,
-  square: ChessSquare
-): string {
-  if (!piece) return `Empty square ${square}`;
-  const colorName = piece.color === 'w' ? 'White' : 'Black';
-  const typeName = PIECE_TYPE_NAMES[piece.type] ?? piece.type;
-  return `${colorName} ${typeName} at ${square}`;
-}
+export type PieceInfo = Pick<ChessPiece, "color" | "type">;
+const NAMES = { k: "king", q: "queen", r: "rook", b: "bishop", n: "knight", p: "pawn" };
 
 interface SquareProps {
   square: ChessSquare;
@@ -40,6 +19,7 @@ interface SquareProps {
   tabIndex: number;
   onFocus: () => void;
   pieceSet?: PieceSet;
+  column: number;
 }
 
 export default function Square({
@@ -55,37 +35,38 @@ export default function Square({
   onClick,
   tabIndex,
   onFocus,
-  pieceSet = 'merida',
+  pieceSet,
+  column,
 }: SquareProps) {
-  const colorClass = isLight ? 'square-light' : 'square-dark';
-  const selectedClass = isSelected ? ' square-selected' : '';
-  const lastMoveClass = isLastMove ? ' square-last-move' : '';
-  const checkClass = isCheck ? ' square-check' : '';
-
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' || e.key === ' ') {
-      e.preventDefault();
-      onClick();
-    }
-    // Arrow keys handled at board level, but allow bubbling
-  };
-
+  const label = piece
+    ? `${piece.color === "w" ? "White" : "Black"} ${NAMES[piece.type]} at ${square}`
+    : `Empty square ${square}`;
   return (
-    <div
-      className={'square ' + colorClass + selectedClass + lastMoveClass + checkClass}
+    <button
+      type="button"
+      role="gridcell"
+      aria-colindex={column}
+      aria-label={label}
+      aria-selected={isSelected}
+      aria-description={isLegalMove ? "Legal move destination" : undefined}
+      className={`square ${isLight ? "square-light" : "square-dark"}${isSelected ? " square-selected" : ""}${isLastMove ? " square-last-move" : ""}${isCheck ? " square-check" : ""}`}
       data-square={square}
       onClick={onClick}
-      role="gridcell"
       tabIndex={tabIndex}
       onFocus={onFocus}
-      onKeyDown={handleKeyDown}
-      aria-label={getSquareAriaLabel(piece, square)}
     >
-      {rankLabel && <span className="label-rank">{rankLabel}</span>}
-      {fileLabel && <span className="label-file">{fileLabel}</span>}
+      {rankLabel && (
+        <span className="label-rank" aria-hidden="true">
+          {rankLabel}
+        </span>
+      )}
+      {fileLabel && (
+        <span className="label-file" aria-hidden="true">
+          {fileLabel}
+        </span>
+      )}
       {piece && <Piece piece={piece} pieceSet={pieceSet} />}
-      {isLegalMove && <span className="legal-move-dot" />}
-    </div>
+      {isLegalMove && <span className="legal-move-dot" aria-hidden="true" />}
+    </button>
   );
 }
-
