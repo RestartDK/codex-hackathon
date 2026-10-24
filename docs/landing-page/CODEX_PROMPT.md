@@ -40,3 +40,6 @@ Verify and finish:
 5. Deliver the actual implementation, then report changed files, landing route, reused screens/components, working destinations, validation performed and outcomes, and remaining limitations. Clearly separate actual features, illustrative content, and planned capabilities. Never report a check as passed unless it ran successfully.
 
 Use your judgment for routine choices and keep moving. If a missing asset or unimplemented feature has an honest fallback in DESIGN.md, use it and document the limitation.
+
+
+Current brand guidance: read [PLATFORM_STYLE.md](PLATFORM_STYLE.md) alongside DESIGN.md. Use the platform’s original colors, textures, font, game marks, and orb artwork; keep the refined landing layouts. `platform-theme.css` is the current visual authority.

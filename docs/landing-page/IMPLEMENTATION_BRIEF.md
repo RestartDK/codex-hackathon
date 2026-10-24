@@ -124,3 +124,6 @@ Required: complete landing page, real navigation, real game links, responsive co
 Optional only after the above: recorded audio example, short entrance motion, additional original scenery, preview game switcher using existing safe components.
 
 Outside default scope: new game implementation, speech backend, FAQ AI backend, authentication redesign, payments, email collection, analytics migration, new game modes, or a site-wide component rewrite. If a required asset is missing, use the specified honest fallback and record it.
+
+
+Current brand guidance: read [PLATFORM_STYLE.md](PLATFORM_STYLE.md) alongside DESIGN.md. Use the platform’s original colors, textures, font, game marks, and orb artwork; keep the refined landing layouts. `platform-theme.css` is the current visual authority.

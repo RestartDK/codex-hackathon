@@ -4,6 +4,8 @@ Status: implementation specification for a hackathon landing page.
 Date: 24 October 2026.
 Companion files: [implementation brief](IMPLEMENTATION_BRIEF.md), [Codex prompt](CODEX_PROMPT.md).
 
+**Current visual authority:** [PLATFORM_STYLE.md](PLATFORM_STYLE.md) and `public/landing/platform-theme.css` align the entire page with the actual gaming platform. They supersede earlier pastel palette, custom orb, font, and screenshot-filter choices below. Preserve the refined layouts and interactions.
+
 ## 1. Product and evidence
 
 Play by Voice is a voice-led gaming project. The prior product discussion names Chess and Loups-Garous and refers to existing screens for both. The landing page should invite people to discover games through speaking and listening, including people who cannot rely on a visual board.

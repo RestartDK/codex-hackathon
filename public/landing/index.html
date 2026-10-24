@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#FAF9F6" />
+    <meta name="theme-color" content="#FFFFFF" />
     <meta
       name="description"
       content="A different way into the game. Discover Play by Voice, a conversational chess companion built around speaking and listening."
@@ -11,6 +11,7 @@
     <title>Play by Voice — Play beyond the screen.</title>
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="stylesheet" href="./styles.css" />
+    <link rel="stylesheet" href="./platform-theme.css" />
     <script src="./script.js" defer></script>
   </head>
   <body>
@@ -114,7 +115,7 @@
         <div class="library-grid">
           <article class="library-game library-chess" aria-labelledby="chess-title">
             <div class="library-art" aria-hidden="true">
-              <img src="/artwork/pieces/wn.webp" width="160" height="160" alt="" loading="lazy" />
+              <span class="platform-game-shape triangle"></span>
             </div>
             <div class="library-game-copy">
               <span class="library-status">Available to play</span>
@@ -125,7 +126,7 @@
           </article>
           <article class="library-game library-werewolf" aria-labelledby="werewolf-title">
             <div class="library-art" aria-hidden="true">
-              <span class="library-moon"></span><span class="library-moon-orbit"></span>
+              <span class="platform-game-shape pentagon"></span>
             </div>
             <div class="library-game-copy">
               <span class="library-status">Coming soon</span>
@@ -136,10 +137,7 @@
           </article>
           <article class="library-game library-tictactoe" aria-labelledby="tictactoe-title">
             <div class="library-art" aria-hidden="true">
-              <div class="tic-board">
-                <span>×</span><span></span><span>○</span><span></span><span>×</span><span></span
-                ><span>○</span><span></span><span>×</span>
-              </div>
+              <span class="platform-game-shape diamond"></span>
             </div>
             <div class="library-game-copy">
               <span class="library-status">Coming soon</span>
@@ -204,7 +202,7 @@
             <a class="text-link" href="/">Meet your companion <span aria-hidden="true">↗</span></a>
             <div class="orb orb-demo" aria-hidden="true">
               <img
-                src="/artwork/orb-blue.webp"
+                src="/artwork/orb-green.webp"
                 width="480"
                 height="502"
                 loading="lazy"

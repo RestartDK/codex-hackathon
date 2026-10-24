@@ -1,0 +1,465 @@
+/* Platform parity: values and assets from src/app/main.css and App.css.
+   Landing-only selectors preserve the existing product implementation. */
+:root {
+  --pv-canvas: #fff;
+  --pv-surface: #fff;
+  --pv-soft: #f3f4f6;
+  --pv-ink: #111;
+  --pv-muted: #6b7280;
+  --pv-line: #e5e7eb;
+  --pv-control: #737a83;
+  --pv-accent: #526834;
+  --pv-focus: #386df6;
+  --platform-accent: #d4e89c;
+  --platform-blue: #cfeafa;
+  --platform-olive: #526834;
+  --platform-marine: #36576a;
+  --platform-ease: cubic-bezier(0.23, 1, 0.32, 1);
+}
+body {
+  font-family: Arial, Helvetica, sans-serif;
+  background: #fff;
+  color: #111;
+}
+h1,
+h2,
+h3,
+.wordmark {
+  font-family: Arial, Helvetica, sans-serif;
+}
+.button {
+  background: #111;
+  color: #fff;
+  transition:
+    background 160ms ease,
+    transform 160ms var(--platform-ease);
+}
+.button:hover {
+  background: #303030;
+}
+.button:active {
+  background: #000;
+}
+.button-secondary {
+  background: #fff;
+  color: #111;
+  border-color: #737a83;
+}
+.button-secondary:hover {
+  background: #f5f8ed;
+}
+.button-secondary:active {
+  background: #edf3e1;
+}
+.nav-pill {
+  background: #fffffff2;
+  border: 1px solid #e5e7eb;
+  box-shadow: 0 8px 32px #1111110a;
+}
+.wordmark {
+  letter-spacing: -0.025em;
+}
+.brand-dot {
+  color: #111;
+}
+.nav-links > a:not(.button):hover,
+.text-link,
+.footer-links a:hover {
+  color: #526834;
+}
+.small-signal {
+  background: #526834;
+  box-shadow: 0 0 0 4px #d4e89c4d;
+}
+.brand-orb {
+  background: url("/artwork/orb-blue.webp") center/138% 144% no-repeat;
+  box-shadow: none;
+}
+.hero-sky {
+  background:
+    radial-gradient(ellipse at 50% 76%, #bae3ffb3, transparent 58%),
+    linear-gradient(#fff 9%, #fff 30%, #eef9ff 56%, #cfeafa 76%, #fff 100%);
+}
+.hero-sky:after {
+  background: url("./assets/grain.svg") repeat;
+  opacity: 0.45;
+  mask-image: linear-gradient(transparent 30%, #000 65%, transparent 100%);
+}
+.orb {
+  background: none;
+  box-shadow: none;
+}
+.orb img {
+  opacity: 1;
+  mix-blend-mode: normal;
+}
+.orb > span {
+  display: none;
+}
+.orb-hero {
+  transform: none;
+}
+.orb-shadow {
+  background: #77a0bc22;
+}
+.art-caption,
+.sound-mark {
+  color: #526a7c;
+}
+.cool-showcase {
+  background: #36576a url("/artwork/tic-tac-toe-card.webp") center/cover;
+  position: relative;
+  border-radius: 48px;
+}
+.cool-showcase:before {
+  background: linear-gradient(145deg, #36576a38, #0b20394d);
+  opacity: 1;
+}
+.cool-showcase .product-preview {
+  filter: none;
+}
+.cool-showcase .preview-wrap {
+  border: 1px solid #ffffff70;
+  border-radius: 24px;
+  box-shadow: 0 28px 64px -20px #10201859;
+}
+.cool-showcase .scene-caption {
+  color: #fff;
+  background: #142b3fcf;
+  display: table;
+  padding: 8px 16px;
+  margin-inline: auto;
+  border-radius: 999px;
+}
+.preview-caption .status-dot {
+  background: #526834;
+}
+.library-intro > span,
+.library-status {
+  color: #526834;
+}
+.library-game {
+  border: 0;
+  border-radius: 48px;
+  position: relative;
+  isolation: isolate;
+  background-position: center;
+  background-size: cover;
+  overflow: hidden;
+}
+.library-chess {
+  background-image: url("/artwork/chess-card.webp");
+  background-color: #526834;
+}
+.library-werewolf {
+  background-image: url("/artwork/werewolf-card.webp");
+  background-color: #86593f;
+}
+.library-tictactoe {
+  background-image: url("/artwork/tic-tac-toe-card.webp");
+  background-color: #3f466d;
+}
+.library-game:before {
+  content: "";
+  position: absolute;
+  inset: 36% 0 0;
+  z-index: -1;
+  background: linear-gradient(transparent, #111c 42%);
+  pointer-events: none;
+}
+.library-art {
+  background: none;
+}
+.platform-game-shape {
+  display: block;
+  background: #fff;
+  width: 108px;
+  height: 94px;
+  filter: drop-shadow(0 8px 24px #00000012);
+}
+.platform-game-shape.triangle {
+  clip-path: polygon(0 0, 100% 0, 50% 100%);
+}
+.platform-game-shape.pentagon {
+  width: 116px;
+  height: 116px;
+  clip-path: polygon(50% 0, 100% 38%, 81% 100%, 19% 100%, 0 38%);
+}
+.platform-game-shape.diamond {
+  width: 116px;
+  height: 116px;
+  clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%);
+}
+.library-game h3,
+.library-game p,
+.library-game .library-status,
+.library-game .library-planned {
+  color: #fff;
+}
+.library-game .library-status {
+  display: table;
+  background: #ffffffed;
+  color: #333;
+  border-radius: 999px;
+  padding: 7px 11px;
+  font-size: 12px;
+}
+.library-game .text-link {
+  color: #111;
+  background: #fff;
+  border-radius: 999px;
+  padding: 8px 16px;
+  gap: 24px;
+  min-height: 44px;
+}
+.library-game .text-link:hover {
+  background: #f3f6ed;
+}
+.library-game-copy {
+  position: relative;
+  z-index: 1;
+}
+.library-future .button {
+  border-color: #a9b2a3;
+  background: #fff;
+}
+.library-future .button:hover {
+  background: #f5f8ed;
+}
+.voice-section {
+  background: #fff;
+}
+.open-conversation:before {
+  background: radial-gradient(ellipse at 65% 48%, #eef9ff, transparent 70%);
+}
+.open-conversation .message.assistant:before {
+  background: url("/artwork/orb-green.webp") center/138% 144% no-repeat;
+  box-shadow: none;
+}
+.open-conversation .message.player {
+  background: #f3f4f6;
+  box-shadow: none;
+}
+.open-conversation .message.player .speaker {
+  color: #526834;
+}
+.accessibility-visual {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 48px;
+}
+.accessibility-visual:before {
+  content: "";
+  position: absolute;
+  inset: 30% 0 0;
+  background:
+    radial-gradient(ellipse at 50% 110%, #bae3ff, transparent 72%),
+    linear-gradient(transparent, #eef9ff 45%, #cfeafa);
+  pointer-events: none;
+}
+.accessibility-visual:after {
+  content: "";
+  position: absolute;
+  inset: 45% 0 0;
+  background: url("./assets/grain.svg") repeat;
+  opacity: 0.3;
+  pointer-events: none;
+}
+.sound-rings > span {
+  border-color: #6b9baf26;
+}
+.capability-pill {
+  background: #fff;
+  border-color: #e5e7eb;
+  box-shadow: 0 8px 24px #11111108;
+  z-index: 2;
+}
+.visual-overline,
+.visual-bottom {
+  color: #526477;
+  z-index: 2;
+}
+.chat-scene {
+  background: #36576a url("/artwork/tic-tac-toe-card.webp") center/cover;
+  border-radius: 48px;
+}
+.chat-scene:before {
+  background: linear-gradient(145deg, #142b4566, #20323f40);
+  opacity: 1;
+}
+.chat-scene:after {
+  display: none;
+}
+.faq-chat {
+  background: #172d3cf5;
+  border: 1px solid #9eafbd99;
+  box-shadow: 0 32px 80px -16px #0c182f59;
+  border-radius: 32px;
+}
+.chat-header {
+  background: #10222fcc;
+}
+.chat-title,
+.chat-form input,
+.chat-suggestions button {
+  font-family: Arial, Helvetica, sans-serif;
+}
+.chat-question {
+  background: #0b1b29;
+}
+.chat-suggestions button {
+  background: #263f50;
+  border-color: #a6bac899;
+}
+.chat-suggestions button:hover {
+  background: #36576a;
+}
+.chat-form {
+  background: #10222f;
+}
+.chat-send {
+  background: #fff;
+  color: #111;
+}
+.chat-send:disabled {
+  background: #a7b9c5;
+  color: #243c4c;
+}
+.editorial-footer {
+  background: #fff;
+}
+.editorial-footer:before {
+  width: 100%;
+  left: 0;
+  transform: none;
+  top: auto;
+  bottom: 0;
+  height: 500px;
+  background:
+    radial-gradient(ellipse at 50% 110%, #bae3ff66, transparent 72%),
+    linear-gradient(transparent, #eef9ff66);
+}
+.footer-play {
+  background: linear-gradient(#333, #111);
+  color: #fff;
+  box-shadow:
+    inset 0 2px 3px #ffffff26,
+    0 4px 12px #11111114;
+}
+.footer-wordmark span {
+  color: #dce1e5;
+}
+.footer-credit {
+  color: #6b7280;
+}
+@media (max-width: 1023px) {
+  .library-game {
+    border-radius: 36px;
+  }
+}
+@media (max-width: 767px) {
+  .cool-showcase,
+  .chat-scene,
+  .accessibility-visual {
+    border-radius: 32px;
+  }
+  .library-game {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    border-radius: 36px;
+  }
+  .library-art {
+    height: 180px;
+    min-height: 180px;
+  }
+  .library-game-copy {
+    padding: 0 24px 24px;
+  }
+  .library-game:before {
+    inset: 24% 0 0;
+  }
+  .platform-game-shape.triangle {
+    width: 90px;
+    height: 78px;
+  }
+  .platform-game-shape.pentagon,
+  .platform-game-shape.diamond {
+    width: 96px;
+    height: 96px;
+  }
+  .library-status {
+    margin-bottom: 16px;
+  }
+  .faq-chat {
+    border-radius: 28px;
+  }
+}
+@media (forced-colors: active) {
+  .hero-sky:after,
+  .accessibility-visual:before,
+  .accessibility-visual:after,
+  .library-game:before,
+  .chat-scene:before {
+    display: none;
+  }
+  .library-game,
+  .library-game h3,
+  .library-game p,
+  .library-game .library-status,
+  .library-game .library-planned,
+  .library-game .text-link,
+  .faq-chat,
+  .chat-form,
+  .chat-question,
+  .chat-suggestions button,
+  .chat-send {
+    background: Canvas;
+    color: CanvasText;
+  }
+  .library-game {
+    border: 1px solid CanvasText;
+  }
+  .cool-showcase .product-preview {
+    filter: none;
+  }
+}
+
+/* Large scenes soften the source image's enlarged grain, then restore fine grain
+   at a constant density. Game cards retain the original artwork untouched. */
+.cool-showcase,
+.chat-scene {
+  background: #36576a;
+  isolation: isolate;
+}
+.cool-showcase:before,
+.chat-scene:before {
+  background: url("/artwork/tic-tac-toe-card.webp") center/cover;
+  filter: blur(1.5px);
+  opacity: 0.55;
+  z-index: -2;
+}
+.cool-showcase:after,
+.chat-scene:after {
+  content: "";
+  display: block;
+  position: absolute;
+  inset: 0;
+  clip-path: none;
+  background: url("./assets/grain.svg") repeat;
+  opacity: 0.5;
+  z-index: -1;
+  pointer-events: none;
+}
+@media (forced-colors: active) {
+  .cool-showcase:before,
+  .cool-showcase:after,
+  .chat-scene:before,
+  .chat-scene:after {
+    display: none;
+  }
+  .cool-showcase,
+  .chat-scene {
+    background: Canvas;
+  }
+}

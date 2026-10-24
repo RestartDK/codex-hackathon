@@ -67,3 +67,7 @@ Rechecked the chat using suggestions, Enter submission, empty submission state, 
 ## Conversation and footer refinement
 
 The example transcript now sits in open space, with rounded player bubbles and assistant orb markers instead of an enclosing rectangular card. The final invitation and footer are combined into a spacious off-white composition inspired by the supplied reference: centered headline, pill launch action, real underlined links, and a large faded decorative wordmark. No social or App Store destinations are invented.
+
+## Platform visual alignment
+
+The entire landing now uses the platform's Arial/Helvetica type, white/black foundation, exact blue and green companion artwork, original grainy game backgrounds, geometric game marks, large rounded surfaces, and shared focus/easing values. The existing platform files remain untouched. A separate `platform-theme.css` owns the alignment; see [PLATFORM_STYLE.md](PLATFORM_STYLE.md) for exact source mappings. This supersedes the earlier cool/grayscale showcase treatment and custom pastel orb. The original screenshot colors are restored.
