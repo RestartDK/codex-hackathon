@@ -33,7 +33,7 @@ The included `netlify.toml` runs the production build with Nitro's Netlify prese
 
 Connect the repository to Netlify and deploy the branch you want to serve. The build configuration supplies `NITRO_PRESET=netlify`; add `OPENAI_API_KEY` in the site's environment variables for model-driven guide, NPC, and voice features. The game still runs with its local guide and bot fallbacks if that variable is unavailable.
 
-Treat only `OPENAI_API_KEY` as a secret. `OPENAI_BASE_URL`, `OPENAI_*_MODEL`, and `OPENAI_VOICE` are public configuration labels. The Netlify build keeps OpenAI access server-side; the app does not expose these values in the browser bundle.
+Treat only `OPENAI_API_KEY` as a secret. `OPENAI_BASE_URL`, `OPENAI_*_MODEL`, and `OPENAI_VOICE` are public configuration labels. The Netlify configuration excludes only those labels from secret-value scanning while keeping API-key scanning enabled.
 
 ## Rules
 

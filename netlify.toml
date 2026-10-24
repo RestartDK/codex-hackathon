@@ -8,7 +8,3 @@ NODE_VERSION = "22"
 # These are public configuration labels, not credentials. Keeping the
 # exception key-scoped preserves scanning for OPENAI_API_KEY.
 SECRETS_SCAN_OMIT_KEYS = "OPENAI_BASE_URL,OPENAI_DELEGATION_MODEL,OPENAI_NPC_MODEL,OPENAI_VOICE,OPENAI_VOICE_MODEL"
-# The server-only OpenAI key is not present in source or generated browser
-# assets. Netlify's scanner still matches its build-scoped value, so allow
-# this verified false positive for the deployed test application.
-SECRETS_SCAN_ENABLED = "false"
