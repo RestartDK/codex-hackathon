@@ -240,7 +240,7 @@ export default function App() {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [commandText, setCommandText] = useState("");
-  const [voiceStatus, setVoiceStatus] = useState("Voice guide is off");
+  const [voiceStatus, setVoiceStatus] = useState("Voice companion starts when you begin a game");
   const [listening, setListening] = useState(false);
   const [voiceCommandsPaused, setVoiceCommandsPaused] = useState(false);
   const [guideMessages, setGuideMessages] = useState<GuideMessage[]>([]);
@@ -252,6 +252,9 @@ export default function App() {
   const [openingAudio, setOpeningAudio] = useState<{ gameId: string; text: string }>();
   const recognitionRef = useRef<SpeechRecognitionSession | null>(null);
   const latestGameRef = useRef<GameView | undefined>(undefined);
+  const sessionRef = useRef<Session | undefined>(undefined);
+  const autoVoiceRequestedRef = useRef(false);
+  const voiceFailureRef = useRef<string | undefined>(undefined);
   const presentedGameRef = useRef<GameView | undefined>(undefined);
   const voiceCommandHandlerRef = useRef<(transcript: string) => void>(() => undefined);
   const liveConnectionRef = useRef<LiveVoiceSession | null>(null);
@@ -283,23 +286,20 @@ export default function App() {
   });
 
   function commitGame(game: GameView, token: string) {
+    const nextSession = { game, token };
     latestGameRef.current = game;
-    setSession({ game, token });
-    const currentPresentation = presentedGameRef.current;
-    // Hold the previous screen during a scene change. StoryAudio reveals this
-    // update when the matching spoken transition begins.
-    if (
-      !currentPresentation ||
-      currentPresentation.id !== game.id ||
-      currentPresentation.phase === game.phase
-    ) {
-      presentedGameRef.current = game;
-      setPresentedGame(game);
-    }
+    sessionRef.current = nextSession;
+    setSession(nextSession);
+    // A player command always wins over an in-progress announcement. Showing the
+    // new game state immediately prevents a spoken move from being applied to an
+    // old day or night screen.
+    presentedGameRef.current = game;
+    setPresentedGame(game);
   }
 
   useEffect(
     () => () => {
+      autoVoiceRequestedRef.current = false;
       recognitionRef.current?.stop();
       stopLiveVoice();
     },
@@ -309,6 +309,10 @@ export default function App() {
   async function create(event?: FormEvent, testMode = false) {
     event?.preventDefault();
     primeBrowserNarration();
+    // This runs directly from the player's Start or Quick Test gesture, which is
+    // the one moment browsers allow microphone permission to be requested.
+    autoVoiceRequestedRef.current = true;
+    startAlwaysOnVoice();
     setBusy(true);
     setError("");
     try {
@@ -329,6 +333,9 @@ export default function App() {
       const game = data as GameView;
       const briefing = openingBriefing(game);
       commitGame(game, data.session);
+      // When browser speech recognition is unavailable, try the provider-backed
+      // companion once the game session is ready.
+      if (!recognitionRef.current && !liveConnectionRef.current) void connectLiveVoice();
       setSelected([]);
       setGuideMessages([
         {
@@ -348,11 +355,9 @@ export default function App() {
   async function perform(input: Record<string, unknown>, announceFailure = false) {
     if (!session) return undefined;
     if (storyAudio.phaseTransitioning) {
-      const message =
-        "The guide is announcing this phase. Please wait a moment before the next move.";
-      setError(message);
-      if (announceFailure) queueAssistant(message);
-      return undefined;
+      // The player has spoken or acted. Stop the now-stale announcement and move
+      // directly to the updated phase so the narration and screen cannot diverge.
+      storyAudio.stop();
     }
     if (busy) {
       if (announceFailure) queueAssistant("One moment. I am still resolving the previous command.");
@@ -491,12 +496,11 @@ export default function App() {
       return;
     }
     if (/\b(stop|disable|turn off)\b.*\b(listening|voice control|microphone)\b/iu.test(command)) {
-      recognitionRef.current?.stop();
-      recognitionRef.current = null;
-      setListening(false);
-      setVoiceCommandsPaused(false);
-      setVoiceStatus("Voice guide is off");
-      queueAssistant("Voice guide is off. Use the enable button to listen again.");
+      setVoiceCommandsPaused(true);
+      setVoiceStatus("Voice commands are paused. Say ‘resume listening’ to continue.");
+      appendAssistantCaption(
+        "Voice commands are paused. Say ‘resume listening’ when you are ready.",
+      );
       return;
     }
     if (voiceCommandsPaused) return;
@@ -666,54 +670,67 @@ export default function App() {
     await perform({ command }, true);
   }
 
-  function toggleVoiceGuide() {
-    if (recognitionRef.current || liveConnectionRef.current || liveConnecting) {
-      useLiveFallbackRef.current = false;
-      recognitionRef.current?.stop();
-      recognitionRef.current = null;
-      stopLiveVoice();
-      resetVoiceGuide("Voice guide is off");
-      return;
-    }
+  /**
+   * Starts the hands-free input once and leaves it running for the match.
+   * Browser recognition restarts itself after ordinary phrase boundaries.
+   */
+  function startAlwaysOnVoice() {
+    if (recognitionRef.current || liveConnectionRef.current || liveConnecting) return;
+    voiceFailureRef.current = undefined;
     try {
       const recognition = startPersistentSpeechRecognition({
         onTranscript: (transcript) => voiceCommandHandlerRef.current(transcript),
         onError: (reason) => {
+          voiceFailureRef.current = reason;
           if (reason === "network") {
-            if (session) {
+            if (sessionRef.current) {
               useLiveFallbackRef.current = true;
-              setVoiceStatus("Browser transcription is unavailable. Starting Live Voice Guide…");
-            } else
-              setVoiceStatus(
-                "Browser transcription is unavailable. Start the game, then enable Voice Guide again.",
-              );
+              setVoiceStatus("Switching to the live voice companion…");
+            } else {
+              setVoiceStatus("Voice companion will reconnect when the game opens.");
+            }
+            return;
+          }
+          if (["not-allowed", "service-not-allowed"].includes(reason)) {
+            setVoiceStatus("Microphone permission is needed for hands-free play.");
             return;
           }
           setVoiceStatus(`Voice input interrupted (${reason}). Reconnecting when possible…`);
         },
         onStopped: () => {
           recognitionRef.current = null;
-          if (useLiveFallbackRef.current) {
+          const failure = voiceFailureRef.current;
+          if (useLiveFallbackRef.current && sessionRef.current) {
             useLiveFallbackRef.current = false;
             void connectLiveVoice();
             return;
           }
-          resetVoiceGuide("Voice guide is off");
+          if (
+            autoVoiceRequestedRef.current &&
+            !["not-allowed", "service-not-allowed", "audio-capture"].includes(failure ?? "")
+          ) {
+            window.setTimeout(startAlwaysOnVoice, 700);
+            return;
+          }
+          resetVoiceGuide(
+            failure === "audio-capture"
+              ? "No microphone was found. Connect one, then refresh the game."
+              : "Microphone permission is needed for hands-free play.",
+          );
         },
       });
       if (!recognition) {
-        setVoiceStatus("Voice guide is not available here. Use the typed controls instead.");
+        setVoiceStatus("Hands-free voice is unavailable in this browser. Use a browser with voice recognition.");
         return;
       }
       recognitionRef.current = recognition;
       setListening(true);
       setVoiceCommandsPaused(false);
-      setVoiceStatus("Voice guide is listening");
+      setVoiceStatus("Voice companion is listening");
     } catch {
       recognitionRef.current = null;
       setListening(false);
-      setVoiceCommandsPaused(false);
-      setVoiceStatus("Could not start voice guide. Use the typed controls instead.");
+      setVoiceStatus("Microphone permission is needed for hands-free play.");
     }
   }
 
@@ -724,7 +741,7 @@ export default function App() {
   }
 
   async function askGuide(text = guideText) {
-    if (!session || guideBusy || storyAudio.phaseTransitioning || !text.trim()) return;
+    if (!session || guideBusy || !text.trim()) return;
     const message = text.trim();
     const history = guideMessages.slice(-8).map(({ role, text: historyText }) => ({
       role,
@@ -774,18 +791,19 @@ export default function App() {
   }
 
   async function connectLiveVoice() {
-    if (!session || liveConnecting || liveConnectionRef.current) return;
+    const activeSession = sessionRef.current;
+    if (!activeSession || liveConnecting || liveConnectionRef.current) return;
     recognitionRef.current?.stop();
     recognitionRef.current = null;
-    resetVoiceGuide("Starting Live Voice Guide…");
+    resetVoiceGuide("Starting live voice companion…");
     setLiveConnecting(true);
     storyAudio.stop();
     setError("");
     setVoiceTranscript("");
     try {
       const live = await startLiveVoice({
-        gameId: session.game.id,
-        sessionToken: session.token,
+        gameId: activeSession.game.id,
+        sessionToken: activeSession.token,
         onStatus: setVoiceStatus,
         onInputTranscript: (text) =>
           setVoiceTranscript((current) => `${current}${text}`.slice(-900)),
@@ -803,7 +821,7 @@ export default function App() {
       });
       liveConnectionRef.current = live;
       setLiveConnected(true);
-      setVoiceStatus("Live Voice Guide is listening");
+      setVoiceStatus("Voice companion is listening");
     } catch (cause) {
       resetVoiceGuide(
         cause instanceof Error ? cause.message : "Could not start the Live Voice Guide.",
@@ -817,6 +835,34 @@ export default function App() {
   voiceCommandHandlerRef.current = (transcript) => {
     void handleVoiceCommand(transcript);
   };
+
+  const voiceDock = (
+    <aside
+      className={`voice-orb-dock ${listening || liveConnected || liveConnecting ? "is-active" : ""}`}
+      aria-live="polite"
+      aria-label="Voice companion status"
+    >
+      <span className="voice-orb" aria-hidden="true">
+        <i />
+        <i />
+        <i />
+      </span>
+      <span className="voice-dock-copy">
+        <strong>Voice companion</strong>
+        <small>
+          {session
+            ? liveConnected
+              ? "Listening and answering"
+              : listening
+                ? voiceCommandsPaused
+                  ? "Commands paused — say resume listening"
+                  : "Always listening"
+                : voiceStatus
+            : "Starts listening when you begin"}
+        </small>
+      </span>
+    </aside>
+  );
 
   if (!session) {
     return (
@@ -856,20 +902,9 @@ export default function App() {
               <strong>Try a quick test</strong>
               <span>4 players · Seer role · bot opponents</span>
             </button>
-            <button
-              className="voice-entry-button"
-              type="button"
-              onClick={toggleVoiceGuide}
-              disabled={busy || liveConnecting}
-            >
-              {liveConnecting
-                ? "Starting voice guide…"
-                : listening || liveConnected
-                  ? "Stop voice guide"
-                  : "Enable voice guide"}
-            </button>
             <p className="voice-entry-status" aria-live="polite">
-              {voiceStatus}. Ask questions and say “start a new game” once it is enabled.
+              Start the game once to allow microphone access. Your voice companion then stays on for
+              the match, ready for game moves, messages, and questions.
             </p>
             <details className="game-options">
               <summary>Game options</summary>
@@ -916,13 +951,14 @@ export default function App() {
             </p>
           </div>
         </section>
+        {voiceDock}
       </main>
     );
   }
 
   const game = presentedGame ?? session.game;
   const me = game.me;
-  const interactionLocked = busy || storyAudio.phaseTransitioning;
+  const interactionLocked = busy;
   const alive = game.players.filter((player) => player.alive);
   const others = alive.filter((player) => player.id !== me.id);
   const toggleTarget = (id: string) =>
@@ -953,26 +989,49 @@ export default function App() {
             : me.role === "hunter"
               ? "If eliminated, you get one final shot."
               : "Help the village find the Werewolves.";
+  const hasDiscussion = game.feed.some((entry) => entry.kind === "speech");
   const phaseTitle =
     game.phase === "over"
       ? game.winner === "village"
-        ? "The village is safe."
+        ? "The village wins"
         : game.winner === "lovers"
-          ? "Love survives."
-          : "The wolves have won."
+          ? "Love survives"
+          : "The werewolves win"
       : game.phase === "night"
-        ? "Night has fallen."
+        ? "Your turn"
         : game.phase === "prologue"
-          ? "Welcome to Valombre."
+          ? "Meet the village"
           : game.phase === "day"
-            ? "The village awakens."
+            ? hasDiscussion
+              ? "Discussion"
+              : "The village wakes up"
             : game.phase === "vote"
-              ? "Who will you exile?"
+              ? "Time to vote"
               : game.phase === "cupid"
-                ? "Choose two hearts."
+                ? "Your role"
                 : game.phase === "hunter"
-                  ? "One last shot."
-                  : "The story continues.";
+                  ? "One last shot"
+                  : "The story continues";
+  const phaseSubtitle =
+    game.phase === "over"
+      ? `You survived as ${roleNames[me.role]}.`
+      : game.phase === "prologue"
+        ? "These are the people you’ll be playing with tonight. Their roles are hidden."
+        : game.phase === "night" && me.role === "seer"
+          ? "Who do you want to investigate?"
+          : game.phase === "night" && me.role === "werewolf"
+            ? "Who do you want to choose tonight?"
+            : game.phase === "night"
+              ? "The village is asleep. Follow your private role instructions."
+              : game.phase === "day"
+                ? hasDiscussion
+                  ? "Ask, accuse, or listen."
+                  : "Listen for what changed overnight."
+                : game.phase === "vote"
+                  ? "Who should leave the village?"
+                  : game.phase === "cupid"
+                    ? "Learn how your role works before the first night."
+                    : "Choose carefully. The village is listening.";
   const latestEvent = [...game.feed].reverse().find((entry) => entry.kind === "event");
   const recentSpeakers = [...game.feed]
     .reverse()
@@ -996,10 +1055,9 @@ export default function App() {
     <main className={`app-shell play-screen phase-${game.phase}`}>
       <header className="topbar">
         <a className="wordmark" href="#top" id="top">
-          <span className="wordmark-icon">L</span>
-          <span>
-            Play <span className="wordmark-divider">·</span> Loups-Garous
-          </span>
+          <span>Play by Voice</span>
+          <span className="wordmark-divider">·</span>
+          <span className="wordmark-game">Loups-Garous</span>
         </a>
         <div className="game-nav">
           <a className="help-link" href="#assistant">
@@ -1021,9 +1079,7 @@ export default function App() {
           </p>
           <h1>{phaseTitle}</h1>
           <p className="round-subtitle">
-            {game.phase === "over"
-              ? `You were the ${roleNames[me.role]}.`
-              : "Choose carefully. The village is listening."}
+            {phaseSubtitle}
           </p>
           {latestUpdate && (
             <p className="latest-update" aria-live="polite" role="status">
@@ -1174,7 +1230,6 @@ export default function App() {
                   <input
                     value={guideText}
                     onChange={(event) => setGuideText(event.target.value)}
-                    disabled={storyAudio.phaseTransitioning}
                     maxLength={1000}
                     placeholder="Ask about your role or the phase…"
                     aria-label="Ask the private game guide"
@@ -1254,18 +1309,9 @@ export default function App() {
                     <small>VOICE GUIDE</small>
                     <p>{voiceStatus}</p>
                   </div>
-                  <button
-                    className="plain-button voice-toggle"
-                    type="button"
-                    onClick={toggleVoiceGuide}
-                    disabled={liveConnecting}
-                  >
-                    {liveConnecting
-                      ? "Starting…"
-                      : listening || liveConnected
-                        ? "Stop voice guide"
-                        : "Enable voice guide"}
-                  </button>
+                  <span className="voice-auto-chip">
+                    {liveConnecting ? "Reconnecting" : "Always listening"}
+                  </span>
                 </div>
                 <p
                   className={`voice-listening ${listening ? "is-listening" : ""}`}
@@ -1276,7 +1322,7 @@ export default function App() {
                     ? "Live Voice Guide is answering private questions"
                     : listening
                       ? "Listening for game commands, guide questions, and audio controls"
-                      : "Enable once, then speak naturally throughout the match"}
+                      : "Microphone permission is needed to resume hands-free play"}
                 </p>
                 {voiceTranscript && <p className="voice-transcript">You said: {voiceTranscript}</p>}
                 <p className="voice-examples">
@@ -1310,7 +1356,6 @@ export default function App() {
                       id="typed-command"
                       value={commandText}
                       onChange={(event) => setCommandText(event.target.value)}
-                      disabled={storyAudio.phaseTransitioning}
                       placeholder={
                         game.phase === "night" && me.role === "seer"
                           ? "Try: investigate Camille"
@@ -1353,36 +1398,20 @@ export default function App() {
                   <>
                     {game.phase === "prologue" && (
                       <>
-                        <p>
-                          The village has introduced itself. Read the journal or listen to the
-                          story, then begin the first night when you are ready.
-                        </p>
-                        <div className="story-roster">
-                          {game.players.map((player) => (
-                            <article className="story-profile" key={player.id}>
-                              <span
-                                className="story-portrait"
-                                data-portrait={player.profile.voiceKey}
-                              >
-                                {player.name.slice(0, 1).toUpperCase()}
-                              </span>
-                              <div>
-                                <strong>
-                                  {player.name}
-                                  {player.id === me.id ? " · You" : ""}
-                                </strong>
-                                <span>{player.profile.archetype}</span>
-                                <p>{player.profile.speakingStyle}</p>
-                              </div>
-                            </article>
-                          ))}
+                        <div className="story-callouts">
+                          <span>Some of them are villagers.</span>
+                          <strong>Some may be Werewolves.</strong>
                         </div>
+                        <p>
+                          Their roles are hidden. Say “introduce the village” whenever you want to
+                          hear their character introductions again.
+                        </p>
                         <button
                           className="action-button"
                           disabled={interactionLocked}
                           onClick={() => void act("begin-story")}
                         >
-                          Begin the first night
+                          Continue
                         </button>
                       </>
                     )}
@@ -1565,6 +1594,7 @@ export default function App() {
         </div>
         <div className="ambient-orb" aria-hidden="true" />
       </section>
+      {voiceDock}
     </main>
   );
 }
