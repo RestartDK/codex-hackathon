@@ -3,7 +3,7 @@ import { Chess } from 'chess.js';
 import type { Square } from 'chess.js';
 import type { PromotionChoice, AppSettings, GameMode, StockfishStatus, MoveFeedback } from '../types';
 import { DIFFICULTIES } from '../chess/difficulty';
-import { computeMoveFeedback } from '../chess/computer';
+import { computeMoveFeedback, fallbackComputerMove } from '../chess/computer';
 import { StockfishEngine } from '../chess/stockfish';
 import type { StockfishMove, StockfishEngineState } from '../chess/stockfish';
 import { saveGame, loadGame, clearGame } from '../lib/storage';
@@ -275,11 +275,29 @@ export function useChessGame({ settings }: UseChessGameOptions) {
 
       if (!engine?.isReady) {
         // Fallback to custom engine — no Stockfish callback to worry about
-        for (let attempt = 0; attempt < 40 && !engine?.isReady; attempt++) {
-          await new Promise((resolve) => window.setTimeout(resolve, 100));
+        for (let attempt = 0; attempt < 5 && !engine?.isReady; attempt++) {
+          await new Promise((resolve) => window.setTimeout(resolve, 50));
         }
         if (!engine?.isReady) {
-          throw new Error('The Stockfish opponent did not become ready. Use Retry engine.');
+          const startingFen = g.fen();
+          const move = await fallbackComputerMove(new Chess(startingFen), difficulty);
+          if (pausedRef.current || g.fen() !== startingFen || g.turn() === settingsRef.current.playerColor) {
+            computerMoveActiveRef.current = false;
+            setIsComputerThinking(false);
+            return;
+          }
+          g.move(move);
+          computerMoveActiveRef.current = false;
+          setSelectedSquare(null);
+          setLegalMoves([]);
+          updateState();
+          const latest = g.history({ verbose: true }).at(-1);
+          if (settingsRef.current.soundEnabled) {
+            if (latest?.captured) playCaptureSound();
+            else playMoveSound();
+          }
+          setIsComputerThinking(false);
+          return;
         }
         const config = DIFFICULTIES[difficulty];
         if (config.stockfishSkillLevel !== undefined) engine.setSkillLevel(config.stockfishSkillLevel);
@@ -323,7 +341,7 @@ export function useChessGame({ settings }: UseChessGameOptions) {
 
     setIsComputerThinking(true);
 
-    const thinkTime = 300 + Math.random() * 400;
+    const thinkTime = 80;
 
     computerMoveTimeoutRef.current = setTimeout(() => {
       scheduleComputerMoveViaStockfish();

@@ -66,6 +66,15 @@ describe('Piece set renderers produce distinct output', () => {
     expect(span!.className).toContain('piece-set-unicode');
   });
 
+  it('renders Merida white pieces light and black pieces dark', () => {
+    const white = render(<Piece piece={{ color: 'w', type: 'p' }} pieceSet="merida" />).container.querySelector('span')!;
+    const black = render(<Piece piece={{ color: 'b', type: 'p' }} pieceSet="merida" />).container.querySelector('span')!;
+    expect(white.style.color).toBe('rgb(247, 243, 232)');
+    expect(black.style.color).toBe('rgb(32, 38, 49)');
+    expect(white.className).toContain('piece-white');
+    expect(black.className).toContain('piece-black');
+  });
+
   it('renders different inline styles for each piece set', () => {
     const results = PIECE_SETS.map((set) => {
       const { container } = render(

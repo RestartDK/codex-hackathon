@@ -197,7 +197,7 @@ export function createChessToolExecutor(
       } else if (scope !== 'all') {
         return json({ status: 'error', message: 'Scope must be all, rank, or file.' });
       }
-      return json({ status: 'ok', scope, value: value || null, pieces: selected });
+      return json({ status: 'ok', message: selected.map((piece) => `${piece.color} ${piece.piece} on ${piece.square}`).join('. ') || 'No pieces in this area.', scope, value: value || null, pieces: selected });
     }
 
     if (name === 'propose_move') {
@@ -223,21 +223,14 @@ export function createChessToolExecutor(
       if (candidates.length > 1) return json({ status: 'clarification_required', origins: candidates.map((move) => move.from), message: `More than one piece can move to ${to}.` });
       const move = candidates[0];
       const description = describeMove(move);
-      if (bridge.confirmMoves === false) {
-        const result = bridge.makeMove(
-          move.from,
-          move.to,
-          move.promotion as 'q' | 'r' | 'b' | 'n' | undefined,
-        );
-        return json({ status: result.ok ? 'completed' : 'error', message: result.message });
-      }
-      return propose(description, () =>
-        bridge.makeMove(
-          move.from,
-          move.to,
-          move.promotion as 'q' | 'r' | 'b' | 'n' | undefined,
-        ),
+      // A precise move is an instruction, not a suggestion. Play it immediately.
+      // Engine-selected/delegated moves below still require confirmation.
+      const result = bridge.makeMove(
+        move.from,
+        move.to,
+        move.promotion as 'q' | 'r' | 'b' | 'n' | undefined,
       );
+      return json({ status: result.ok ? 'completed' : 'error', message: result.message, description });
     }
 
     if (name === 'get_hint' || name === 'propose_best_move') {

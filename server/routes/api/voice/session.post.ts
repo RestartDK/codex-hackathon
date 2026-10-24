@@ -4,8 +4,8 @@ const TOOL_INSTRUCTIONS = `
 You are the reasoning layer for a voice-first chess companion. The browser owns the
 authoritative chess state. Always use a chess function before stating current board
 facts or attempting a game action. Never invent a legal move, square, piece, capture,
-check, result, or evaluation. Move requests create proposals; the application requires
-a later spoken confirmation before committing them. Keep spoken answers concise and
+check, result, or evaluation. A specific move ordered by the player is committed immediately.
+Only a move selected or suggested by the companion requires later confirmation. Keep spoken answers concise and
 say coordinates as a letter followed by a number.
 After a move tool reports completion, acknowledge it briefly without repeating the
 full move because the application supplies an authoritative move narration.
@@ -107,7 +107,7 @@ const tools = [
   {
     type: 'function',
     name: 'propose_move',
-    description: 'Resolve a move and either request confirmation or commit it when move confirmations are disabled.',
+    description: 'Resolve and immediately commit a specific move explicitly ordered by the player.',
     parameters: {
       type: 'object',
       properties: {
@@ -163,6 +163,21 @@ const tools = [
   },
 ];
 
+const ludoTools = [
+  { type: 'function', name: 'propose_best_token_move', description: 'Suggest a legal token only when asked to choose for the player. Follow the returned confirmation requirement.', parameters: { type: 'object', properties: {}, additionalProperties: false }, strict: true },
+  { type: 'function', name: 'get_position', description: 'Get the authoritative Ludo turn, phase, die, tokens, and result.', parameters: { type: 'object', properties: {}, additionalProperties: false }, strict: true },
+  { type: 'function', name: 'get_tokens', description: 'Describe token positions and legal token choices.', parameters: { type: 'object', properties: { owner: { type: 'string', enum: ['human', 'computer'] } }, required: ['owner'], additionalProperties: false }, strict: true },
+  { type: 'function', name: 'roll_dice', description: 'Roll the local Ludo die for the human player.', parameters: { type: 'object', properties: {}, additionalProperties: false }, strict: true },
+  { type: 'function', name: 'propose_token_move', description: 'Play an explicitly ordered numbered human token immediately after a roll. No confirmation.', parameters: { type: 'object', properties: { tokenId: { type: 'integer', minimum: 1, maximum: 4 } }, required: ['tokenId'], additionalProperties: false }, strict: true },
+  { type: 'function', name: 'confirm_action', description: 'Confirm a previously proposed Ludo token move or new game.', parameters: { type: 'object', properties: {}, additionalProperties: false }, strict: true },
+  { type: 'function', name: 'cancel_action', description: 'Cancel a pending Ludo token move or control.', parameters: { type: 'object', properties: {}, additionalProperties: false }, strict: true },
+  { type: 'function', name: 'continue_turn', description: 'Continue after a human move, or start a human bonus roll.', parameters: { type: 'object', properties: {}, additionalProperties: false }, strict: true },
+  { type: 'function', name: 'correct_last_move', description: 'Restore the latest human token choice before the next roll, keeping the same die.', parameters: { type: 'object', properties: {}, additionalProperties: false }, strict: true },
+  { type: 'function', name: 'propose_game_control', description: 'Pause, resume, or propose a new Ludo game.', parameters: { type: 'object', properties: { action: { type: 'string', enum: ['pause', 'resume', 'new_game'] } }, required: ['action'], additionalProperties: false }, strict: true },
+];
+
+const LUDO_INSTRUCTIONS = `You are the reasoning layer for a Ludo companion. The browser owns state, dice, and rules. Use a Ludo function for current facts or actions. Explicit token orders use propose_token_move and play immediately. Use propose_best_token_move only when asked to choose for the player; follow confirmation_required if returned. Rolls, pause, resume, correction, and board queries need no confirmation. New game clears a save and requires confirmation. For board configuration or positions, call get_position and describe the returned tokens, colors, last die, and turn. Give the full configuration only on request. After moves, do not repeat instructions or narrate future computer actions: the browser supplies short paced updates.`;
+
 function allowedOrigins(): string[] {
   return (process.env.ALLOWED_ORIGINS ?? 'http://localhost:3000,http://127.0.0.1:3000,http://localhost:5173,http://127.0.0.1:5173')
     .split(',')
@@ -216,7 +231,7 @@ export default defineHandler(async (event) => {
     });
   }
 
-  let body: { sdp?: unknown };
+  let body: { sdp?: unknown; gameId?: unknown };
   try {
     body = await event.req.json();
   } catch {
@@ -228,6 +243,9 @@ export default defineHandler(async (event) => {
       headers: { 'content-type': 'application/json' },
     });
   }
+  const gameId = body.gameId === 'ludo' ? 'ludo' : 'chess';
+  const activeTools = gameId === 'ludo' ? ludoTools : tools;
+  const activeInstructions = gameId === 'ludo' ? LUDO_INSTRUCTIONS : TOOL_INSTRUCTIONS;
 
   let upstream: Response;
   try {
@@ -241,19 +259,19 @@ export default defineHandler(async (event) => {
       body: JSON.stringify({
         session: {
           model: process.env.OPENAI_VOICE_MODEL ?? 'gpt-live-1',
-          instructions: `You are a calm English voice companion for a blind chess player. Be brief, accept interruptions, and delegate every current board fact and game action. Never claim an action succeeded until its tool result says so.
+          instructions: `You are a calm English voice companion for a blind ${gameId} player. Be brief, accept interruptions, and delegate every current game fact and game action. Never claim an action succeeded until its tool result says so.
 
-At the beginning, the application supplies a dashboard overview and says whether a saved game exists. First narrate that overview. If a saved game exists, ask whether to resume it or start a new game, and wait for the answer before discussing the tutorial. For resume, call propose_game_control with action resume. For a new game, call propose_game_control with action new_game and follow its confirmation flow. After the game choice is complete—or immediately when no save exists—ask whether the player wants a quick spoken guide or already knows how to play. Do not begin the guide until they answer. Treat natural affirmative answers such as “yes”, “please”, or “teach me” as choosing the guide. Treat answers such as “no”, “skip”, or “I know how” as declining it.
+At the beginning, use the application's brief welcome. If a saved game exists, ask resume or new game and wait. Resume immediately through propose_game_control; confirm only a new game that discards progress. Offer help in one short phrase; explain rules or the dashboard only when asked. An explicit move order plays immediately. A companion-selected move follows the tool's confirmation requirement. Board questions, rolling, pause, and resume need no confirmation.
 
-If they choose the guide, explain it conversationally in this order: the goal is to checkmate the opposing king; files are letters a through h and ranks are numbers 1 through 8; briefly describe how pawns, knights, bishops, rooks, queens, and kings move; explain that they can speak a move, inspect squares and pieces, ask for legal moves or a hint, and ask what the computer played; explain that moves are read back for confirmation before being committed. Keep the initial guide under ninety seconds, invite interruption, and offer more detail about any rule. If they decline, acknowledge it briefly and say whose turn it is only after consulting a game-state tool.
+Keep ordinary replies to one short sentence. For a requested guide or board configuration, provide the detail requested using current tool results. Speak each application update once in order, without adding tutorials or repeating a completed roll or move. A computer turn update says what is happening now; do not speculate about its next roll or move.
 
-Honor requests to repeat, use shorter answers, add detail, speak more slowly, or stop speaking. For “what did I miss?”, delegate to get_history. For pause and resume requests, delegate to propose_game_control.`,
+Honor requests to repeat, add detail, speak more slowly, pause, or stop speaking. Delegate pause and resume to propose_game_control. Use get_position for Ludo board configuration, read_board for chess board configuration, and get_history for chess history.`,
           delegation: {
             type: 'responses',
             responses: {
               model: process.env.OPENAI_DELEGATION_MODEL ?? 'gpt-6-luna',
-              instructions: TOOL_INSTRUCTIONS,
-              tools,
+              instructions: activeInstructions,
+              tools: activeTools,
               tool_choice: 'auto',
               parallel_tool_calls: false,
             },

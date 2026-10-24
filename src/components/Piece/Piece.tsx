@@ -22,13 +22,13 @@ type PieceSetRenderer = (
 
 const PIECE_RENDERERS: Record<string, PieceSetRenderer> = {
   unicode: (color, _type, char) => ({
-    className: "piece piece-" + color + " piece-set-unicode",
+    className: `piece piece-${color === "w" ? "white" : "black"} piece-set-unicode`,
     style: { color: "var(--text)" },
     children: char,
   }),
 
   symbols: (color, _type, char) => ({
-    className: "piece piece-" + color + " piece-set-symbols",
+    className: `piece piece-${color === "w" ? "white" : "black"} piece-set-symbols`,
     style: {
       color: color === "w" ? "#c8a84e" : "#8b6914",
       fontWeight: 700,
@@ -37,7 +37,7 @@ const PIECE_RENDERERS: Record<string, PieceSetRenderer> = {
   }),
 
   outlined: (color, _type, char) => ({
-    className: "piece piece-" + color + " piece-set-outlined",
+    className: `piece piece-${color === "w" ? "white" : "black"} piece-set-outlined`,
     style: {
       color: "transparent",
       WebkitTextStroke:
@@ -50,9 +50,12 @@ const PIECE_RENDERERS: Record<string, PieceSetRenderer> = {
   }),
 
   merida: (color, _type, char) => ({
-    className: "piece piece-" + color + " piece-set-merida",
+    className: `piece piece-${color === "w" ? "white" : "black"} piece-set-merida`,
     style: {
-      color: color === "w" ? "#2a2a2a" : "#d4d4d4",
+      color: color === "w" ? "#f7f3e8" : "#202631",
+      textShadow: color === "w"
+        ? "0 1px 2px rgba(0,0,0,0.95), 0 0 1px rgba(0,0,0,0.9)"
+        : "0 1px 1px rgba(255,255,255,0.35)",
       fontWeight: 700,
       fontSize: "1.15em",
     },

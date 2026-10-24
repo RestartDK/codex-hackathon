@@ -1,6 +1,6 @@
-# Voice Chess Companion
+# Voice Game Companion
 
-A voice-first chess game for blind and low-vision players. The website opens directly on a playable board with no account or login. A player can make moves, inspect the position, hear game events, and request a Stockfish hint through speech or the typed-command fallback.
+A voice-first game library for blind and low-vision players. The website opens on Chess and Ludo, with no account or login. A player can choose a game, resume its separate local save, hear its tutorial, and play through speech or the typed-command fallback.
 
 This is an early implementation. It needs testing with blind and low-vision players before anyone should claim that it is fully accessible.
 
@@ -11,11 +11,14 @@ This is an early implementation. It needs testing with blind and low-vision play
 - Play as White or Black; Easy, Medium, and Hard levels
 - GPT-Live WebRTC voice connection through a server route; the API key never reaches the browser
 - Authoritative tools for positions, squares, pieces, legal moves, board reading, history, hints, and move proposals
-- Separate move confirmation with stale-position protection
+- Explicit moves play immediately; companion-selected moves can require confirmation
 - Automatic move narration, captions, keyboard board navigation, screen-reader live-region mode, and typed commands
 - Local game persistence, undo, resignation, review, visual themes, and sound controls
+- Library-first routing at `/`, `/games/chess`, and `/games/ludo`
+- Two-player Ludo against the computer with numbered tokens, safe squares, captures, exact finishing, bonus rolls, third-six handling, suggested-move confirmation, and same-die correction before the next roll
+- Shared game catalog/contracts and game-specific voice tools for future games
 
-The full product and engineering plan is in [`plan.md`](plan.md). Upstream attribution is in [`UPSTREAM.md`](UPSTREAM.md).
+The chess plan is in [`plan.md`](plan.md), and the historical multi-game implementation plan is in [`game-library-plan.md`](game-library-plan.md). Later usability decisions are reflected in the current code and this README. Upstream attribution is in [`UPSTREAM.md`](UPSTREAM.md) and [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
 
 ## Requirements
 
@@ -79,14 +82,23 @@ The automated suites use no paid API calls. Browser tests cover saved-game gatin
 - “What did the computer play?”
 - “Give me a hint”
 - “Choose a move for me”
+- “Roll”, “move token two”, or “choose a token for me” in Ludo
+- “Board configuration” in either game
 - “Undo”, “resign”, or “start a new game”
 
-Moves are proposals by default. The player must then say “yes” or use the Confirm button. New game, undo, and resignation always use a proposal/confirmation flow when invoked by voice.
+Explicit chess moves and Ludo token choices play immediately. Companion-selected moves follow the suggested-move confirmation setting. Consequential actions such as discarding an unfinished game, chess undo, and resignation still ask for confirmation. Board descriptions and rules are available on request, without repeated tutorials during play.
+
+Ludo rolls and moves have separate readable delays. When voice is active, the next computer step also waits for observed speech playback to go quiet. A bounded wait prevents a dropped voice response from freezing play. Corrections remain available until the next roll; the computer proceeds automatically after the correction window.
 
 ## Architecture
 
 - `src/hooks/useChessGame.ts`: authoritative chess state and operations
+- `src/games/ludo/ludo.ts`: pure versioned Ludo rules, dice boundary, serialization, and computer move selection
+- `src/games/ludo/useLudoGame.ts`: Ludo session, persistence, correction checkpoint, and computer pacing
+- `src/games/registry.ts`: trusted library metadata and per-game save keys
+- `src/games/contracts.ts`: shared controller/event/snapshot boundary for future games
 - `src/voice/chessTools.ts`: bounded tool adapter; model output cannot directly replace game state
+- `src/games/ludo/ludoTools.ts`: bounded Ludo tool adapter
 - `src/voice/useVoiceCompanion.ts`: browser WebRTC/media and tool-event handling
 - `server/routes/api/voice/session.post.ts`: server-owned GPT-Live session configuration
 - `src/chess/stockfish.ts`: local UCI worker wrapper
@@ -97,6 +109,8 @@ Every proposed move is resolved against current legal moves. Confirmation checks
 ## Current limitations
 
 - Real microphone behavior, audio interruption, and NVDA output still require hands-on testing; automated tests intentionally do not create paid GPT-Live sessions.
+- Ludo uses the documented two-player local ruleset and a classic cross-board presentation. Numbered token descriptions are the primary nonvisual interaction.
+- Ludo exposes one in-progress local save per game. Cloud accounts and multiplayer are intentionally out of scope.
 - Move explanations report verified effects (capture, promotion, castling, check, or checkmate) but do not claim a strategic motive.
 - Voice-session throttling is in-memory and suitable for this demo, not a distributed production deployment. A public no-login deployment still needs provider budgets and centralized abuse monitoring.
 

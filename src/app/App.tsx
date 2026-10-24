@@ -8,6 +8,7 @@ import PlayerPanel from '../components/PlayerPanel/PlayerPanel';
 import GameEndModal from '../components/GameEndModal/GameEndModal';
 import VoiceCompanion from '../components/VoiceCompanion/VoiceCompanion';
 import ConfirmDialog from '../components/ConfirmDialog/ConfirmDialog';
+import { Button } from '../components/ui/Button';
 import type { GameMode } from '../types';
 import { useChessGame } from '../hooks/useChessGame';
 import { useSettings } from '../hooks/useSettings';
@@ -16,8 +17,9 @@ import './App.css';
 import '../components/GamePanel/GamePanel.css';
 import '../components/Settings/SettingsPanel.css';
 import '../components/VoiceCompanion/VoiceCompanion.css';
+import LudoPage from '../components/LudoGame/LudoPage';
 
-export default function App() {
+function ChessPage() {
   const {
     settings,
     settingsOpen,
@@ -94,6 +96,22 @@ export default function App() {
 
   const canUndo = history.length > 0 && !awaitingStartChoice;
   const canResign = !awaitingStartChoice && !gameResult && !game.isGameOver() && history.length > 0;
+  const presentedStatus = useMemo(() => {
+    if (settings.gameMode !== 'computer' || gameResult || game.isGameOver()) return status;
+    const turnColor = game.turn() === 'w' ? 'White' : 'Black';
+    const owner = game.turn() === settings.playerColor ? 'Your turn' : "Computer's turn";
+    const latest = game.history({ verbose: true }).at(-1);
+    const pieceNames = { p: 'pawn', n: 'knight', b: 'bishop', r: 'rook', q: 'queen', k: 'king' } as const;
+    let captureNotice = '';
+    if (latest?.captured) {
+      const capturedColor = latest.color === 'w' ? 'b' : 'w';
+      const capturedColorName = capturedColor === 'w' ? 'White' : 'Black';
+      captureNotice = capturedColor === settings.playerColor
+        ? `You lost your ${capturedColorName} ${pieceNames[latest.captured]}. `
+        : `The computer lost its ${capturedColorName} ${pieceNames[latest.captured]}. `;
+    }
+    return `${captureNotice}${owner} — ${turnColor} to move${game.isCheck() ? ', in check' : ''}`;
+  }, [game, gameResult, history, settings.gameMode, settings.playerColor, status]);
 
   const requestGameMode = (mode: GameMode) => {
     if (mode === settings.gameMode) return;
@@ -159,6 +177,7 @@ export default function App() {
       </a>
 
       <header className="app-header">
+        <button className="library-link" onClick={() => { window.location.href = '/'; }}>Game library</button>
         <h1>Voice Chess Companion</h1>
         <span className="piece-set-badge" title="Active piece set">
           {settings.pieceSet}
@@ -195,8 +214,9 @@ export default function App() {
               whiteCaptured={captured.white}
               blackCaptured={captured.black}
               gameMode={settings.gameMode}
+              playerColor={settings.playerColor}
               turn={game.turn() as 'w' | 'b'}
-              status={status}
+              status={presentedStatus}
               materialAdvantage={materialAdvantage}
             />
           </aside>
@@ -215,11 +235,13 @@ export default function App() {
               kingInCheck={kingInCheck}
               displayFen={displayFen}
               manualFlip={manualBoardFlip}
+              playerColor={settings.playerColor}
+              gameMode={settings.gameMode}
             />
           </section>
 
           <GamePanel
-            status={status}
+            status={presentedStatus}
             gameMode={settings.gameMode}
             difficulty={settings.difficulty}
             isComputerThinking={isComputerThinking}
@@ -300,5 +322,21 @@ export default function App() {
       )}
     </div>
   );
+}
+
+function LibraryPage() {
+  const hasSave = (key: string) => {
+    try { return Boolean(localStorage.getItem(key)); } catch { return false; }
+  };
+  const chessSaved = hasSave('chess-by-sparsh-save');
+  const ludoSaved = hasSave('voice-game-companion-ludo-save');
+  return <div className="app library-app"><a href="#library-main" className="skip-link">Skip to main content</a><header className="app-header"><h1>Voice Game Companion</h1><span className="game-badge">Accessible games</span></header><main id="library-main" className="library-main"><section className="library-intro" aria-labelledby="library-heading"><p className="voice-eyebrow">Play by voice, keyboard, or mouse</p><h2 id="library-heading">Choose a game</h2><p>Chess and Ludo are ready to play against the computer. Select a game to hear its dashboard and tutorial. Your saves stay separate.</p></section><div className="game-library" role="list"><article className="game-card" role="listitem"><span className="game-card-icon" aria-hidden="true">♟</span><h3>Chess</h3><p>Play accessible chess with spoken moves, position questions, hints, and a computer opponent.</p><p className="save-status">{chessSaved ? 'Saved game available' : 'No saved game'}</p><div className="game-card-actions"><Button onClick={() => { window.location.href = '/games/chess'; }}>{chessSaved ? 'Open chess' : 'Play chess'}</Button>{chessSaved && <Button className="secondary-button" onClick={() => { window.location.href = '/games/chess?resume=1'; }}>Resume chess</Button>}</div></article><article className="game-card" role="listitem"><span className="game-card-icon" aria-hidden="true">🎲</span><h3>Ludo</h3><p>Roll, choose numbered tokens, capture safely, and race four tokens home against the computer.</p><p className="save-status">{ludoSaved ? 'Saved game available' : 'No saved game'}</p><div className="game-card-actions"><Button onClick={() => { window.location.href = '/games/ludo'; }}>{ludoSaved ? 'Open Ludo' : 'Play Ludo'}</Button>{ludoSaved && <Button className="secondary-button" onClick={() => { window.location.href = '/games/ludo?resume=1'; }}>Resume Ludo</Button>}</div></article></div><p className="library-help">Say “play chess,” “play Ludo,” or “what games are available” after starting voice in a game.</p></main></div>;
+}
+
+export default function App() {
+  const path = window.location.pathname.replace(/\/$/, '') || '/';
+  if (path === '/games/chess') return <ChessPage />;
+  if (path === '/games/ludo') return <LudoPage />;
+  return <LibraryPage />;
 }
 

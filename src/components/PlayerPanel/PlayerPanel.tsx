@@ -13,6 +13,7 @@ interface PlayerPanelProps {
   whiteCaptured: string[];
   blackCaptured: string[];
   gameMode: GameMode;
+  playerColor: 'w' | 'b';
   turn: 'w' | 'b';
   status: string;
   materialAdvantage: number;
@@ -22,12 +23,13 @@ export default function PlayerPanel({
   whiteCaptured,
   blackCaptured,
   gameMode,
+  playerColor,
   turn,
   status,
   materialAdvantage,
 }: PlayerPanelProps) {
-  const whiteName = gameMode === 'computer' ? 'User' : 'Player 1';
-  const blackName = gameMode === 'computer' ? 'Computer' : 'Player 2';
+  const whiteName = gameMode === 'computer' ? (playerColor === 'w' ? 'You (White)' : 'Computer (White)') : 'Player 1 (White)';
+  const blackName = gameMode === 'computer' ? (playerColor === 'b' ? 'You (Black)' : 'Computer (Black)') : 'Player 2 (Black)';
 
   // Pieces white lost = pieces black captured
   const whiteLost = blackCaptured;

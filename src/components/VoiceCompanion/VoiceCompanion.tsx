@@ -16,9 +16,11 @@ interface VoiceCompanionProps extends ChessToolBridge {
 
 function localIntent(command: string): { name: string; args: object } | null {
   const normalized = command.trim().toLowerCase().replace(/[,.?]/g, '');
+  if (/\bboard\b/.test(normalized) && /\b(config(?:uration)?s?|positions?|layout|describe|read)\b/.test(normalized)) return { name: 'read_board', args: { scope: 'all', value: null } };
   if (/^(yes|confirm|play it|do it)$/.test(normalized)) return { name: 'confirm_action', args: {} };
   if (/^(no|cancel|never mind|nevermind)$/.test(normalized)) return { name: 'cancel_action', args: {} };
   if (/^(status|position|what is happening|whats happening)$/.test(normalized)) return { name: 'get_position', args: {} };
+  if (/^(board|board config|board configuration|describe (?:the )?board|(?:give|tell) me (?:the )?(?:board config|board configuration|configuration of (?:the )?board))$/.test(normalized)) return { name: 'read_board', args: { scope: 'all', value: null } };
   if (/^(history|recent moves|last moves)$/.test(normalized)) return { name: 'get_history', args: { count: 6 } };
   if (/^(hint|give me a hint|suggest a move)$/.test(normalized)) return { name: 'get_hint', args: {} };
   if (/^(choose a move|choose a move for me|play for me)$/.test(normalized)) return { name: 'propose_best_move', args: {} };
@@ -31,23 +33,29 @@ function localIntent(command: string): { name: string; args: object } | null {
   return null;
 }
 
-const QUICK_GUIDE = `Here is the quick guide. Your goal is to checkmate the opposing king. The board files are letters a through h, and ranks are numbers one through eight. Pawns move forward and capture diagonally. Knights move in an L shape. Bishops move diagonally, rooks move straight, queens move straight or diagonally, and kings move one square at a time. You can say a move such as e two to e four, ask what is on a square, ask where your pieces are, request legal moves, ask what the computer played, or ask for a hint. I will read a move back and ask for confirmation before playing it. You can interrupt me at any time or ask for more detail about a rule.`;
+const QUICK_GUIDE = `Here is the quick guide. Your goal is to checkmate the opposing king. The board files are letters a through h, and ranks are numbers one through eight. Pawns move forward and capture diagonally. Knights move in an L shape. Bishops move diagonally, rooks move straight, queens move straight or diagonally, and kings move one square at a time. You can say a move such as e two to e four, ask what is on a square, ask where your pieces are, request legal moves, ask what the computer played, or ask for a hint. A move you directly order plays immediately. If you ask me to choose or suggest a move for you, I will ask for confirmation before playing it. You can interrupt me at any time or ask for more detail about a rule.`;
 
 const DASHBOARD_OVERVIEW = 'The dashboard has voice controls and a typed-command fallback at the top, an accessible chessboard, player and game status, move history, new game, undo and resign controls, and settings for color, difficulty, board appearance, confirmations, sounds, and screen-reader narration.';
 
 const PIECE_NAMES = { p: 'pawn', n: 'knight', b: 'bishop', r: 'rook', q: 'queen', k: 'king' } as const;
 
-function narrateMove(move: Move, game: ChessToolBridge['game']): string {
+export function narrateMove(move: Move, game: ChessToolBridge['game'], playerColor: Color): string {
   const color = move.color === 'w' ? 'White' : 'Black';
+  const owner = move.color === playerColor ? 'You moved' : 'The computer moved';
   let action: string;
-  if (move.flags.includes('k')) action = `${color} castles kingside`;
-  else if (move.flags.includes('q')) action = `${color} castles queenside`;
+  if (move.flags.includes('k')) action = `${owner} by castling the ${color} king kingside`;
+  else if (move.flags.includes('q')) action = `${owner} by castling the ${color} king queenside`;
   else {
-    action = `${color} ${PIECE_NAMES[move.piece]} from ${move.from} to ${move.to}`;
+    action = `${owner} the ${color} ${PIECE_NAMES[move.piece]} from ${move.from} to ${move.to}`;
     if (move.captured) {
       const capturedColor = move.color === 'w' ? 'Black' : 'White';
       const captureSquare = move.flags.includes('e') ? `${move.to[0]}${move.from[1]}` : move.to;
       action += `, capturing the ${capturedColor} ${PIECE_NAMES[move.captured]} on ${captureSquare}`;
+      if ((move.color === 'w' ? 'b' : 'w') === playerColor) {
+        action += `. You lost your ${capturedColor} ${PIECE_NAMES[move.captured]}`;
+      } else {
+        action += `. The computer lost its ${capturedColor} ${PIECE_NAMES[move.captured]}`;
+      }
     }
     if (move.promotion) action += `, promoting to ${PIECE_NAMES[move.promotion]}`;
   }
@@ -55,7 +63,9 @@ function narrateMove(move: Move, game: ChessToolBridge['game']): string {
   if (game.isStalemate()) return `${action}. Stalemate. The game is a draw.`;
   if (game.isDraw()) return `${action}. The game is a draw.`;
   if (game.isCheck()) action += '. Check';
-  return `${action}. ${game.turn() === 'w' ? 'White' : 'Black'} to move.`;
+  const nextColor = game.turn() === 'w' ? 'White' : 'Black';
+  const nextOwner = game.turn() === playerColor ? 'Your turn' : "The computer's turn";
+  return `${action}. ${nextOwner}, playing ${nextColor}.`;
 }
 
 export default function VoiceCompanion(props: VoiceCompanionProps) {
@@ -84,8 +94,8 @@ export default function VoiceCompanion(props: VoiceCompanionProps) {
         ? `A saved game with ${props.history.length} moves is loaded. Would you like to resume it or start a new game?`
         : props.isTerminated
           ? 'The previous game is finished. You can review its moves or start a new game.'
-          : 'There is no saved game in progress. Would you like a quick spoken guide to the rules and voice controls, or do you already know how to play?';
-      const welcome = `Welcome to Voice Chess. You are playing ${color}. ${DASHBOARD_OVERVIEW} ${nextQuestion}`;
+          : 'Make a move when ready. Ask for help or board configuration anytime.';
+      const welcome = `Welcome to chess. You are ${color}. ${nextQuestion}`;
       setLocalResponse(welcome);
       voice.announce(welcome);
     }
@@ -100,10 +110,10 @@ export default function VoiceCompanion(props: VoiceCompanionProps) {
     lastHistoryLength.current = props.history.length;
     const move = props.game.history({ verbose: true }).at(-1);
     if (!move) return;
-    const event = narrateMove(move, props.game);
+    const event = narrateMove(move, props.game, props.playerColor);
     setLocalResponse(event);
     if (voice.status === 'connected') voice.announce(event);
-  }, [props.game, props.history.length, voice.status, voice.announce]);
+  }, [props.game, props.history.length, props.playerColor, voice.status, voice.announce]);
 
   async function runTypedCommand() {
     const normalized = typedCommand.trim().toLowerCase();
@@ -125,6 +135,7 @@ export default function VoiceCompanion(props: VoiceCompanionProps) {
     const response = await executor.execute(intent.name, JSON.stringify(intent.args));
     const parsed = JSON.parse(response) as { message?: string; description?: string; [key: string]: unknown };
     setLocalResponse(parsed.message ?? parsed.description ?? JSON.stringify(parsed));
+    if (voice.status === 'connected' && intent.name === 'read_board' && parsed.message) voice.announce(parsed.message);
     setTypedCommand('');
   }
 
@@ -210,7 +221,7 @@ export default function VoiceCompanion(props: VoiceCompanionProps) {
 
       <div className="voice-preferences">
         <label>Play as <select value={props.playerColor} onChange={(event) => setRequestedColor(event.target.value as Color)}><option value="w">White</option><option value="b">Black</option></select></label>
-        <label><input type="checkbox" checked={props.confirmMoves} onChange={(event) => props.onConfirmMovesChange(event.target.checked)} /> Confirm moves</label>
+        <label><input type="checkbox" checked={props.confirmMoves} onChange={(event) => props.onConfirmMovesChange(event.target.checked)} /> Confirm suggested moves</label>
         <label><input type="checkbox" checked={props.screenReaderMode} onChange={(event) => props.onScreenReaderModeChange(event.target.checked)} /> Screen-reader narration</label>
       </div>
 

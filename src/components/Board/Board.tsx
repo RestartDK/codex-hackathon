@@ -23,6 +23,8 @@ interface BoardProps {
   displayFen?: string | null;
   /** Inverts the configured orientation when the player presses Flip Board. */
   manualFlip?: boolean;
+  playerColor?: Color;
+  gameMode?: 'computer' | 'local';
 }
 
 export default function Board({
@@ -38,6 +40,8 @@ export default function Board({
   kingInCheck = null,
   displayFen = null,
   manualFlip = false,
+  playerColor = 'w',
+  gameMode = 'computer',
 }: BoardProps) {
   // When displayFen is provided (review mode), use a separate Chess instance
   // to render the historical position. Never mutate the live game.
@@ -152,7 +156,7 @@ export default function Board({
       {/* Top side: white or black label */}
       <div className="board-side-label board-side-top">
         <span className={`side-color-dot side-dot-${topColor}`} />
-        <span className="side-color-name">{topColor === 'w' ? 'White' : 'Black'}</span>
+        <span className="side-color-name">{topColor === 'w' ? 'White' : 'Black'}{gameMode === 'computer' ? (topColor === playerColor ? ' — You' : ' — Computer') : ''}</span>
         {topColor === currentTurn && (
           <span className="side-turn-dot" title="Current turn to move">●</span>
         )}
@@ -170,7 +174,7 @@ export default function Board({
       {/* Bottom side: white or black label */}
       <div className="board-side-label board-side-bottom">
         <span className={`side-color-dot side-dot-${bottomColor}`} />
-        <span className="side-color-name">{bottomColor === 'w' ? 'White' : 'Black'}</span>
+        <span className="side-color-name">{bottomColor === 'w' ? 'White' : 'Black'}{gameMode === 'computer' ? (bottomColor === playerColor ? ' — You' : ' — Computer') : ''}</span>
         {bottomColor === currentTurn && (
           <span className="side-turn-dot" title="Current turn to move">●</span>
         )}

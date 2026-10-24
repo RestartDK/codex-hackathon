@@ -52,13 +52,15 @@ Before sharing a public URL:
 
 Use desktop Chrome over HTTPS:
 
-1. Open the root URL and verify the board appears without login.
-2. Start voice and grant microphone access.
+1. Open the root URL and verify the Chess and Ludo library appears without login.
+2. Open Chess, start voice, and grant microphone access.
 3. Ask “What is on e1?” and verify the answer is “White king.”
-4. Say “Move e2 to e4,” verify that the position does not change before confirmation, then say “yes.”
+4. Say “Move e2 to e4” and verify it plays immediately without asking for confirmation.
 5. Verify the move is announced and Stockfish replies once.
 6. Ask for a hint; verify it proposes or describes one legal move only.
 7. End voice and verify the browser microphone indicator turns off.
 8. Reload and confirm the game can be reconstructed from saved move history.
+9. Open Ludo, roll, and order a numbered token. Verify it moves immediately, the computer rolls and moves automatically with readable pacing, and each update matches the screen.
+10. Ask for “board configuration” in each game. Verify both sides' current positions are described. Test a suggested move separately: it should follow the suggested-move confirmation setting.
 
 Repeat the accessibility checklist in [`docs/MANUAL_ACCESSIBILITY_TESTS.md`](docs/MANUAL_ACCESSIBILITY_TESTS.md). Record actual latency and errors; do not treat mocked tests as proof that audio works.

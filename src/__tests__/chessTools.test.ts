@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vite-plus/test';
 import { Chess } from 'chess.js';
 import { createChessToolExecutor, type ChessToolBridge } from '../voice/chessTools';
+import { narrateMove } from '../components/VoiceCompanion/VoiceCompanion';
 
 function setup(confirmMoves = true) {
   const game = new Chess();
@@ -25,28 +26,32 @@ function setup(confirmMoves = true) {
 }
 
 describe('chess voice tools', () => {
-  it('proposes a legal move without mutating the position', async () => {
+  it('plays a directly ordered legal move without asking for confirmation', async () => {
     const { game, executor } = setup();
-    const before = game.fen();
     const result = JSON.parse(await executor.execute('propose_move', JSON.stringify({ from: 'e2', to: 'e4' })));
-    expect(result.status).toBe('confirmation_required');
-    expect(game.fen()).toBe(before);
+    expect(result.status).toBe('completed');
+    expect(game.get('e4')).toMatchObject({ type: 'p', color: 'w' });
+    expect(executor.getPending()).toBeNull();
   });
 
-  it('commits only after a separate confirmation', async () => {
-    const { game, executor } = setup();
-    await executor.execute('propose_move', JSON.stringify({ from: 'e2', to: 'e4' }));
+  it('requires confirmation when the companion chooses a move', async () => {
+    const { game, bridge, executor } = setup();
+    bridge.getHint = async () => ({ ok: true, from: 'e2', to: 'e4', san: 'e4' });
+    const proposal = JSON.parse(await executor.execute('propose_best_move', '{}'));
+    expect(proposal.status).toBe('confirmation_required');
+    expect(game.get('e2')).toMatchObject({ type: 'p', color: 'w' });
     const result = JSON.parse(await executor.execute('confirm_action', '{}'));
     expect(result.status).toBe('completed');
     expect(game.get('e4')).toMatchObject({ type: 'p', color: 'w' });
   });
 
-  it('rejects illegal and stale proposals', async () => {
-    const { game, executor } = setup();
+  it('rejects illegal direct moves and stale suggested moves', async () => {
+    const { game, bridge, executor } = setup();
     const illegal = JSON.parse(await executor.execute('propose_move', JSON.stringify({ from: 'e2', to: 'e5' })));
     expect(illegal.status).toBe('illegal');
 
-    await executor.execute('propose_move', JSON.stringify({ from: 'e2', to: 'e4' }));
+    bridge.getHint = async () => ({ ok: true, from: 'e2', to: 'e4', san: 'e4' });
+    await executor.execute('propose_best_move', '{}');
     game.move('d4');
     const stale = JSON.parse(await executor.execute('confirm_action', '{}'));
     expect(stale.status).toBe('stale');
@@ -60,7 +65,7 @@ describe('chess voice tools', () => {
     expect(rank.pieces).toHaveLength(8);
   });
 
-  it('can play immediately when confirmations are disabled', async () => {
+  it('plays direct orders immediately regardless of suggestion confirmation preference', async () => {
     const { game, executor } = setup(false);
     const result = JSON.parse(await executor.execute('propose_move', JSON.stringify({ from: 'e2', to: 'e4' })));
     expect(result.status).toBe('completed');
@@ -85,7 +90,8 @@ describe('chess voice tools', () => {
     expect(bridge.getHint).not.toHaveBeenCalled();
 
     bridge.isPaused = false;
-    await executor.execute('propose_move', JSON.stringify({ from: 'e2', to: 'e4' }));
+    bridge.getHint = async () => ({ ok: true, from: 'e2', to: 'e4', san: 'e4' });
+    await executor.execute('propose_best_move', '{}');
     bridge.isTerminated = true;
     expect(JSON.parse(await executor.execute('confirm_action', '{}')).status).toBe('error');
     expect(executor.getPending()).toBeNull();
@@ -102,6 +108,15 @@ describe('chess voice tools', () => {
     expect(history.moves[0].spoken).toContain('captures the pawn');
     expect(explanation.verifiedEffects).toContain('captured a pawn');
     expect(explanation.limitation).toContain('do not invent');
+  });
+
+  it('explicitly announces when the computer captures one of the player pieces', () => {
+    const game = new Chess();
+    game.move('e4'); game.move('d5'); game.move('exd5'); game.move('Qxd5');
+    const move = game.history({ verbose: true }).at(-1)!;
+    const narration = narrateMove(move, game, 'w');
+    expect(narration).toContain('You lost your White pawn');
+    expect(narration).toContain('Your turn, playing White');
   });
 
   it('reports unavailable pause and resume controls instead of claiming success', async () => {
