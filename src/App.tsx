@@ -823,7 +823,9 @@ export default function App() {
       <main className="app-shell landing-screen">
         <header className="topbar">
           <a className="wordmark" href="#top" id="top">
-            <span className="wordmark-icon">L</span> Loups-Garous
+            <span>Play by Voice</span>
+            <span className="wordmark-divider">·</span>
+            <span className="wordmark-game">Loups-Garous</span>
           </a>
           <a className="help-link" href="#how-to-play">
             How to play
@@ -991,7 +993,7 @@ export default function App() {
             : (latestEvent?.text ?? "The village is waiting for the next chapter.");
 
   return (
-    <main className="app-shell play-screen">
+    <main className={`app-shell play-screen phase-${game.phase}`}>
       <header className="topbar">
         <a className="wordmark" href="#top" id="top">
           <span className="wordmark-icon">L</span>
