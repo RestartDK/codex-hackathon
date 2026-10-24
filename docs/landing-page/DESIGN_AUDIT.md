@@ -56,3 +56,7 @@ The hero's ice folds are now continuously warped by a local WebGL texture shader
 Headlines reveal characters in reading order, with semantic heading labels retained. Motion was reconstructed locally from the reference's visible behavior and DOM geometry; no Framer bundle or third-party background source was imported.
 
 Verification: compared two running screenshots and observed changed background/orb pixels; compared two paused screenshots and both regions were pixel-identical. Checked 320, 390, 768, 1024, and 1440px without overflow, mobile menu open/close/Escape, keyboard label exchange, FAQ suggestions, 512px orb buffers, and empty browser error logs. Production build, syntax, formatter, and whitespace checks passed. Native reduced-motion preference changes and physical-device performance were not exercised.
+
+## Alignment polish
+
+Game emblems now share the card copy’s 24px left inset. Setup numbers are 30px/36px with no background or border. The FAQ send control uses explicit grid centering for its SVG, including hover; the input border is now 30% opacity. Browser geometry confirmed matching icon/text offsets and zero horizontal/vertical offset between the arrow and button centers at desktop and mobile widths.

@@ -1128,3 +1128,39 @@ p {
     filter: none !important;
   }
 }
+/* Alignment polish from the latest visual review. */
+.library-art {
+  justify-items: start;
+  padding-inline: 24px;
+}
+.step-number {
+  font-size: 30px;
+  line-height: 36px;
+  font-weight: 500;
+  background: none;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  padding: 0;
+}
+.chat-send {
+  display: grid;
+  place-items: center;
+  padding: 0;
+  line-height: 1;
+}
+.chat-send > span {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  line-height: 0;
+}
+.chat-send .ui-icon {
+  display: block;
+  margin: 0;
+  transform: none !important;
+}
+.chat-form {
+  border-color: #6d94a84d;
+}
