@@ -61,11 +61,11 @@ Use local content structures if helpful; a CMS, backend, generic page builder, o
 | --- | --- | --- | --- |
 | 1 | Hero | Pale atmospheric stage, floating nav, exact headline, two actions, large orb | Clear headline at 320px; actions resolve; orb does not obscure text |
 | 2 | Product showcase | Capture/reuse real game UI inside one large scene | Correct product content; static or no session side effects |
-| 3 | Games | Two distinct visual game cards; verified availability | Working launch paths or honest Coming soon states |
+| 3 | Games | Growing library shelf; current/planned entries and future invitation | Working launch paths or honest Coming soon states |
 | 4 | How it works | Open three-step ordered list | Wording matches actual setup and voice flow |
 | 5 | Voice experience | Labeled example transcript; audio only if real asset exists | Readable without JS/audio; no permission on page load |
 | 6 | Accessibility | Editorial explanation plus verified capability text | Each published capability has evidence |
-| 7 | FAQ | Conversation-style container with native disclosure controls | Keyboard operation, readable surfaces, no fake input |
+| 7 | FAQ | Working chat panel with suggested/typed questions and curated local answers | Keyboard operation, readable surfaces, no fake input |
 | 8 | Final CTA/footer | Small orb, warm sky, consistent launch action, real footer links | Same launch target everywhere; no invented links |
 
 Use exact copy from DESIGN.md with the conditional alternatives it specifies. Preserve original app components and game behavior. Avoid copying reference branding, third-party app UI, logos, or typography embedded in images.
@@ -84,7 +84,7 @@ Use repository-required checks. Add tests only for meaningful new behavior, such
 
 - Navigate through every primary and game CTA; confirm the expected app flow opens.
 - Open and close mobile navigation by trigger, Escape, and selecting a link. Verify hidden links cannot receive focus.
-- Open and close FAQ questions using keyboard alone.
+- Submit suggested and typed FAQ questions using keyboard alone; verify empty submission and unknown-question fallback.
 - Confirm static preview does not start a session or microphone stream.
 - If audio exists, test play, pause, restart, unavailable asset/error, and transcript access.
 - If a real microphone demo is reused, test permission grant/denial, unavailable browser support, stop, and recovery using the application's supported environment.
@@ -119,7 +119,7 @@ State the landing route, changes made, reused product components/screens, actual
 
 ## Scope boundary for the hackathon
 
-Required: complete landing page, real navigation, real game links, responsive composition, accessible menu/FAQ, truthful copy, real product preview where available, labeled transcript, and visual review.
+Required: complete landing page, real navigation, real game links, responsive composition, accessible menu and chat FAQ, truthful copy, real product preview where available, labeled transcript, and visual review.
 
 Optional only after the above: recorded audio example, short entrance motion, additional original scenery, preview game switcher using existing safe components.
 

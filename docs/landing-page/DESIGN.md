@@ -154,16 +154,11 @@ Fallback if no product screen exists: an honestly labeled “Example conversatio
 ### 8.3 Games — `#games`
 
 H2: **Choose your world.**
-Two large editorial cards, minimum 440px tall wide, content-driven small. Each combines a scene, game name, one sentence, availability, and a clear action. No carousel.
+Lead: **A growing world of games, brought closer by conversation.**
 
-| Game | Scene | Copy | Action when working |
-| --- | --- | --- | --- |
-| Chess | Cool sky, restrained board or real chess crop | “Think a move ahead. Say it out loud.” | “Play Chess” |
-| Loups-Garous | Lavender twilight, warm distant village | “A village full of secrets. A game of conversation.” | “Play Loups-Garous” |
+Present a growing collection rather than a page about two games. Use a three-column library shelf on desktop and compact horizontal game entries stacked on mobile. Current entries are Chess (available), Loups-Garous (coming soon), and Tic-Tac-Toe (coming soon), reflecting the actual game picker. Retain one launch link for Chess and no enabled links for planned games. Future entries should be straightforward to add without changing the composition.
 
-Title and copy sit on a solid or sufficiently opaque surface. Static visual should not depend on recognizing a piece or scene to understand the card. Two columns at ≥768px; stack below. A whole-card link is allowed only when it contains no nested interactive controls. Keep tap targets separate if there are secondary actions.
-
-Only use “Available” after checking a working route. For missing games display “Coming soon” with no enabled play action. Do not invent online multiplayer, number of players, matchmaking, or AI opponents.
+Use cooler, restrained blue-gray, mist-lavender, and pale sage surfaces with simple game objects. Below the shelf, an open editorial invitation reads **More games. More ways in.** with a real link to the game picker. Do not invent release dates, gameplay, or named future games. These entries are the beginning of the collection, not its limit.
 
 ### 8.4 How it works — `#how-it-works`
 
@@ -208,22 +203,17 @@ The landing page itself must satisfy the requirements in section 11 regardless o
 
 ### 8.7 FAQ — `#faq`
 
-H2: **A few things before you play.**
+H2: **A few things you might be wondering.**
 
-Use the AI-chat reference: one large sky/twilight scene, centered conversation panel, tiny orb beside “Ask Play by Voice,” question and answer rhythm. Wide panel padding 40px, small 24px. Keep line length ≤60ch. Choose light glass by default; dark solid/glass is acceptable here for a deliberate focal contrast.
+Follow the original AI-chat reference literally in its interaction pattern: a large scenic blue/gray environment, a dark translucent conversation panel, right-aligned dark question bubbles, left-aligned assistant responses with the orb, suggested questions, and a working pill-shaped text composer with send action. Do not use accordion rows.
 
-Implement as a real FAQ, not a fake chatbot. Use a visible list of semantic `<details>` / `<summary>` question-and-answer pairs inside the conversation panel. Style questions like chat prompts and answers like calm assistant responses; the first item may start open. Native open/close controls remain recognizable and keyboard accessible. No inert send button, microphone, or input field. Do not duplicate hidden FAQ content for SEO or screen readers.
+The current implementation is a local product FAQ guide, visibly identified as **Product guide** / **Answers from our product FAQ**. It uses curated factual answers, with no API, recording, or persistence. Support typed questions and suggested-question buttons. Unknown topics receive an honest scope explanation and a route to the project documentation. Never pretend this is an unrestricted AI assistant.
 
-Default questions and publication-safe answers:
+Provide verified answers about available games, getting started, typed/keyboard controls, accessibility limitations, move guidance, microphone requirements, and voice privacy. Say that only Chess is playable now; do not imply planned games work. Distinguish local storage behavior from the voice provider's retention.
 
-- **What is Play by Voice?** “A hackathon project exploring games through speaking and listening.”
-- **Which games can I try?** Answer from verified game status: list working games and label planned ones separately.
-- **Do I need to see the screen?** “Play by Voice is being designed around spoken play. The current demo may still require on-screen setup.” Replace with precise verified limitations if known.
-- **Do I need a microphone?** “Spoken input needs microphone access. Reading this page and its example conversation does not.” Only state an alternative input method if it exists.
-- **Can I repeat an instruction?** Describe the actual repeat control/command if verified; otherwise say “Repeat controls are planned; they may not be available in this demo.” Omit this item if it adds little.
-- **What happens to my voice?** Populate from the actual capture, provider, transmission, retention, and stop behavior. If unverified, say “This landing page does not record audio. Check the game's microphone and privacy information before enabling voice.” Use that fallback only after confirming the landing page has no capture; never invent a privacy policy.
+The composer has an accessible label, Enter submission, disabled empty submission, and 300-character limit. Render all messages using text nodes. Keep a bounded in-memory transcript and an accessible, keyboard-scrollable log with polite announcements. Reveal controls only after enhancement so the initial conversation and documentation link remain useful without JavaScript. No decorative microphone control unless it really works.
 
-A real FAQ assistant is outside the default scope. A future assistant must have a working endpoint and honest error/loading states before showing chat input.
+Exact colors: scene top `#627E8E`, middle `#8C9BA5`, horizon `#C3B5B0`, base `#5B6C78`; panel `#243943` at 93% opacity; question `#14232D`; composer `#182D37`; text `#F9F9FC`; muted text `#D5D8E3`. Keep text on reliably opaque surfaces. Do not apply these colors to unrelated landing sections.
 
 ### 8.8 Final invitation and footer — `#start`
 
@@ -281,6 +271,8 @@ Target WCAG 2.2 AA for the landing page; do not publish a conformance claim with
 
 ## 12. Performance and resilient delivery
 
+For the showcase, use a cool sky-blue environment instead of peach/lavender, and neutralize the captured Chess screen with a CSS grayscale filter to remove the green/lime clash. Preserve the original image and product styles.
+
 Use the existing framework, router, styling approach, icon set, and image pipeline. No UI framework migration. Scope selectors/tokens to the landing page and avoid restyling actual game screens accidentally.
 
 Reuse assets first. Atmospheric images: responsive AVIF/WebP with appropriate sizes, explicit dimensions, and a useful fallback color. Target ≤300KB for the above-fold scene and ≤1.5MB total initial transfer where practical; measure rather than promising. Prioritize only the actual LCP asset, never every image. Lazy-load below-fold images. A CSS orb needs no large media dependency.
@@ -299,7 +291,7 @@ Use one local font family; only required weights. Avoid adding animation, 3D, au
 | Use a few atmospheric moments separated by white space | Cover the whole page in purple gradients and glass |
 | Preserve product routes, screens, and established state | Replace the app to make a landing page easier |
 | State prototype limitations plainly | Claim complete voice access, privacy, or browser support without evidence |
-| Use two large distinct game scenes | Make six identical feature cards |
+| Show the start of a growing game collection | Present two games as the whole product |
 
 ## 14. Definition of done
 

@@ -19,9 +19,9 @@ Open the local URL printed by the server, followed by `/landing/`. For productio
 
 ## Files
 
-- `public/landing/index.html`: all eight sections, semantic FAQ, truthful prototype copy.
+- `public/landing/index.html`: all eight sections, a growing game library, chat FAQ, and truthful prototype copy.
 - `public/landing/styles.css`: independent design tokens and responsive styles; no application stylesheet imports.
-- `public/landing/script.js`: mobile navigation disclosure only; no speech, capture, analytics, or external API calls.
+- `public/landing/script.js`: mobile navigation and a local FAQ chat guide; no speech, capture, analytics, or external API calls.
 - `public/landing/assets/sky.svg`: original decorative cloud atmosphere.
 - `public/landing/assets/chess-preview.webp`: screenshot captured from the actual existing Chess interface; static preview with no session initialization.
 - `public/landing/assets/manrope-latin-variable.woff2`: locally served Manrope font, with its OFL license alongside it.
@@ -57,3 +57,9 @@ The illustrated transcript is labeled as an example. Full accessibility conforma
 ## Handoff documents
 
 [DESIGN.md](DESIGN.md) contains the original visual specification. [IMPLEMENTATION_BRIEF.md](IMPLEMENTATION_BRIEF.md) and [CODEX_PROMPT.md](CODEX_PROMPT.md) were prepared before the repository became available; their initial “no repository” statements record that earlier handoff context. This README describes the completed repository implementation. Where route guidance differs, `/landing/` is intentional to honor the instruction to leave existing files untouched.
+
+## Requested visual revision
+
+The showcase now uses a cool blue environment and a grayscale CSS treatment on the original product capture. Actual game screens and original artwork remain unchanged. The library presents three current/planned entries plus a future-facing invitation. FAQ is now a functioning chat interface with suggested and typed questions, local curated answers, bounded in-memory history, an accessible message log, and an explicit fallback for unknown topics. It is not a live AI service.
+
+Rechecked the chat using suggestions, Enter submission, empty submission state, unknown questions, and long-answer scrolling. Revised layouts fit 1440, 768, 390, and 320px without page overflow or clipped chat controls.
