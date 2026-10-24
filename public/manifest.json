@@ -1,7 +1,7 @@
 {
-  "name": "Voice Chess Companion",
-  "short_name": "Voice Chess",
-  "description": "Voice-first chess for blind and low-vision players.",
+  "name": "Voice Game Companion",
+  "short_name": "Voice Games",
+  "description": "A voice-first game library for blind and low-vision players.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#07110f",

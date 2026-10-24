@@ -1,6 +1,6 @@
 # Voice Game Companion
 
-A voice-first game library for blind and low-vision players. The website opens on Chess and Ludo, with no account or login. A player can choose a game, resume its separate local save, hear its tutorial, and play through speech or the typed-command fallback.
+A voice-first game library for blind and low-vision players. The website opens on Chess, Ludo, Tic-Tac-Toe, and the interactive mystery The Intercept, with no account or login. A player can choose a game, resume its separate local save, hear its tutorial, and play through speech or the typed-command fallback.
 
 This is an early implementation. It needs testing with blind and low-vision players before anyone should claim that it is fully accessible.
 
@@ -14,9 +14,11 @@ This is an early implementation. It needs testing with blind and low-vision play
 - Explicit moves play immediately; companion-selected moves can require confirmation
 - Automatic move narration, captions, keyboard board navigation, screen-reader live-region mode, and typed commands
 - Local game persistence, undo, resignation, review, visual themes, and sound controls
-- Library-first routing at `/`, `/games/chess`, and `/games/ludo`
+- Library-first routing at `/`, `/games/chess`, `/games/ludo`, `/games/intercept`, and `/games/tic-tac-toe`
 - Two-player Ludo against the computer with numbered tokens, safe squares, captures, exact finishing, bonus rolls, third-six handling, suggested-move confirmation, and same-die correction before the next roll
 - Shared game catalog/contracts and game-specific voice tools for future games
+- The original MIT-licensed Intercept story running locally through a pinned InkJS runtime, with faithful passage narration, numbered choices, recap, repeat, one-step undo, and save/resume
+- Accessible three-by-three Tic-Tac-Toe against Easy, Medium, or unbeatable Hard AI, with natural spoken square names, paced computer replies, full-turn undo, score, and save/resume
 
 The chess plan is in [`plan.md`](plan.md), and the historical multi-game implementation plan is in [`game-library-plan.md`](game-library-plan.md). Later usability decisions are reflected in the current code and this README. Upstream attribution is in [`UPSTREAM.md`](UPSTREAM.md) and [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
 
@@ -60,6 +62,7 @@ Never expose the key through a `VITE_` variable. Audio and raw conversation tran
 
 ```powershell
 npm run dev
+npm run story:check
 npm run typecheck
 npm test
 npm run lint
@@ -83,7 +86,8 @@ The automated suites use no paid API calls. Browser tests cover saved-game gatin
 - “Give me a hint”
 - “Choose a move for me”
 - “Roll”, “move token two”, or “choose a token for me” in Ludo
-- “Board configuration” in either game
+- “Play center”, “what is in bottom right?”, or “suggest a move” in Tic-Tac-Toe
+- “Board configuration” in Chess or Ludo, and “describe the board” in Tic-Tac-Toe
 - “Undo”, “resign”, or “start a new game”
 
 Explicit chess moves and Ludo token choices play immediately. Companion-selected moves follow the suggested-move confirmation setting. Consequential actions such as discarding an unfinished game, chess undo, and resignation still ask for confirmation. Board descriptions and rules are available on request, without repeated tutorials during play.
@@ -99,6 +103,10 @@ Ludo rolls and moves have separate readable delays. When voice is active, the ne
 - `src/games/contracts.ts`: shared controller/event/snapshot boundary for future games
 - `src/voice/chessTools.ts`: bounded tool adapter; model output cannot directly replace game state
 - `src/games/ludo/ludoTools.ts`: bounded Ludo tool adapter
+- `src/games/intercept/intercept.ts`: authoritative Ink story state, persistence, progression, and undo checkpoint
+- `src/games/intercept/interceptTools.ts`: player-visible story tools with direct-choice and delegated-choice boundaries
+- `src/games/tic-tac-toe/ticTacToe.ts`: pure rules, save validation, position language, and local AI
+- `src/games/tic-tac-toe/ticTacToeTools.ts`: authoritative board-query and action boundary
 - `src/voice/useVoiceCompanion.ts`: browser WebRTC/media and tool-event handling
 - `server/routes/api/voice/session.post.ts`: server-owned GPT-Live session configuration
 - `src/chess/stockfish.ts`: local UCI worker wrapper
@@ -111,6 +119,8 @@ Every proposed move is resolved against current legal moves. Confirmation checks
 - Real microphone behavior, audio interruption, and NVDA output still require hands-on testing; automated tests intentionally do not create paid GPT-Live sessions.
 - Ludo uses the documented two-player local ruleset and a classic cross-board presentation. Numbered token descriptions are the primary nonvisual interaction.
 - Ludo exposes one in-progress local save per game. Cloud accounts and multiplayer are intentionally out of scope.
+- The Intercept preserves its authored text and choices. It does not provide free-form world simulation or reveal unseen branches.
+- Tic-Tac-Toe currently fixes the player as X and the computer as O; online and local two-player modes are out of scope.
 - Move explanations report verified effects (capture, promotion, castling, check, or checkmate) but do not claim a strategic motive.
 - Voice-session throttling is in-memory and suitable for this demo, not a distributed production deployment. A public no-login deployment still needs provider budgets and centralized abuse monitoring.
 

@@ -16,8 +16,117 @@ test('opens on the accessible game library', async ({ page }) => {
   await expect(page.getByRole('heading', { name: 'Choose a game' })).toBeVisible();
   await expect(page.getByRole('listitem').filter({ hasText: 'Chess' })).toBeVisible();
   await expect(page.getByRole('listitem').filter({ hasText: 'Ludo' })).toBeVisible();
+  await expect(page.getByRole('listitem').filter({ hasText: 'The Intercept' })).toBeVisible();
+  await expect(page.getByRole('listitem').filter({ hasText: 'Tic-Tac-Toe' })).toBeVisible();
   await page.getByRole('button', { name: 'Play chess' }).click();
   await expect(page).toHaveURL(/\/games\/chess$/);
+});
+
+test('Tic-Tac-Toe opens as an accessible voice-first game', async ({ page }) => {
+  await page.goto('/games/tic-tac-toe');
+  await expect(page.getByRole('heading', { name: 'Voice Tic-Tac-Toe' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Beat the computer using voice alone' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Start voice companion' })).toBeFocused();
+  await expect(page.getByRole('grid', { name: 'Tic-Tac-Toe board' })).toBeVisible();
+  await expect(page.getByRole('gridcell')).toHaveCount(9);
+  await expect(page.locator('[role="gridcell"][tabindex="0"]')).toHaveCount(1);
+  await expect(page.getByLabel('Typed command fallback')).toHaveAttribute('placeholder', 'play center');
+  await page.getByLabel('Typed command fallback').fill('what is this game');
+  await page.getByRole('button', { name: 'Run command' }).click();
+  await expect(page.locator('.sr-announcement')).toContainText('three by three strategy game');
+});
+
+test('a direct Tic-Tac-Toe move plays immediately and the computer replies exactly once', async ({ page }) => {
+  await page.addInitScript(() => { Math.random = () => 0; });
+  await page.goto('/games/tic-tac-toe');
+  await page.getByLabel('Difficulty').selectOption('easy');
+  await page.getByLabel('Typed command fallback').fill('play center');
+  await page.getByRole('button', { name: 'Run command' }).click();
+  await expect(page.getByRole('group', { name: 'Tic-Tac-Toe action confirmation' })).toHaveCount(0);
+  await expect(page.getByRole('gridcell', { name: 'center, your X' })).toBeVisible();
+  await expect.poll(async () => page.evaluate(() => JSON.parse(localStorage.getItem('voice-game-companion-tic-tac-toe-save')!).state.moves.length), { timeout: 3000 }).toBe(2);
+  await expect(page.getByRole('gridcell', { name: 'top left, computer O' })).toBeVisible();
+  await page.waitForTimeout(900);
+  await expect.poll(async () => page.evaluate(() => JSON.parse(localStorage.getItem('voice-game-companion-tic-tac-toe-save')!).state.moves.length)).toBe(2);
+});
+
+test('a delegated Tic-Tac-Toe move asks once for confirmation and supports full-turn undo', async ({ page }) => {
+  await page.addInitScript(() => { Math.random = () => 0; });
+  await page.goto('/games/tic-tac-toe');
+  await page.getByLabel('Difficulty').selectOption('easy');
+  await page.getByLabel('Typed command fallback').fill('suggest a move');
+  await page.getByRole('button', { name: 'Run command' }).click();
+  const confirmation = page.getByRole('group', { name: 'Tic-Tac-Toe action confirmation' });
+  await expect(confirmation).toBeVisible();
+  await confirmation.getByRole('button', { name: 'Confirm' }).click();
+  await expect.poll(async () => page.evaluate(() => JSON.parse(localStorage.getItem('voice-game-companion-tic-tac-toe-save')!).state.moves.length), { timeout: 3000 }).toBe(2);
+  await page.getByRole('button', { name: 'Undo full turn' }).click();
+  await expect.poll(async () => page.evaluate(() => JSON.parse(localStorage.getItem('voice-game-companion-tic-tac-toe-save')!).state.moves.length)).toBe(0);
+  await expect(page.getByRole('gridcell', { name: 'top left, empty' })).toBeVisible();
+});
+
+test('Tic-Tac-Toe completes a match, saves score, and requires resume for unfinished rounds', async ({ page }) => {
+  await page.addInitScript(() => { Math.random = () => 0; });
+  await page.goto('/games/tic-tac-toe');
+  await page.getByLabel('Difficulty').selectOption('easy');
+  for (const position of ['top left', 'center', 'bottom right']) {
+    await page.getByLabel('Typed command fallback').fill(`play ${position}`);
+    await page.getByRole('button', { name: 'Run command' }).click();
+    if (position !== 'bottom right') await expect.poll(async () => page.evaluate(() => JSON.parse(localStorage.getItem('voice-game-companion-tic-tac-toe-save')!).state.turn), { timeout: 3000 }).toBe('X');
+  }
+  await expect(page.getByRole('dialog', { name: 'You win!' })).toBeVisible();
+  await expect(page.locator('.tic-tac-toe-score div').filter({ hasText: 'Wins' })).toContainText('1');
+  await page.getByRole('button', { name: 'Play another round' }).click();
+  await page.getByRole('gridcell', { name: 'center, empty' }).click();
+  await expect.poll(async () => page.evaluate(() => JSON.parse(localStorage.getItem('voice-game-companion-tic-tac-toe-save')!).state.moves.length)).toBe(1);
+  await page.reload();
+  await expect(page.getByRole('group', { name: 'Saved Tic-Tac-Toe round choice' })).toBeVisible();
+  await expect(page.getByRole('gridcell', { name: 'center, your X' })).toHaveAttribute('aria-disabled', 'true');
+  await page.getByRole('button', { name: 'Resume saved round' }).click();
+  await expect(page.getByRole('group', { name: 'Saved Tic-Tac-Toe round choice' })).toHaveCount(0);
+});
+
+test('The Intercept opens with an accessible narrated scene and numbered choices', async ({ page }) => {
+  await page.goto('/games/intercept');
+  await expect(page.getByRole('heading', { name: 'The Intercept' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'A mystery where your choices shape the ending' })).toBeVisible();
+  await expect(page.locator('.intercept-introduction')).toContainText('There is no score or single official victory');
+  await expect(page.getByRole('button', { name: 'Start voice companion' })).toBeFocused();
+  await expect(page.getByRole('heading', { name: 'Current scene' })).toBeVisible();
+  await expect(page.locator('.intercept-passage').getByText(/They are keeping me waiting/)).toBeVisible();
+  await expect(page.getByRole('group', { name: 'Story choices' }).getByRole('button')).toHaveCount(3);
+  await expect(page.getByRole('button', { name: /1.*Think/ })).toBeVisible();
+  await expect(page.getByLabel('Typed command fallback')).toHaveAttribute('placeholder', 'choice 1');
+  await page.getByLabel('Typed command fallback').fill('what is the goal');
+  await page.getByRole('button', { name: 'Run command' }).click();
+  await expect(page.locator('.sr-announcement')).toContainText('multiple endings');
+});
+
+test('an explicitly ordered Intercept choice plays immediately and can be undone', async ({ page }) => {
+  await page.goto('/games/intercept');
+  await page.getByLabel('Typed command fallback').fill('choice one');
+  await page.getByRole('button', { name: 'Run command' }).click();
+  await expect(page.getByRole('group', { name: 'Story action confirmation' })).toHaveCount(0);
+  await expect(page.locator('.intercept-passage').getByText(/They suspect me to be a traitor/)).toBeVisible();
+  await expect.poll(async () => page.evaluate(() => JSON.parse(localStorage.getItem('voice-game-companion-intercept-save')!).state.revision)).toBe(1);
+  await page.getByRole('button', { name: 'Undo last choice' }).click();
+  await expect(page.locator('.intercept-passage').getByText(/They are keeping me waiting/)).toBeVisible();
+  await expect(page.getByRole('button', { name: /1.*Think/ })).toBeVisible();
+});
+
+test('a delegated Intercept choice requires confirmation and saved stories require resume', async ({ page }) => {
+  await page.goto('/games/intercept');
+  await page.getByLabel('Typed command fallback').fill('choose for me');
+  await page.getByRole('button', { name: 'Run command' }).click();
+  await expect(page.getByRole('group', { name: 'Story action confirmation' })).toBeVisible();
+  await page.getByRole('group', { name: 'Story action confirmation' }).getByRole('button', { name: 'Confirm' }).click();
+  await expect.poll(async () => page.evaluate(() => JSON.parse(localStorage.getItem('voice-game-companion-intercept-save')!).state.revision)).toBe(1);
+  await page.reload();
+  await expect(page.getByRole('group', { name: 'Saved Intercept story choice' })).toBeVisible();
+  await expect(page.getByRole('group', { name: 'Story choices' }).getByRole('button').first()).toBeDisabled();
+  await page.getByRole('button', { name: 'Resume saved story' }).click();
+  await expect(page.getByRole('group', { name: 'Saved Intercept story choice' })).toHaveCount(0);
+  await expect(page.getByRole('group', { name: 'Story choices' }).getByRole('button').first()).toBeEnabled();
 });
 
 test('opens directly on the accessible chess experience', async ({ page }) => {

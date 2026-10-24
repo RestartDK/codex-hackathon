@@ -39,6 +39,26 @@ Use prepared positions or typed controls to verify:
 - Check visible focus, contrast, reduced-motion behavior, captions, and operation without sound.
 - Close each dialog with keyboard controls and confirm focus returns predictably.
 
+## The Intercept cases
+
+- Start a new story and verify the opening scene and every visible option are spoken once in the displayed order.
+- Choose by number, ordinal, exact choice text, button, and typed command. Explicit choices must not ask for confirmation.
+- Ask the companion to choose. Confirm that it proposes a visible option and waits for approval.
+- Interrupt narration with a choice, then verify no passage from the previous revision is spoken afterward.
+- Test repeat, recap, pause/resume, one-step undo, reload/resume, restart confirmation, and a complete ending without viewing the screen.
+- Confirm the companion never announces internal variables, unseen choices, or future consequences.
+
+## Tic-Tac-Toe cases
+
+- Complete one win, loss, and draw without viewing the screen, using natural square names and numbers one through nine.
+- Verify every player and computer mark is announced with its position and followed by the correct turn or result.
+- Ask for the board, one square, available squares, history, score, and whose turn; compare every answer with the visible board.
+- Confirm a directly ordered square plays immediately, while “suggest a move” waits for confirmation.
+- Verify arrow-key focus wraps around the semantic grid and Enter or Space selects an empty square.
+- Change difficulty during an unfinished round and confirm that clearing the board requires approval.
+- Test full-turn undo before and after the computer reply, new round with retained score, reset match, corrupt-save recovery, and reload/resume.
+- On Hard, try forks and traps and confirm the local computer always responds once without freezing or using the voice API.
+
 ## Failure and recovery
 
 - End voice and verify the microphone indicator disappears.

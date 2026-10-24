@@ -182,13 +182,13 @@ export function useVoiceCompanion(executor: VoiceToolExecutor, audioMuted: boole
         if (peer.connectionState === 'failed') {
           executor.invalidatePending();
           setStatus('error');
-          setError('The voice connection ended. Your chess game is still saved.');
+          setError('The voice connection ended. Your game is still saved.');
         }
         if (peer.connectionState === 'disconnected' && disconnectTimeoutRef.current === null) {
           disconnectTimeoutRef.current = window.setTimeout(() => {
             executor.invalidatePending();
             setStatus('error');
-            setError('The voice connection was lost. Your chess game is still saved.');
+            setError('The voice connection was lost. Your game is still saved.');
           }, 3000);
         }
       };

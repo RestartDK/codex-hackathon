@@ -11,11 +11,12 @@
     "test": "vp test",
     "test:watch": "vp test watch",
     "test:e2e": "node scripts/run-e2e.mjs",
+    "story:check": "node scripts/check-intercept-story.mjs",
     "lint": "vp check --no-fmt",
     "format:check": "vp fmt --check",
     "format": "vp fmt --write",
     "typecheck": "tsc -b --noEmit",
-    "verify": "npm run typecheck && npm test && npm run lint && npm run build",
+    "verify": "npm run story:check && npm run typecheck && npm test && npm run lint && npm run build",
     "postinstall": "node scripts/copy-stockfish.mjs"
   },
   "dependencies": {
@@ -44,7 +45,7 @@
     "typescript": "~6.0.2",
     "vite-plus": "^1.4.0"
   },
-  "description": "A voice-first chess companion for blind and low-vision players.",
+  "description": "A voice-first game library for blind and low-vision players.",
   "license": "MIT",
   "author": "Sparsh Sam",
   "repository": {

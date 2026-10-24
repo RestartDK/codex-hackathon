@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect } from 'react';
+import { lazy, Suspense, useMemo, useState, useEffect } from 'react';
 import { Chess } from 'chess.js';
 import Board from '../components/Board/Board';
 import GamePanel from '../components/GamePanel/GamePanel';
@@ -18,6 +18,10 @@ import '../components/GamePanel/GamePanel.css';
 import '../components/Settings/SettingsPanel.css';
 import '../components/VoiceCompanion/VoiceCompanion.css';
 import LudoPage from '../components/LudoGame/LudoPage';
+import { gameRegistry, type GameMetadata } from '../games/registry';
+
+const InterceptPage = lazy(() => import('../components/InterceptGame/InterceptPage'));
+const TicTacToePage = lazy(() => import('../components/TicTacToeGame/TicTacToePage'));
 
 function ChessPage() {
   const {
@@ -325,18 +329,35 @@ function ChessPage() {
 }
 
 function LibraryPage() {
-  const hasSave = (key: string) => {
-    try { return Boolean(localStorage.getItem(key)); } catch { return false; }
+  const saveStatus = (game: GameMetadata): 'none' | 'saved' | 'completed' => {
+    try {
+      const raw = localStorage.getItem(game.saveKey);
+      if (!raw) return 'none';
+      if (game.id === 'intercept') {
+        const saved = JSON.parse(raw) as { state?: { status?: string } };
+        if (saved.state?.status === 'finished') return 'completed';
+      }
+      if (game.id === 'tic-tac-toe') {
+        const saved = JSON.parse(raw) as { state?: { moves?: unknown[]; score?: { wins?: number; losses?: number; draws?: number } } };
+        const score = saved.state?.score;
+        if (!(saved.state?.moves?.length || score?.wins || score?.losses || score?.draws)) return 'none';
+      }
+      return 'saved';
+    } catch { return 'none'; }
   };
-  const chessSaved = hasSave('chess-by-sparsh-save');
-  const ludoSaved = hasSave('voice-game-companion-ludo-save');
-  return <div className="app library-app"><a href="#library-main" className="skip-link">Skip to main content</a><header className="app-header"><h1>Voice Game Companion</h1><span className="game-badge">Accessible games</span></header><main id="library-main" className="library-main"><section className="library-intro" aria-labelledby="library-heading"><p className="voice-eyebrow">Play by voice, keyboard, or mouse</p><h2 id="library-heading">Choose a game</h2><p>Chess and Ludo are ready to play against the computer. Select a game to hear its dashboard and tutorial. Your saves stay separate.</p></section><div className="game-library" role="list"><article className="game-card" role="listitem"><span className="game-card-icon" aria-hidden="true">♟</span><h3>Chess</h3><p>Play accessible chess with spoken moves, position questions, hints, and a computer opponent.</p><p className="save-status">{chessSaved ? 'Saved game available' : 'No saved game'}</p><div className="game-card-actions"><Button onClick={() => { window.location.href = '/games/chess'; }}>{chessSaved ? 'Open chess' : 'Play chess'}</Button>{chessSaved && <Button className="secondary-button" onClick={() => { window.location.href = '/games/chess?resume=1'; }}>Resume chess</Button>}</div></article><article className="game-card" role="listitem"><span className="game-card-icon" aria-hidden="true">🎲</span><h3>Ludo</h3><p>Roll, choose numbered tokens, capture safely, and race four tokens home against the computer.</p><p className="save-status">{ludoSaved ? 'Saved game available' : 'No saved game'}</p><div className="game-card-actions"><Button onClick={() => { window.location.href = '/games/ludo'; }}>{ludoSaved ? 'Open Ludo' : 'Play Ludo'}</Button>{ludoSaved && <Button className="secondary-button" onClick={() => { window.location.href = '/games/ludo?resume=1'; }}>Resume Ludo</Button>}</div></article></div><p className="library-help">Say “play chess,” “play Ludo,” or “what games are available” after starting voice in a game.</p></main></div>;
+  return <div className="app library-app"><a href="#library-main" className="skip-link">Skip to main content</a><header className="app-header"><h1>Voice Game Companion</h1><span className="game-badge">Accessible games</span></header><main id="library-main" className="library-main"><section className="library-intro" aria-labelledby="library-heading"><p className="voice-eyebrow">Play by voice, keyboard, or mouse</p><h2 id="library-heading">Choose a game</h2><p>Play a strategy game against the computer or enter a narrated interactive mystery. Each game has accessible controls and its own save.</p></section><div className="game-library" role="list">{gameRegistry.map((game) => {
+    const status = saveStatus(game);
+    const hasSave = status !== 'none';
+    return <article className="game-card" role="listitem" key={game.id}><span className="game-card-icon" aria-hidden="true">{game.symbol}</span><h3>{game.title}</h3><p>{game.description}</p><p className="save-status">{status === 'completed' ? 'Completed story available' : hasSave ? 'Saved game available' : 'No saved game'}</p><div className="game-card-actions"><Button onClick={() => { window.location.href = game.route; }}>{hasSave ? `Open ${game.title}` : `Play ${game.title}`}</Button>{hasSave && status !== 'completed' && <Button className="secondary-button" onClick={() => { window.location.href = `${game.route}?resume=1`; }}>Resume {game.title}</Button>}</div></article>;
+  })}</div><p className="library-help">Open any game to start its voice companion. Every game also works with keyboard or typed commands.</p></main></div>;
 }
 
 export default function App() {
   const path = window.location.pathname.replace(/\/$/, '') || '/';
   if (path === '/games/chess') return <ChessPage />;
   if (path === '/games/ludo') return <LudoPage />;
+  if (path === '/games/intercept') return <Suspense fallback={<main className="intercept-main" aria-busy="true"><p>Loading The Intercept…</p></main>}><InterceptPage /></Suspense>;
+  if (path === '/games/tic-tac-toe') return <Suspense fallback={<main className="tic-tac-toe-main" aria-busy="true"><p>Loading Tic-Tac-Toe…</p></main>}><TicTacToePage /></Suspense>;
   return <LibraryPage />;
 }
 
