@@ -463,3 +463,416 @@ h3,
     background: Canvas;
   }
 }
+
+/* Final polish: game-platform controls, light surfaces, fine texture, scalable artwork. */
+.button,
+.button-small,
+.footer-play {
+  min-height: 44px;
+  border: 1px solid #d4e89c;
+  border-radius: 24px;
+  background: #d4e89c;
+  color: #111;
+  padding: 10px 18px;
+  font-size: 13px;
+  line-height: 1.5;
+  font-weight: 400;
+  gap: 8px;
+  box-shadow: none;
+  text-shadow: none;
+}
+.button:hover,
+.button-small:hover,
+.footer-play:hover {
+  background: #c4df83;
+  transform: none;
+}
+.button:active,
+.button-small:active,
+.footer-play:active {
+  background: #bdd778;
+  transform: scale(0.98);
+}
+.button-secondary,
+.library-future .button {
+  background: #fff;
+  border-color: #e0e4dc;
+  color: #111;
+}
+.button-secondary:hover,
+.library-future .button:hover {
+  background: #f3f6ed;
+}
+.button-secondary:active,
+.library-future .button:active {
+  background: #e9eedf;
+}
+.library-game .text-link,
+.chat-suggestions button,
+.motion-button {
+  border: 1px solid #e0e4dc;
+  background: #fff;
+  padding: 10px 18px;
+  min-height: 44px;
+  border-radius: 24px;
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1.5;
+  color: #111;
+  gap: 8px;
+  box-shadow: none;
+  font-family: Arial, Helvetica, sans-serif;
+}
+.library-game .text-link:hover,
+.chat-suggestions button:hover,
+.motion-button:hover {
+  background: #f3f6ed;
+}
+.chat-send {
+  width: 44px;
+  height: 44px;
+  border: 0;
+  border-radius: 50%;
+  background: #d4e89c;
+  color: #111;
+  font-size: 24px;
+}
+.chat-send:hover:not(:disabled) {
+  background: #c4df83;
+}
+.chat-send:disabled {
+  background: #edf1e6;
+  color: #727c65;
+  opacity: 0.7;
+}
+.cool-showcase,
+.chat-scene {
+  background: linear-gradient(145deg, #edf3f7, #e5edf2 55%, #f1f4f7);
+}
+.cool-showcase:before,
+.chat-scene:before {
+  background:
+    radial-gradient(ellipse at 10% 20%, #dcebf699, transparent 65%),
+    radial-gradient(ellipse at 90% 80%, #dae3ed80, transparent 65%);
+  filter: none;
+  opacity: 1;
+}
+.cool-showcase:after,
+.chat-scene:after {
+  opacity: 0.12;
+}
+.cool-showcase .preview-wrap {
+  border: 1px solid #e0e6eb;
+  box-shadow: 0 24px 64px -20px #36576a29;
+}
+.cool-showcase .scene-caption {
+  background: none;
+  color: #5c6874;
+  padding: 0;
+  font-size: 13px;
+}
+.preview-viewport {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1440/1073;
+  overflow: hidden;
+  background: #fff;
+  pointer-events: none;
+}
+.product-frame {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 1440px;
+  max-width: none;
+  height: 1073px;
+  border: 0;
+  transform-origin: 0 0;
+  pointer-events: none;
+}
+.library-game {
+  background: var(--game-wash);
+}
+.library-chess {
+  --game-art: url("/artwork/chess-card.webp");
+  --game-wash: linear-gradient(145deg, #bac492, #70875a 55%, #435c3a);
+}
+.library-werewolf {
+  --game-art: url("/artwork/werewolf-card.webp");
+  --game-wash: linear-gradient(145deg, #e7c590, #bd8b50 55%, #7a5938);
+}
+.library-tictactoe {
+  --game-art: url("/artwork/tic-tac-toe-card.webp");
+  --game-wash: linear-gradient(145deg, #919bc8, #6474a1 55%, #414b72);
+}
+.library-game:after {
+  content: "";
+  position: absolute;
+  inset: -6px;
+  z-index: -2;
+  background: var(--game-art) center/cover;
+  filter: blur(3px);
+  opacity: 0.35;
+  pointer-events: none;
+}
+.library-game:before {
+  background:
+    linear-gradient(transparent, #172018b8 48%),
+    url("./assets/grain.svg") repeat;
+}
+.library-art {
+  z-index: 0;
+}
+.library-game-copy {
+  z-index: 1;
+}
+.faq-chat {
+  background: #fff;
+  color: #111;
+  border: 1px solid #e0e6eb;
+  box-shadow: 0 24px 64px -20px #36576a26;
+}
+.chat-header {
+  background: #fff;
+  border-bottom: 1px solid #e5e7eb;
+  color: #111;
+}
+.window-dots i {
+  background: #c7d2db;
+}
+.chat-guide-label {
+  color: #6b7280;
+}
+.chat-log {
+  scrollbar-color: #c7d2db transparent;
+}
+.chat-log:focus-visible {
+  outline-color: #386df6;
+}
+.chat-question {
+  background: #f3f4f6;
+  color: #111;
+  border: 0;
+  border-radius: 24px;
+}
+.chat-speaker {
+  color: #6b7280;
+}
+.chat-reply p {
+  color: #303841;
+}
+.chat-suggestions button {
+  background: #fff;
+  border-color: #e0e4dc;
+  color: #111;
+}
+.chat-form {
+  background: #fff;
+  border: 1px solid #d9e2e9;
+  border-radius: 28px;
+  box-shadow: none;
+  padding: 8px 8px 8px 16px;
+}
+.chat-form input {
+  color: #111;
+  font-size: 16px;
+}
+.chat-form input::placeholder {
+  color: #6b7280;
+}
+.chat-form:focus-within {
+  outline: 3px solid #386df6;
+  outline-offset: 4px;
+}
+.chat-note,
+.chat-scene .faq-scene-note {
+  color: #6b7280;
+}
+.faq-chat button:focus-visible {
+  outline-color: #386df6;
+  box-shadow: 0 0 0 2px #fff;
+}
+/* Infinite-resolution spheres; ambient motion never implies microphone activity. */
+.orb {
+  overflow: hidden;
+  border-radius: 50%;
+  background: none;
+  box-shadow: 0 12px 40px #6b9baf12;
+  animation: voice-orb-breathe 5.5s ease-in-out infinite;
+  animation-play-state: paused;
+}
+.orb img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  max-width: 100%;
+  object-fit: contain;
+  opacity: 1;
+  mix-blend-mode: normal;
+}
+.orb > span {
+  display: block;
+  position: absolute;
+  inset: -25%;
+  width: 150%;
+  height: 150%;
+  border-radius: 44%;
+  background: conic-gradient(
+    from 0deg,
+    transparent 5%,
+    #f0fbff99 25%,
+    #7cacec55 40%,
+    transparent 55%,
+    #fff9 70%,
+    #96c4f666 85%,
+    transparent
+  );
+  mix-blend-mode: soft-light;
+  filter: blur(10px);
+  box-shadow: none;
+  animation: voice-orb-flow 12s linear infinite;
+  animation-play-state: paused;
+}
+.orb-demo > span {
+  background: conic-gradient(
+    transparent,
+    #e9f6d799,
+    #9ab76f66,
+    transparent,
+    #fff9,
+    #b4cb8b66,
+    transparent
+  );
+}
+.orb:after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: radial-gradient(ellipse at 30% 20%, #ffffff45, transparent 45%);
+  pointer-events: none;
+}
+.brand-orb {
+  position: relative;
+  background: url("./assets/orb-blue.svg") center/contain no-repeat;
+  animation: voice-orb-breathe 5.5s ease-in-out infinite;
+  animation-play-state: paused;
+}
+.open-conversation .message.assistant:before {
+  background: url("./assets/orb-green.svg") center/contain no-repeat;
+}
+.orb.orb-motion-visible,
+.orb-motion-visible > span,
+.brand-orb.orb-motion-visible {
+  animation-play-state: running;
+}
+.motion-paused .orb,
+.motion-paused .orb > span,
+.motion-paused .brand-orb {
+  animation-play-state: paused !important;
+}
+.orb-motion-control {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  margin: 8px auto 0;
+  padding: 0 16px 16px;
+}
+.motion-button {
+  cursor: pointer;
+  background: #ffffffcf;
+}
+.motion-button[hidden] {
+  display: none;
+}
+@keyframes voice-orb-breathe {
+  0%,
+  100% {
+    transform: scale(1) rotate(-2deg);
+  }
+  50% {
+    transform: scale(1.035) rotate(2deg);
+  }
+}
+@keyframes voice-orb-flow {
+  0% {
+    transform: rotate(0deg) scale(1);
+  }
+  50% {
+    transform: rotate(180deg) scale(1.1, 0.93);
+  }
+  100% {
+    transform: rotate(360deg) scale(1);
+  }
+}
+@media (max-width: 767px) {
+  .orb > span {
+    filter: blur(7px);
+  }
+  .chat-suggestions button {
+    font-size: 13px;
+  }
+  .motion-button {
+    font-size: 12px;
+  }
+  .chat-header {
+    min-height: 72px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .orb,
+  .orb > span,
+  .brand-orb {
+    animation: none !important;
+  }
+  .orb-motion-control {
+    display: none;
+  }
+  .button:active,
+  .button-small:active,
+  .footer-play:active {
+    transform: none;
+  }
+}
+@media (forced-colors: active) {
+  .library-game:before,
+  .library-game:after,
+  .cool-showcase:before,
+  .cool-showcase:after,
+  .chat-scene:before,
+  .chat-scene:after {
+    display: none;
+  }
+  .button,
+  .button-small,
+  .footer-play,
+  .button-secondary,
+  .library-future .button,
+  .chat-suggestions button,
+  .motion-button,
+  .chat-send,
+  .faq-chat,
+  .chat-header,
+  .chat-question,
+  .chat-form {
+    background: Canvas;
+    color: CanvasText;
+    border: 1px solid CanvasText;
+  }
+  .chat-reply p,
+  .chat-note,
+  .chat-speaker {
+    color: CanvasText;
+  }
+  .chat-form input {
+    color: CanvasText;
+  }
+}
+/* Run fine grain across the whole card, avoiding a visible texture boundary. */
+.library-game:before {
+  inset: 0;
+  background:
+    linear-gradient(180deg, transparent 25%, #172018b8 75%),
+    url("./assets/grain.svg") repeat;
+}

@@ -61,7 +61,7 @@
         </div>
         <div class="hero-art" aria-hidden="true">
           <div class="orb orb-hero">
-            <img src="/artwork/orb-blue.webp" width="480" height="502" alt="" /><span></span>
+            <img src="./assets/orb-blue.svg" width="480" height="502" alt="" /><span></span>
           </div>
           <div class="orb-shadow"></div>
           <span class="art-caption"
@@ -71,6 +71,17 @@
         <a class="scroll-note" href="#experience"
           >Made to be heard <span aria-hidden="true">↓</span></a
         >
+        <div class="orb-motion-control">
+          <button
+            id="orb-motion-toggle"
+            class="motion-button"
+            type="button"
+            aria-pressed="false"
+            hidden
+          >
+            Pause orb animation
+          </button>
+        </div>
       </section>
 
       <section class="section showcase" id="experience" aria-labelledby="experience-title">
@@ -86,19 +97,42 @@
           <div class="preview-wrap">
             <div class="preview-caption">
               <span class="status-dot" aria-hidden="true"></span> Inside Play by Voice
-              <span>Chess</span>
+              <span>Chess · Marine theme</span>
             </div>
-            <img
-              id="product-preview"
-              class="product-preview"
-              src="./assets/chess-preview.webp"
-              alt="Play by Voice Chess interface with the board, move history, assistant controls, and voice companion."
-              width="1440"
-              height="1073"
-              loading="lazy"
-            />
+            <div
+              class="preview-viewport"
+              role="img"
+              aria-label="Static Chess preview in the platform's Marine board theme, showing the board, move history, and companion controls."
+            >
+              <iframe
+                class="product-frame"
+                src="./assets/chess-preview.html"
+                title="Static Chess preview"
+                width="1440"
+                height="1073"
+                loading="lazy"
+                sandbox=""
+                tabindex="-1"
+                aria-hidden="true"
+              ></iframe>
+            </div>
+            <noscript
+              ><style>
+                .preview-viewport {
+                  display: none;
+                }
+                .preview-caption > span:last-child {
+                  display: none;
+                }</style
+              ><img
+                src="./assets/chess-preview.webp"
+                alt="Static Chess interface preview"
+                width="1440"
+                height="1073"
+                loading="lazy"
+            /></noscript>
           </div>
-          <p class="scene-caption">The real game. Your own pace.</p>
+          <p class="scene-caption">Your game. A calmer point of view.</p>
         </div>
       </section>
 
@@ -202,7 +236,7 @@
             <a class="text-link" href="/">Meet your companion <span aria-hidden="true">↗</span></a>
             <div class="orb orb-demo" aria-hidden="true">
               <img
-                src="/artwork/orb-green.webp"
+                src="./assets/orb-green.svg"
                 width="480"
                 height="502"
                 loading="lazy"
@@ -256,7 +290,7 @@
             <span></span><span></span><span></span>
             <div class="orb orb-access">
               <img
-                src="/artwork/orb-blue.webp"
+                src="./assets/orb-blue.svg"
                 width="480"
                 height="502"
                 loading="lazy"

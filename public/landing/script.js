@@ -158,3 +158,38 @@ faqSuggestions.addEventListener("click", (event) => {
 });
 faqForm.hidden = false;
 faqSuggestions.hidden = false;
+
+// Scale actual HTML rather than a screenshot, so the product preview stays sharp at zoom.
+const previewViewport = document.querySelector(".preview-viewport");
+const previewFrame = document.querySelector(".product-frame");
+function scaleProductPreview() {
+  previewFrame.style.transform = `scale(${previewViewport.clientWidth / 1440})`;
+}
+scaleProductPreview();
+if ("ResizeObserver" in window) {
+  new ResizeObserver(scaleProductPreview).observe(previewViewport);
+} else {
+  window.addEventListener("resize", scaleProductPreview);
+}
+
+// Ambient decorative motion has a visible pause control and runs only on visible orbs.
+const motionControl = document.querySelector("#orb-motion-toggle");
+motionControl.hidden = false;
+motionControl.addEventListener("click", () => {
+  const paused = document.documentElement.classList.toggle("motion-paused");
+  motionControl.setAttribute("aria-pressed", String(paused));
+  motionControl.textContent = paused ? "Resume orb animation" : "Pause orb animation";
+});
+const animatedOrbs = document.querySelectorAll(".orb, .brand-orb");
+if ("IntersectionObserver" in window) {
+  const orbObserver = new IntersectionObserver(
+    (entries) => {
+      for (const entry of entries)
+        entry.target.classList.toggle("orb-motion-visible", entry.isIntersecting);
+    },
+    { rootMargin: "32px" },
+  );
+  animatedOrbs.forEach((orb) => orbObserver.observe(orb));
+} else {
+  animatedOrbs.forEach((orb) => orb.classList.add("orb-motion-visible"));
+}

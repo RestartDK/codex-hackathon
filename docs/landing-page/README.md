@@ -71,3 +71,9 @@ The example transcript now sits in open space, with rounded player bubbles and a
 ## Platform visual alignment
 
 The entire landing now uses the platform's Arial/Helvetica type, white/black foundation, exact blue and green companion artwork, original grainy game backgrounds, geometric game marks, large rounded surfaces, and shared focus/easing values. The existing platform files remain untouched. A separate `platform-theme.css` owns the alignment; see [PLATFORM_STYLE.md](PLATFORM_STYLE.md) for exact source mappings. This supersedes the earlier cool/grayscale showcase treatment and custom pastel orb. The original screenshot colors are restored.
+
+## Quality, controls, and motion refinement
+
+The current landing uses the exact `.pill-button` and `.pill-button.primary` values from the app, a white FAQ, lighter blue scenic backgrounds, greatly reduced fine grain, and scalable animated SVG orbs. The showcase is now an inert HTML capture of the real Chess interface rather than an enlarged screenshot. Its Marine board theme and restrained glow are landing-only preview styles. Original product sources and saved preferences remain unchanged. The earlier screenshot remains a no-JavaScript fallback.
+
+New assets: `orb-blue.svg`, `orb-green.svg`, `chess-preview.html`, and `product-preview.css`. Motion includes pause/resume, viewport visibility gating, and reduced-motion support. See PLATFORM_STYLE.md for exact final mappings, source provenance, and snapshot refresh guidance.
