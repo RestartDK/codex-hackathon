@@ -1,45 +1,60 @@
 {
   "name": "codex-hackathon",
-  "version": "0.0.0",
   "private": true,
+  "version": "0.1.0",
   "type": "module",
   "scripts": {
     "dev": "vp dev",
+    "start": "vp dev",
     "build": "tsc -b && vp build",
-    "check": "vp check",
-    "typecheck": "tsc -b",
-    "lint": "vp lint",
-    "fmt": "vp fmt",
     "preview": "vp preview",
-    "start": "node .output/server/index.mjs",
-    "smoke": "node scripts/smoke.mjs"
+    "test": "vp test",
+    "test:watch": "vp test watch",
+    "test:e2e": "node scripts/run-e2e.mjs",
+    "lint": "vp check --no-fmt",
+    "format:check": "vp fmt --check",
+    "format": "vp fmt --write",
+    "typecheck": "tsc -b --noEmit",
+    "verify": "npm run typecheck && npm test && npm run lint && npm run build",
+    "postinstall": "node scripts/copy-stockfish.mjs"
   },
   "dependencies": {
-    "react": "^19.3.1",
-    "react-dom": "^19.3.1"
+    "chess.js": "^1.4.0",
+    "@radix-ui/react-dialog": "^1.1.15",
+    "clsx": "^2.1.1",
+    "lucide-react": "^0.548.0",
+    "nitro": "^3.0.260903-beta",
+    "openai": "^7.35.0",
+    "react": "^19.2.6",
+    "react-dom": "^19.2.6",
+    "stockfish": "19.0.1",
+    "tailwind-merge": "^3.3.1"
   },
   "devDependencies": {
-    "@types/node": "^26",
-    "@types/react": "^19.3.0",
-    "@types/react-dom": "^19.3.0",
-    "@vitejs/plugin-react": "^6.1.2",
-    "nitro": "3.0.260903-beta",
-    "typescript": "~6.0.3",
-    "vite": "npm:@voidzero-dev/vite-plus-core@1.4.0",
-    "vite-plus": "1.4.0"
+    "@playwright/test": "^1.64.1",
+    "@tailwindcss/vite": "^4.1.14",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@types/node": "^24.12.3",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.1",
+    "jsdom": "^29.1.1",
+    "tailwindcss": "^4.1.14",
+    "typescript": "~6.0.2",
+    "vite-plus": "^1.4.0"
   },
-  "overrides": {
-    "vite": "npm:@voidzero-dev/vite-plus-core@1.4.0"
+  "description": "A voice-first chess companion for blind and low-vision players.",
+  "license": "MIT",
+  "author": "Sparsh Sam",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/RestartDK/codex-hackathon.git"
   },
-  "devEngines": {
-    "packageManager": {
-      "name": "bun",
-      "version": "1.4.4",
-      "onFail": "download"
-    }
+  "homepage": "https://github.com/RestartDK/codex-hackathon#readme",
+  "bugs": {
+    "url": "https://github.com/RestartDK/codex-hackathon/issues"
   },
-  "engines": {
-    "node": "^22.18.0 || ^24.11.0 || >=26.0.0"
-  },
-  "packageManager": "bun@1.4.4"
+  "keywords": []
 }
+
