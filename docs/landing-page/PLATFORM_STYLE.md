@@ -50,3 +50,7 @@ The large orbs now contain a canvas particle field following continuous rippling
 The particle experiment is superseded. Orbs use continuous blue/lavender/pink color fields (green tones only for the Chess example), warped into slowly flowing liquid folds. There are no dots. The fixed spherical outline, pause control, visibility gating, and reduced-motion support remain. Buttons use a 700ms custom easing curve, a small hover lift and shadow, directional arrow motion, and a 120ms pressed response; touch devices avoid sticky hover and reduced motion removes transforms.
 
 The user-supplied `elayadesign/ai-design-skills` landing-page-design skill was installed and consulted for motion. Existing platform typography, atmospheric backgrounds, and the agreed page structure take precedence over conflicting generic skill defaults. No new dependencies or changes to game files were needed.
+
+## Latest visual direction
+
+The user's Glacia reference supersedes the former neutral landing shell. See [GLACIAL_DIRECTION.md](GLACIAL_DIRECTION.md) for the current colors, typography, frosted surfaces, original ice artwork, and verification. Game identities and the existing game application remain preserved.

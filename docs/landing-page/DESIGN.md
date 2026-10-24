@@ -4,7 +4,7 @@ Status: implementation specification for a hackathon landing page.
 Date: 24 October 2026.
 Companion files: [implementation brief](IMPLEMENTATION_BRIEF.md), [Codex prompt](CODEX_PROMPT.md).
 
-**Current visual authority:** [PLATFORM_STYLE.md](PLATFORM_STYLE.md) and `public/landing/platform-theme.css` align the entire page with the actual gaming platform. They supersede earlier pastel palette, custom orb, font, and screenshot-filter choices below. Preserve the refined layouts and interactions.
+**Current visual authority:** [GLACIAL_DIRECTION.md](GLACIAL_DIRECTION.md) and `public/landing/glacial-theme.css` implement the latest user-requested Glacia style. They supersede earlier color, typography, button, and background guidance below. Existing game files remain unchanged.
 
 ## 1. Product and evidence
 

@@ -83,3 +83,5 @@ New assets: `orb-blue.svg`, `orb-green.svg`, `chess-preview.html`, and `product-
 Reviewed the actual Figma home and audio-settings frames. Global green actions were a Chess-color leak. The landing now uses neutral primary actions and blue-gray accents; each game retains its own palette. Pointed game symbols and thin Unicode glyphs are replaced by rounded SVG icons. See FIGMA_REVIEW.md for source references, exact color roles, and the deliberate icon changes requested by the user. Original product files remain untouched.
 
 Latest visual and interaction review: [DESIGN_AUDIT.md](DESIGN_AUDIT.md).
+
+Current design: [GLACIAL_DIRECTION.md](GLACIAL_DIRECTION.md), based on the user’s latest Glacia reference.

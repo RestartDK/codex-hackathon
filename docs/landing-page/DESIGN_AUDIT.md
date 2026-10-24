@@ -42,3 +42,7 @@ Added visible wave-like particle motion inside the landing orbs. Compared screen
 ## Current gradient and button refinement
 
 Replaced particles with a continuous liquid color field. Confirmed six liquid canvases and no particle canvases in the page, a fixed outer sphere, and paused gradient state after using the pause control. Desktop and 390px layouts render without overflow. Verified custom button transition styles in the browser; hover rules are gated to fine pointers, disabled send buttons do not move, and reduced-motion styles remove transforms. Production build, JavaScript syntax, formatting, and whitespace checks passed. The earlier particle screenshot comparison describes the superseded experiment.
+
+## Glacia style revision
+
+The current visual authority is GLACIAL_DIRECTION.md. Reviewed the restyled page at 320–1440px, with no horizontal overflow. Confirmed mobile menu and FAQ suggestions still work, the game preview renders its real Marine board, and the browser reported no errors. The original game was not restyled. Muted colors were checked against the light canvas; frosted panels keep text on controlled surfaces. Physical-device and formal assistive-technology testing remain outstanding.

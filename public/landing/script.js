@@ -342,3 +342,36 @@ reducedOrbMotion.addEventListener("change", () => {
   syncLiquidMotion();
 });
 syncLiquidMotion();
+
+// Short entrance choreography preserves readable content if enhancement is unavailable.
+if ("IntersectionObserver" in window && !reducedOrbMotion.matches) {
+  const reveals = new IntersectionObserver(
+    (entries) => {
+      for (const entry of entries) {
+        if (!entry.isIntersecting) continue;
+        reveals.unobserve(entry.target);
+        if (reducedOrbMotion.matches || !entry.target.animate) continue;
+        const animation = entry.target.animate(
+          [
+            { opacity: 0, transform: "translateY(20px)" },
+            { opacity: 1, transform: "translateY(0)" },
+          ],
+          { duration: 800, easing: "cubic-bezier(.32,.72,0,1)" },
+        );
+        const stopForReducedMotion = () => {
+          if (reducedOrbMotion.matches) animation.cancel();
+        };
+        reducedOrbMotion.addEventListener("change", stopForReducedMotion);
+        animation.finished
+          .catch(() => {})
+          .finally(() => reducedOrbMotion.removeEventListener("change", stopForReducedMotion));
+      }
+    },
+    { threshold: 0.12 },
+  );
+  document
+    .querySelectorAll(
+      ".section-heading,.library-game,.steps li,.voice-copy,.turn-story,.accessibility-visual,.accessibility-copy,.faq-chat,.footer-invitation",
+    )
+    .forEach((element) => reveals.observe(element));
+}
