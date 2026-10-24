@@ -63,3 +63,7 @@ The illustrated transcript is labeled as an example. Full accessibility conforma
 The showcase now uses a cool blue environment and a grayscale CSS treatment on the original product capture. Actual game screens and original artwork remain unchanged. The library presents three current/planned entries plus a future-facing invitation. FAQ is now a functioning chat interface with suggested and typed questions, local curated answers, bounded in-memory history, an accessible message log, and an explicit fallback for unknown topics. It is not a live AI service.
 
 Rechecked the chat using suggestions, Enter submission, empty submission state, unknown questions, and long-answer scrolling. Revised layouts fit 1440, 768, 390, and 320px without page overflow or clipped chat controls.
+
+## Conversation and footer refinement
+
+The example transcript now sits in open space, with rounded player bubbles and assistant orb markers instead of an enclosing rectangular card. The final invitation and footer are combined into a spacious off-white composition inspired by the supplied reference: centered headline, pill launch action, real underlined links, and a large faded decorative wordmark. No social or App Store destinations are invented.

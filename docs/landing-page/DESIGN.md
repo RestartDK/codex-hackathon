@@ -178,7 +178,7 @@ Stack as a semantic ordered list on small screens. Numbers are visual anchors, n
 H2: **Your move, in your words.**
 Lead: **A short example of a turn in Chess.**
 
-One orb and an ordered three-message transcript. At ≥1024px use orb left / conversation right; below, center orb above transcript. Do not scatter speech bubbles around the page or reorder transcript visually.
+One orb and an ordered example transcript in an open composition. Remove the enclosing rectangular card, border, and shadow. Assistant responses sit freely beside small orb avatars; player responses use fully rounded, lightly floating bubbles. Keep the heading and caption free of panel dividers. At ≥1024px use orb left / conversation right; below, center orb above transcript. Do not scatter speech bubbles around the page or reorder transcript visually.
 
 - **Play by Voice:** “You’re playing white. It’s your turn.”
 - **You:** “Move pawn from E2 to E4.”
@@ -215,13 +215,11 @@ The composer has an accessible label, Enter submission, disabled empty submissio
 
 Exact colors: scene top `#627E8E`, middle `#8C9BA5`, horizon `#C3B5B0`, base `#5B6C78`; panel `#243943` at 93% opacity; question `#14232D`; composer `#182D37`; text `#F9F9FC`; muted text `#D5D8E3`. Keep text on reliably opaque surfaces. Do not apply these colors to unrelated landing sections.
 
-### 8.8 Final invitation and footer — `#start`
+### 8.8 Final invitation and footer
 
-H2: **Ready to play?**
-Lead: **Pick a game. Settle in. Start a conversation.**
-Action: **Start playing**, same destination as hero and nav.
+Use a single spacious editorial footer matching the user's supplied reference: warm off-white canvas, very large centered **Reconnect with play.** headline, one dark softly beveled pill **Start playing** action, an open row of underlined links, then an oversized pale **PLAY BY VOICE** wordmark that fades toward the bottom. Remove the previous orb-led CTA scene and compact footer bar.
 
-Quiet sky/peach scene with small orb. Center all content; keep 96px vertical padding wide / 64px small. Avoid another huge hero. Footer: wordmark, “A hackathon project,” and existing source/privacy/contact links only if real. Never invent social links or a signup form. Do not require headphones; any suggestion of headphones is optional and must not imply accessibility support.
+Only use real links: Games, How it works, GitHub, and Back to top. Do not invent social accounts, email addresses, or an App Store listing. Keep the oversized wordmark decorative and hidden from assistive technology. Contain its crop in its own wrapper; it must not create document overflow. Wrap the link row naturally on small screens and retain 44px targets.
 
 ## 9. Responsive rules
 

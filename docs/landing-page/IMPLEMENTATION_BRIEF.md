@@ -66,7 +66,7 @@ Use local content structures if helpful; a CMS, backend, generic page builder, o
 | 5 | Voice experience | Labeled example transcript; audio only if real asset exists | Readable without JS/audio; no permission on page load |
 | 6 | Accessibility | Editorial explanation plus verified capability text | Each published capability has evidence |
 | 7 | FAQ | Working chat panel with suggested/typed questions and curated local answers | Keyboard operation, readable surfaces, no fake input |
-| 8 | Final CTA/footer | Small orb, warm sky, consistent launch action, real footer links | Same launch target everywhere; no invented links |
+| 8 | Final CTA/footer | Large centered headline, pill action, underlined links, oversized faded wordmark | Same launch target everywhere; no invented links |
 
 Use exact copy from DESIGN.md with the conditional alternatives it specifies. Preserve original app components and game behavior. Avoid copying reference branding, third-party app UI, logos, or typography embedded in images.
 
