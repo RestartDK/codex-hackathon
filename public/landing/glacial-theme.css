@@ -1164,3 +1164,7 @@ p {
 .chat-form {
   border-color: #6d94a84d;
 }
+.library-art {
+  align-items: start;
+  padding-top: 24px;
+}
