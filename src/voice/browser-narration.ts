@@ -240,6 +240,8 @@ export function primeBrowserNarration() {
 }
 
 export type StoryAudioOptions = {
+  initialVolume?: number;
+  onVolumeChange?: (volume: number) => void;
   feed: FeedEntry[] | undefined;
   gameId: string | undefined;
   phase: string | undefined;
@@ -256,6 +258,8 @@ export type StoryAudioOptions = {
  * point for any future TTS provider: preserve the ordered `NarrationBackend` contract.
  */
 export function useStoryAudio({
+  initialVolume,
+  onVolumeChange,
   feed,
   gameId,
   phase,
@@ -266,7 +270,7 @@ export function useStoryAudio({
 }: StoryAudioOptions) {
   const [autoRead, setAutoRead] = useState(true);
   const [muted, setMuted] = useState(false);
-  const [volume, setVolume] = useState(0.8);
+  const [volume, setVolume] = useState(initialVolume ?? 0.8);
   const [speechRate, setSpeechRate] = useState(1);
   const [paused, setPaused] = useState(false);
   const [activeSpeaker, setActiveSpeaker] = useState<string>();
@@ -285,6 +289,7 @@ export function useStoryAudio({
   const lastLineRef = useRef<SpokenLine | undefined>(undefined);
   const publicLinesRef = useRef<SpokenLine[]>([]);
   const backendRef = useRef<NarrationBackend>(backend ?? createBrowserNarrationBackend());
+  const onVolumeChangeRef = useRef(onVolumeChange);
 
   useEffect(() => {
     if (!backend || backendRef.current === backend) return;
@@ -296,6 +301,9 @@ export function useStoryAudio({
   useEffect(() => {
     onPhaseBoundaryStartRef.current = onPhaseBoundaryStart;
   }, [onPhaseBoundaryStart]);
+  useEffect(() => {
+    onVolumeChangeRef.current = onVolumeChange;
+  }, [onVolumeChange]);
 
   function stop() {
     queueRef.current = [];
@@ -381,6 +389,7 @@ export function useStoryAudio({
   function updateVolume(next: number) {
     volumeRef.current = next;
     setVolume(next);
+    onVolumeChangeRef.current?.(next);
   }
 
   function updateSpeechRate(next: number) {

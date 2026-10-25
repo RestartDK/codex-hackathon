@@ -20,6 +20,18 @@ for (const [, source] of sources) {
   assert.match(script.headers.get("content-type") ?? "", /javascript|typescript/u);
 }
 
+const engineScript = await get("/stockfish/stockfish-19-lite-single.js");
+assert.match(engineScript.headers.get("content-type") ?? "", /javascript/u);
+const engineWasm = await get("/stockfish/stockfish-19-lite-single.wasm");
+assert.match(engineWasm.headers.get("content-type") ?? "", /application\/wasm/u);
+
+const foreignVoiceSession = await fetch(new URL("/api/voice/session", baseURL), {
+  method: "POST",
+  headers: { "Content-Type": "application/json", Origin: "https://not-allowed.example" },
+  body: JSON.stringify({ sdp: "v=0" }),
+});
+assert.equal(foreignVoiceSession.status, 403, "the chess voice endpoint refuses foreign origins");
+
 const health = await get("/api/health");
 assert.match(health.headers.get("content-type") ?? "", /application\/json/u);
 assert.deepEqual(await health.json(), { status: "ok" });

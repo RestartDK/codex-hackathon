@@ -1,16 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { FormEvent } from "react";
-import type { FeedEntry, GameView, PublicPlayerView, Role } from "../server/game/types.js";
+import type { FeedEntry, GameView, PublicPlayerView, Role } from "../../server/game/types.js";
 import {
   createOpenAINarrationBackend,
   primeBrowserNarration,
   useStoryAudio,
-} from "./voice/browser-narration.js";
-import { startLiveVoice, type LiveVoiceSession } from "./voice/live-voice.js";
+} from "../voice/browser-narration.js";
+import { startLiveVoice, type LiveVoiceSession } from "../voice/live-voice.js";
 import {
   startPersistentSpeechRecognition,
   type SpeechRecognitionSession,
-} from "./voice/speech-recognition.js";
+} from "../voice/speech-recognition.js";
 
 type Session = { game: GameView; token: string };
 type GuideMessage = { role: "user" | "assistant"; text: string; mode?: "model" | "local" };
@@ -250,7 +250,15 @@ function updatesForReading(game: GameView, command: string) {
   return [`Reading ${label}.`, ...entries.map(readableFeedEntry)];
 }
 
-export default function App() {
+export default function WerewolfApp({
+  narrationVolume,
+  onNarrationVolumeChange,
+  onShowGamePicker,
+}: {
+  narrationVolume: number;
+  onNarrationVolumeChange: (volume: number) => void;
+  onShowGamePicker: () => void;
+}) {
   const [session, setSession] = useState<Session>();
   const [presentedGame, setPresentedGame] = useState<GameView>();
   const [name, setName] = useState("You");
@@ -283,6 +291,7 @@ export default function App() {
   const voiceCommandHandlerRef = useRef<(transcript: string) => void>(() => undefined);
   const startVoiceRef = useRef<() => void>(() => undefined);
   const liveConnectionRef = useRef<LiveVoiceSession | null>(null);
+  const liveStartRef = useRef<AbortController | null>(null);
   const useLiveFallbackRef = useRef(false);
   const narrationBackend = useMemo(
     () => createOpenAINarrationBackend(session?.game.id, session?.token),
@@ -295,6 +304,8 @@ export default function App() {
     setPresentedGame(latestGame);
   }, []);
   const storyAudio = useStoryAudio({
+    initialVolume: narrationVolume,
+    onVolumeChange: onNarrationVolumeChange,
     feed: session?.game.feed,
     gameId: session?.game.id,
     phase: session?.game.phase,
@@ -349,6 +360,8 @@ export default function App() {
       window.removeEventListener("pointerdown", enableVoice);
       autoVoiceRequestedRef.current = false;
       recognitionRef.current?.stop();
+      liveStartRef.current?.abort();
+      liveStartRef.current = null;
       stopLiveVoice();
     };
   }, []);
@@ -863,6 +876,8 @@ export default function App() {
   }
 
   function stopLiveVoice(status = "Voice guide is off") {
+    liveStartRef.current?.abort();
+    liveStartRef.current = null;
     const live = liveConnectionRef.current;
     liveConnectionRef.current = null;
     live?.stop();
@@ -882,10 +897,13 @@ export default function App() {
     storyAudio.stop();
     setError("");
     setVoiceTranscript("");
+    const controller = new AbortController();
+    liveStartRef.current = controller;
     try {
       const live = await startLiveVoice({
         gameId: activeSession.game.id,
         sessionToken: activeSession.token,
+        signal: controller.signal,
         onStatus: setVoiceStatus,
         onInputTranscript: (text) => setVoiceTranscript(text.slice(-900)),
         onInputTranscriptComplete: (text) => {
@@ -908,14 +926,20 @@ export default function App() {
           setLiveConnecting(false);
         },
       });
+      if (controller.signal.aborted) {
+        live.stop();
+        return;
+      }
       liveConnectionRef.current = live;
       setLiveConnected(true);
       setVoiceStatus("Voice companion is listening");
     } catch (cause) {
+      if (controller.signal.aborted) return;
       resetVoiceGuide(
         cause instanceof Error ? cause.message : "Could not start the Live Voice Guide.",
       );
     } finally {
+      if (liveStartRef.current === controller) liveStartRef.current = null;
       setLiveConnecting(false);
     }
   }
@@ -965,9 +989,14 @@ export default function App() {
             <span className="wordmark-divider">·</span>
             <span className="wordmark-game">Loups-Garous</span>
           </a>
-          <a className="help-link" href="#how-to-play">
-            How to play
-          </a>
+          <div className="game-nav">
+            <a className="help-link" href="#how-to-play">
+              How to play
+            </a>
+            <button className="text-button" onClick={onShowGamePicker}>
+              Games
+            </button>
+          </div>
         </header>
         <section className="landing-content">
           <p className="overline">A VILLAGE OF SECRETS</p>
@@ -1158,6 +1187,15 @@ export default function App() {
           <span>
             Day {game.day} · {phaseNames[game.phase]}
           </span>
+          <button
+            className="text-button"
+            onClick={() => {
+              if (window.confirm("Leave this Loups-Garous match? You cannot resume it from Games."))
+                onShowGamePicker();
+            }}
+          >
+            Games
+          </button>
           <button className="text-button" onClick={() => setSession(undefined)}>
             New game
           </button>

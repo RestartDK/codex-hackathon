@@ -19,6 +19,7 @@ export type LiveVoiceCallbacks = {
 export type StartLiveVoiceOptions = LiveVoiceCallbacks & {
   gameId: string;
   sessionToken: string;
+  signal: AbortSignal;
 };
 
 type LiveTransportEvent = {
@@ -39,6 +40,7 @@ export async function startLiveVoice({
   onInputTranscriptComplete,
   onGuideReply,
   onClosed,
+  signal,
 }: StartLiveVoiceOptions): Promise<LiveVoiceSession> {
   if (!navigator.mediaDevices?.getUserMedia)
     throw new Error("Live voice needs a browser with microphone support.");
@@ -72,26 +74,41 @@ export async function startLiveVoice({
     onStatus("Listening…");
   };
 
-  const stop = (status = "Voice is off") => {
-    if (closed) return;
-    closed = true;
+  const release = () => {
     if (inputPauseTimer) window.clearTimeout(inputPauseTimer);
     if (outputPauseTimer) window.clearTimeout(outputPauseTimer);
     if (resumeAudioOnGesture) window.removeEventListener("pointerdown", resumeAudioOnGesture);
     dataChannel?.close();
+    dataChannel = undefined;
     stream?.getTracks().forEach((track) => track.stop());
+    stream = undefined;
     peerConnection?.close();
+    peerConnection = undefined;
     if (audio) {
       audio.pause();
       audio.srcObject = null;
+      audio = undefined;
     }
+  };
+
+  const stop = (status = "Voice is off") => {
+    release();
+    if (closed) return;
+    closed = true;
+    signal.removeEventListener("abort", stopOnAbort);
     onClosed();
     onStatus(status);
   };
 
+  const stopOnAbort = () => stop();
+
+  signal.addEventListener("abort", stopOnAbort, { once: true });
+
   try {
+    signal.throwIfAborted();
     onStatus("Requesting microphone…");
     stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    signal.throwIfAborted();
     peerConnection = new RTCPeerConnection();
     dataChannel = peerConnection.createDataChannel("oai-events");
     dataChannel.onmessage = (event) => {
@@ -153,15 +170,20 @@ export async function startLiveVoice({
     };
     stream.getTracks().forEach((track) => peerConnection!.addTrack(track, stream!));
     const offer = await peerConnection.createOffer();
+    signal.throwIfAborted();
     await peerConnection.setLocalDescription(offer);
+    signal.throwIfAborted();
     const response = await fetch(`/api/games/${gameId}/voice`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "X-Game-Session": sessionToken },
       body: JSON.stringify({ sdp: offer.sdp }),
+      signal,
     });
     const data = await response.json();
     if (!response.ok) throw new Error(data.error ?? "Could not start live voice.");
+    signal.throwIfAborted();
     await peerConnection.setRemoteDescription({ type: "answer", sdp: data.sdp });
+    signal.throwIfAborted();
     return {
       stop: () => stop(),
       setGuideAudioEnabled(enabled) {
