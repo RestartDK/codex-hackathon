@@ -2,27 +2,109 @@
 const toggle = document.querySelector(".menu-toggle");
 const links = document.querySelector("#nav-links");
 const compact = window.matchMedia("(max-width: 767px)");
-function closeMenu(returnFocus = false) {
-  toggle.setAttribute("aria-expanded", "false");
-  toggle.querySelector(".menu-label").textContent = "Menu";
-  document.querySelector(".nav-pill").classList.remove("is-open");
-  links.hidden = compact.matches;
+const nav = document.querySelector(".nav-pill");
+const menuMotionPreference = window.matchMedia("(prefers-reduced-motion: reduce)");
+let menuAnimation = null;
+let menuContentAnimation = null;
+let menuLabelAnimation = null;
+let menuItemAnimations = [];
+function setMenu(opening, returnFocus = false, immediate = false) {
+  const wasOpen = toggle.getAttribute("aria-expanded") === "true";
+  if (!opening && !wasOpen && !menuAnimation && !immediate) {
+    if (returnFocus) toggle.focus();
+    return;
+  }
+  const startHeight = nav.getBoundingClientRect().height;
+  const wasHidden = links.hidden;
+  const startOpacity = wasHidden ? 0 : Number(getComputedStyle(links).opacity);
+  const startTransform = wasHidden ? "translateY(-6px)" : getComputedStyle(links).transform;
+  menuAnimation?.cancel();
+  menuContentAnimation?.cancel();
+  menuLabelAnimation?.cancel();
+  menuItemAnimations.forEach((animation) => animation.cancel());
+  menuItemAnimations = [];
+  menuAnimation = null;
+  toggle.setAttribute("aria-expanded", String(opening));
+  toggle.querySelector(".menu-label").textContent = opening ? "Close" : "Menu";
+  nav.classList.toggle("is-open", opening);
   if (returnFocus) toggle.focus();
+  links.inert = compact.matches && !opening;
+  if (compact.matches && !opening) links.setAttribute("aria-hidden", "true");
+  else links.removeAttribute("aria-hidden");
+  if (immediate || !compact.matches || menuMotionPreference.matches || !nav.animate) {
+    links.hidden = compact.matches && !opening;
+    nav.style.overflow = "";
+    return;
+  }
+  // Keep the closing content in layout until the panel has finished shrinking.
+  links.hidden = false;
+  let endHeight;
+  if (opening) endHeight = nav.getBoundingClientRect().height;
+  else {
+    links.hidden = true;
+    endHeight = nav.getBoundingClientRect().height;
+    links.hidden = false;
+  }
+  nav.style.overflow = "hidden";
+  const animation = nav.animate([{ height: `${startHeight}px` }, { height: `${endHeight}px` }], {
+    duration: 650,
+    easing: "cubic-bezier(.22,1,.36,1)",
+  });
+  menuAnimation = animation;
+  menuContentAnimation = links.animate(
+    [
+      { opacity: startOpacity, transform: startTransform },
+      { opacity: opening ? 1 : 0, transform: opening ? "translateY(0)" : "translateY(-4px)" },
+    ],
+    { duration: opening ? 500 : 220, easing: "cubic-bezier(.22,1,.36,1)", fill: "both" },
+  );
+  menuLabelAnimation = toggle.querySelector(".menu-label").animate(
+    [
+      { opacity: 0.4, transform: "translateY(2px)" },
+      { opacity: 1, transform: "translateY(0)" },
+    ],
+    { duration: 280, easing: "cubic-bezier(.22,1,.36,1)" },
+  );
+  if (opening && wasHidden)
+    menuItemAnimations = Array.from(links.children).map((item, index) =>
+      item.animate(
+        [
+          { opacity: 0, transform: "translateY(8px)" },
+          { opacity: 1, transform: "translateY(0)" },
+        ],
+        {
+          duration: 500,
+          delay: 60 + index * 45,
+          easing: "cubic-bezier(.22,1,.36,1)",
+          fill: "backwards",
+        },
+      ),
+    );
+  animation.finished
+    .then(() => {
+      if (menuAnimation !== animation) return;
+      links.hidden = !opening;
+      nav.style.overflow = "";
+      menuAnimation = null;
+      menuContentAnimation?.cancel();
+      menuContentAnimation = null;
+    })
+    .catch(() => {});
+}
+function closeMenu(returnFocus = false) {
+  setMenu(false, returnFocus);
 }
 function syncMenu() {
   const focusWillHide = compact.matches && links.contains(document.activeElement);
   const toggleWillHide = !compact.matches && document.activeElement === toggle;
   toggle.hidden = !compact.matches;
-  closeMenu(focusWillHide);
+  setMenu(false, focusWillHide, true);
   if (toggleWillHide) links.querySelector("a").focus();
 }
-toggle.addEventListener("click", () => {
-  const opening = toggle.getAttribute("aria-expanded") !== "true";
-  toggle.setAttribute("aria-expanded", String(opening));
-  toggle.querySelector(".menu-label").textContent = opening ? "Close" : "Menu";
-  document.querySelector(".nav-pill").classList.toggle("is-open", opening);
-  links.hidden = !opening;
-});
+menuMotionPreference.addEventListener("change", () =>
+  setMenu(toggle.getAttribute("aria-expanded") === "true", false, true),
+);
+toggle.addEventListener("click", () => setMenu(toggle.getAttribute("aria-expanded") !== "true"));
 links.addEventListener("click", (event) => {
   if (event.target.closest("a") && compact.matches) closeMenu(true);
 });
@@ -254,9 +336,9 @@ function prepareLiquidOrb(orb) {
       if(sky>.5){
         vec2 p=gl_FragCoord.xy/resolution;
         p.y=1.-p.y;
-        float t=time*.12;
+        float t=time*.4;
         vec2 bend=vec2(sin(p.y*5.+t)+sin(p.x*3.-t*.7),cos(p.x*4.+t*.8));
-        p=(p-.5)*.90+.5+bend*.025;
+        p=(p-.5)*.74+.5+bend*.055+vec2(sin(t*.55),cos(t*.45))*.015;
         float aspect=resolution.x/resolution.y;
         p=(p-.5)*vec2(min(1.,aspect/1.333333),min(1.,1.333333/aspect))+.5;
         vec3 color=texture2D(scene,p).rgb;

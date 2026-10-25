@@ -60,3 +60,9 @@ Verification: compared two running screenshots and observed changed background/o
 ## Alignment polish
 
 Game emblems now share the card copy’s 24px left inset. Setup numbers are 30px/36px with no background or border. The FAQ send control uses explicit grid centering for its SVG, including hover; the input border is now 30% opacity. Browser geometry confirmed matching icon/text offsets and zero horizontal/vertical offset between the arrow and button centers at desktop and mobile widths.
+
+## Hover, menu and hero motion polish
+
+Removed the inherited dark CTA hover border by explicitly retaining the icy rim and using a lighter cyan shadow. Mobile menu opening and closing now animate measured panel heights over 650ms with interruptible easing, rather than hiding the contents immediately. Closing links become inert and hidden from assistive technology during the transition; final layout uses the measured closed height to avoid a finishing jump. Escape, focus return, and breakpoint changes remain supported.
+
+The hero shader clock increased from 0.12 to 0.4, with wider fold displacement and a slow lateral drift. Orb speed remains unchanged. Reduced-motion and pause behavior remain intact. Browser checks confirmed intermediate panel heights in both directions, the settled closed height, Escape, and desktop navigation after resizing. The browser error log was empty. Production build, JavaScript syntax, formatting and whitespace checks passed.
