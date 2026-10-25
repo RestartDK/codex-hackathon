@@ -5,6 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vp dev",
+    "predev": "node scripts/copy-stockfish.mjs",
+    "prebuild": "node scripts/copy-stockfish.mjs",
     "build": "tsc -b && vp build",
     "check": "vp check",
     "typecheck": "tsc -b",
@@ -13,11 +15,15 @@
     "fmt": "vp fmt",
     "preview": "vp preview",
     "start": "node --env-file-if-exists=.env .output/server/index.mjs",
-    "smoke": "node scripts/smoke.mjs"
+    "smoke": "node scripts/smoke.mjs",
+    "scope-css": "node scripts/scope-css.mjs"
   },
   "dependencies": {
+    "chess.js": "^1.4.0",
+    "lucide-react": "^0.548.0",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
+    "stockfish": "19.0.1",
     "zod": "^4.6.7"
   },
   "devDependencies": {
