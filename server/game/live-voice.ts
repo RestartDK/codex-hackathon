@@ -12,6 +12,24 @@ const timedFetch = async (url: string, init: RequestInit) => {
   }
 };
 
+export class LiveVoiceProviderError extends Error {}
+
+async function liveProviderError(response: Response) {
+  const raw = await response.text().catch(() => "");
+  let detail = "";
+  try {
+    const body = JSON.parse(raw) as { error?: { message?: unknown } };
+    if (typeof body.error?.message === "string") detail = body.error.message;
+  } catch {
+    // Provider error bodies are optional and may not be JSON.
+  }
+  const safeDetail = detail.replace(/\bsk-[\w-]+\b/gu, "[redacted]");
+  const suffix = safeDetail ? `: ${safeDetail.slice(0, 300)}` : "";
+  return new LiveVoiceProviderError(
+    `Live voice provider rejected the session (${response.status})${suffix}`,
+  );
+}
+
 /** Instructions for the one player-facing, real-time voice companion. */
 export function liveInstructions(context: GameView) {
   return [
@@ -38,18 +56,10 @@ export async function createLiveSession(game: Game, actorId: string, sdp: string
       session: {
         model: voiceModel,
         instructions: liveInstructions(context),
-        audio: {
-          input: {
-            noise_reduction: { type: "near_field" },
-            transcription: {
-              model: "gpt-live-transcribe",
-              languages: ["en", "fr"],
-              prompt:
-                "A voice-controlled Loups-Garous game. Player names and role names may include Werewolf, Seer, Witch, Cupid, Hunter, vote, wait for dawn, and start the game.",
-            },
-          },
-          output: { voice },
-        },
+        // GPT-Live negotiates microphone media through WebRTC. Unlike the
+        // Realtime API, its create-session payload accepts output audio here,
+        // while input transcript deltas arrive over the data channel.
+        audio: { output: { voice } },
         delegation: {
           type: "responses",
           responses: {
@@ -62,7 +72,7 @@ export async function createLiveSession(game: Game, actorId: string, sdp: string
       transport: { type: "webrtc", sdp },
     }),
   });
-  if (!response.ok) throw new Error(`Live voice connection failed (${response.status}).`);
+  if (!response.ok) throw await liveProviderError(response);
   const payload = z
     .object({
       session: z.object({ id: z.string() }),

@@ -65,8 +65,28 @@ describe("player guide and live voice boundary", () => {
     });
     const request = JSON.parse(fetchMock.mock.calls[0]![1]!.body as string);
     expect(request.session.model).toBe("gpt-live-1");
+    expect(request.session.audio).toEqual({ output: { voice: "marin" } });
+    expect(request.session.audio.input).toBeUndefined();
     expect(request.session.delegation.responses.model).toBe("gpt-6-luna");
     expect(request.transport).toEqual({ type: "webrtc", sdp: "offer-sdp" });
+  });
+
+  it("reports a provider configuration error without exposing credentials", async () => {
+    vi.stubEnv("OPENAI_API_KEY", "test-key");
+    const game = createGame("Ada", 4);
+    startGame(game);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 400,
+        text: async () => JSON.stringify({ error: { message: "Invalid audio configuration." } }),
+      }),
+    );
+
+    await expect(createLiveSession(game, "human", "offer-sdp")).rejects.toThrow(
+      "Live voice provider rejected the session (400): Invalid audio configuration.",
+    );
   });
 
   it("exposes no unrevealed roles in the player-scoped context", () => {
