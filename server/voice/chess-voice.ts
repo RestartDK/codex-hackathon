@@ -234,7 +234,7 @@ const tools = [
 ];
 
 const GREETINGS = {
-  home: `Welcome to Play by Voice. ${PLAYABLE_GAMES_LABEL} are ready. Say a game name to begin.`,
+  home: `Welcome to Playora. ${PLAYABLE_GAMES_LABEL} are ready. Say a game name to begin.`,
   chess:
     "Welcome to Chess. The application will provide the current game context. Tell the player they can say a move to play immediately or ask for a quick guide, then listen.",
   loading: "Welcome to Chess. The board is getting ready. Pause and listen.",
@@ -243,7 +243,7 @@ const GREETINGS = {
   help: "You are in Help. Offer chess rules or voice-command help, then pause and listen.",
 } as const;
 
-const INSTRUCTIONS = `You are the calm English-speaking companion in Play by Voice for blind and low-vision players.
+const INSTRUCTIONS = `You are the calm English-speaking companion in Playora for blind and low-vision players.
 In chess setup, "start with defaults" or "start game" must call game_control with start_game. Use set_preference for color, opponent and difficulty selections before starting.
 
 Backchannel policy:

@@ -44,7 +44,7 @@ export default function PlayByVoiceApp({
   preferences: Preferences;
   initialDestination?: AvailableDestination;
   autoVoice?: boolean;
-  onPlayLoupsGarous: () => void;
+  onPlayLoupsGarous: (autoVoice?: boolean) => void;
   onPlayLudo: (autoVoice?: boolean) => void;
   onPlayIntercept: (autoVoice?: boolean) => void;
   onPlayTicTacToe: (autoVoice?: boolean) => void;
@@ -86,7 +86,7 @@ export default function PlayByVoiceApp({
           return `Chess is open. ${resultMessage} You can review the moves or request a new game.`;
         return `Chess is ready. ${settings.gameMode === "local" ? "This is a local two-player game." : `You play ${settings.playerColor === "w" ? "White" : "Black"}.`} ${session.history.length > 0 ? "Ask about the current board or request your next move." : "Say a move to play it immediately, or say quick guide to hear the rules."}`;
       case "loups-garous":
-        onPlayLoupsGarous();
+        onPlayLoupsGarous(companion.voice.status === "connected");
         return "Loups-Garous is open. Say start the game. Use Games to return to the game picker.";
       case "ludo":
         onPlayLudo(companion.voice.status === "connected");
@@ -327,6 +327,14 @@ export default function PlayByVoiceApp({
     };
   }, [hasDialog]);
 
+  const commandControls = (
+    <CompanionDock
+      companion={companion}
+      green={view.kind === "chess-setup" || chessVisible}
+      screenReaderMode={settings.screenReaderMode}
+    />
+  );
+
   return (
     <>
       <div
@@ -347,9 +355,9 @@ export default function PlayByVoiceApp({
                 void companion.navigate("home");
               }
             }}
-            aria-label="Play by Voice, game picker"
+            aria-label="Playora, game picker"
           >
-            Play by Voice
+            Playora
           </button>
           {chessContextVisible && (
             <span className="header-game">
@@ -462,21 +470,19 @@ export default function PlayByVoiceApp({
             />
           )}
         </main>
-        <CompanionDock
-          companion={companion}
-          green={view.kind === "chess-setup" || chessVisible}
-          screenReaderMode={settings.screenReaderMode}
-        />
+        {!hasDialog && commandControls}
       </div>
       {view.kind === "chess" && session.pendingPromotion && (
         <PromotionDialog
           color={session.game.turn()}
           onPromote={session.promote}
           onCancel={session.cancelPromotion}
+          commandControls={commandControls}
         />
       )}
       {showResult && (
         <GameEndModal
+          commandControls={commandControls}
           result={result}
           onNewGame={() => {
             companion.cancelRequests();

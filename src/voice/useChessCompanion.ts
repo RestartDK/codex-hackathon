@@ -28,7 +28,7 @@ function narrateMove(
 
 function welcome(bridge: ChessToolBridge): string {
   if (bridge.view === "home")
-    return `Welcome to Play by Voice. ${PLAYABLE_GAMES_LABEL} are ready to play. Say a game name, or ask for help.`;
+    return `Welcome to Playora. ${PLAYABLE_GAMES_LABEL} are ready to play. Say a game name, or ask for help.`;
   if (bridge.view === "audio")
     return "You are in Audio Settings. You can adjust narrator volume, game sounds, and chess preferences. Say play chess to return to the board, or home for the game picker.";
   if (bridge.view === "help")

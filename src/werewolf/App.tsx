@@ -21,11 +21,7 @@ import {
   primeBrowserNarration,
   useStoryAudio,
 } from "../voice/browser-narration.js";
-import { startLiveVoice, type LiveVoiceSession, type LiveVoiceTarget } from "../voice/live-voice.js";
-import {
-  startPersistentSpeechRecognition,
-  type SpeechRecognitionSession,
-} from "../voice/speech-recognition.js";
+import { useVoiceCompanion, type VoiceToolExecutor } from "../voice/useVoiceCompanion.js";
 import { looksLikeControlCommand } from "./voiceRouting.js";
 import {
   clampVillageCount,
@@ -37,7 +33,6 @@ import {
 
 type Session = { game: GameView; token: string };
 type GuideMessage = { role: "user" | "assistant"; text: string; mode?: "model" | "local" };
-type VoiceInputMode = "idle" | "browser" | "connecting-live" | "live";
 const roleNames: Record<Role, string> = {
   werewolf: "Werewolf",
   villager: "Villager",
@@ -213,7 +208,7 @@ function openingBriefing(game: GameView, explainAsWePlay: boolean) {
 
   const essentials = [
     `Welcome to Valombre. ${roleBriefing[me.role]}`,
-    `Your voice companion is already listening after microphone permission. At night, ${nightVoiceExample[me.role]}, or simply say ‘choose Emma’.`,
+    `Press the voice orb and allow the microphone. At night, ${nightVoiceExample[me.role]}, or simply say ‘choose Emma’.`,
     nextStep,
   ];
 
@@ -226,7 +221,7 @@ function openingBriefing(game: GameView, explainAsWePlay: boolean) {
   return [
     `Welcome to Valombre. ${roleBriefing[me.role]}`,
     "The village wins by removing every Werewolf. The Werewolves win when they equal or outnumber everyone else. Nights are private; mornings are for public discussion and a village vote.",
-    `Your voice companion is already listening after microphone permission. At night, ${nightVoiceExample[me.role]}, or simply say ‘choose Emma’. During the morning, say ‘Emma, why do you suspect Sofia?’ or ‘tell the village I trust Lucas’ to post a public message; the villagers will answer. Say ‘hear the villagers’, ‘begin vote’, ‘vote for Emma’, or ‘what can I do?’ at any time.`,
+    `Press the voice orb and allow the microphone. At night, ${nightVoiceExample[me.role]}, or simply say ‘choose Emma’. During the morning, say ‘Emma, why do you suspect Sofia?’ or ‘tell the village I trust Lucas’ to post a public message; the villagers will answer. Say ‘hear the villagers’, ‘begin vote’, ‘vote for Emma’, or ‘what can I do?’ at any time.`,
     "For the full hands-free control list, say ‘voice help’. You can also say ‘repeat that’, ‘pause narration’, ‘speak slower’, ‘pause game’, ‘resume game’, or ‘stop voice control’.",
     nextStep,
   ].join(" ");
@@ -521,7 +516,9 @@ export default function WerewolfApp({
   onNarrationVolumeChange,
   onShowGamePicker,
   onNavigateGame,
+  autoVoice = false,
 }: {
+  autoVoice?: boolean;
   narrationVolume: number;
   onNarrationVolumeChange: (volume: number) => void;
   onShowGamePicker: () => void;
@@ -538,15 +535,10 @@ export default function WerewolfApp({
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [commandText, setCommandText] = useState("");
-  const [voiceStatus, setVoiceStatus] = useState(
-    "Tap anywhere once to allow the microphone, then say “start the game”",
-  );
-  const [listening, setListening] = useState(false);
+  const [voiceStatus, setVoiceStatus] = useState("Voice is off.");
   const [voiceCommandsPaused, setVoiceCommandsPaused] = useState(false);
   const [guideMessages, setGuideMessages] = useState<GuideMessage[]>([]);
   const [guideText, setGuideText] = useState("");
-  const [liveConnected, setLiveConnected] = useState(false);
-  const [liveConnecting, setLiveConnecting] = useState(false);
   const [voiceTranscript, setVoiceTranscript] = useState("");
   const [openingAudio, setOpeningAudio] = useState<{ gameId: string; text: string }>();
   const [stage, setStage] = useState<SetupStage>("preparing");
@@ -567,22 +559,50 @@ export default function WerewolfApp({
   useEffect(() => {
     if (typing) commandInputRef.current?.focus();
   }, [typing]);
-  const recognitionRef = useRef<SpeechRecognitionSession | null>(null);
   const latestGameRef = useRef<GameView | undefined>(undefined);
   const sessionRef = useRef<Session | undefined>(undefined);
-  const autoVoiceRequestedRef = useRef(false);
-  const voiceFailureRef = useRef<string | undefined>(undefined);
   const presentedGameRef = useRef<GameView | undefined>(undefined);
-  const voiceCommandHandlerRef = useRef<(transcript: string) => void>(() => undefined);
-  const startVoiceRef = useRef<() => void>(() => undefined);
-  const liveConnectionRef = useRef<LiveVoiceSession | null>(null);
-  const inputModeRef = useRef<VoiceInputMode>("idle");
-  const inputGenerationRef = useRef(0);
-  const liveTargetRef = useRef<LiveVoiceTarget["kind"] | null>(null);
-  const voiceActiveRef = useRef(false);
-  const voiceCommandsPausedRef = useRef(false);
+  const voiceCommandHandlerRef = useRef<(transcript: string) => Promise<void>>(
+    async () => undefined,
+  );
+  const voiceExecutor = useMemo<VoiceToolExecutor>(
+    () => ({
+      execute: async (name, rawArguments) => {
+        if (name !== "submit_player_command")
+          return JSON.stringify({ status: "error", message: "Unknown voice command." });
+        let command: unknown;
+        try {
+          command = (JSON.parse(rawArguments || "{}") as { command?: unknown }).command;
+        } catch {
+          command = undefined;
+        }
+        if (typeof command !== "string" || !command.trim())
+          return JSON.stringify({ status: "error", message: "Repeat the command in words." });
+        await voiceCommandHandlerRef.current(command);
+        return JSON.stringify({
+          status: "completed",
+          message: "The application handled the command and narrates any result.",
+        });
+      },
+    }),
+    [],
+  );
+  // One ordered narrator reads this game. The live companion supplies the
+  // microphone and command routing, so its own audio stays muted.
+  const voice = useVoiceCompanion(
+    voiceExecutor,
+    true,
+    "loups-garous",
+    "home",
+    Math.round(narrationVolume * 100),
+  );
   const countRef = useRef(count);
   const explainGameRef = useRef(explainGame);
+  const startVoice = useRef(voice.start);
+  startVoice.current = voice.start;
+  useEffect(() => {
+    if (autoVoice) void startVoice.current();
+  }, [autoVoice]);
   const commandQueueRef = useRef(Promise.resolve());
   const lastVoiceCommandRef = useRef({ text: "", at: 0 });
   const actionInFlightRef = useRef(false);
@@ -697,10 +717,6 @@ export default function WerewolfApp({
     cancelPendingGuide();
     setStage("creating");
     primeBrowserNarration();
-    // This runs directly from the player's Start or Quick Test gesture, which is
-    // the one moment browsers allow microphone permission to be requested.
-    autoVoiceRequestedRef.current = true;
-    startAlwaysOnVoice();
     setBusy(true);
     setError("");
     try {
@@ -731,10 +747,6 @@ export default function WerewolfApp({
       setSeenInvestigations(game.me.investigations.length);
       setVoteOutcome(undefined);
       setIntroStep(game.phase === "prologue" ? "village" : "role");
-      // When browser speech recognition is unavailable, try the provider-backed
-      // companion once the game session is ready.
-      if (liveTargetRef.current === "lobby") teardownLiveVoice();
-      if (!recognitionRef.current && !liveConnectionRef.current) void connectLiveVoice();
       setSelected([]);
       setGuideMessages([
         {
@@ -837,7 +849,7 @@ export default function WerewolfApp({
       text,
       voiceKey: "assistant",
       duringLive: true,
-      instant: options.instant ?? liveConnected,
+      instant: options.instant ?? voice.status === "connected",
     });
   }
 
@@ -910,8 +922,11 @@ export default function WerewolfApp({
         return;
       }
       if (destination && destination !== "loups-garous") {
-        leaveToGamePicker();
-        onNavigateGame?.(destination, voiceActiveRef.current);
+        const keepVoice = voice.status === "connected";
+        window.setTimeout(() => {
+          leaveToGamePicker();
+          onNavigateGame?.(destination, keepVoice);
+        }, 0);
         return;
       }
     }
@@ -1380,93 +1395,6 @@ export default function WerewolfApp({
    * Starts the hands-free input once and leaves it running for the match.
    * Browser recognition restarts itself after ordinary phrase boundaries.
    */
-  function startAlwaysOnVoice() {
-    if (inputModeRef.current !== "idle" || recognitionRef.current || liveConnectionRef.current)
-      return;
-    voiceFailureRef.current = undefined;
-    try {
-      const recognition = startPersistentSpeechRecognition({
-        onTranscript: (transcript) => voiceCommandHandlerRef.current(transcript),
-        onError: (reason) => {
-          voiceFailureRef.current = reason;
-          // Chromium can emit `aborted` while it rotates a continuous
-          // recognition session. The session restarts internally, so it is not
-          // an interruption the player needs to hear about.
-          if (reason === "aborted" || reason === "no-speech") {
-            setVoiceStatus(
-              sessionRef.current
-                ? "Voice companion is listening"
-                : "Listening — say “start the game”",
-            );
-            return;
-          }
-          if (reason === "network") {
-            setVoiceStatus("Switching to the live voice companion…");
-            // Change modes before the browser callback ends. This keeps its
-            // delayed onStopped handler from reviving a second listener.
-            void connectLiveVoice();
-            return;
-          }
-          if (["not-allowed", "service-not-allowed"].includes(reason)) {
-            setVoiceStatus("Tap anywhere once to allow the microphone, then say “start the game”.");
-            return;
-          }
-          setVoiceStatus(`Voice input interrupted (${reason}). Reconnecting when possible…`);
-        },
-        onStopped: () => {
-          recognitionRef.current = null;
-          // `connectLiveVoice` already owns the handoff. A stale browser
-          // callback must never restart itself while Live is opening or active.
-          if (inputModeRef.current === "connecting-live" || inputModeRef.current === "live") return;
-          inputModeRef.current = "idle";
-          const failure = voiceFailureRef.current;
-          if (
-            autoVoiceRequestedRef.current &&
-            !["not-allowed", "service-not-allowed", "audio-capture"].includes(failure ?? "")
-          ) {
-            window.setTimeout(() => {
-              if (inputModeRef.current === "idle") startAlwaysOnVoice();
-            }, 700);
-            return;
-          }
-          resetVoiceGuide(
-            failure === "audio-capture"
-              ? "No microphone was found. Connect one, then refresh the game."
-              : sessionRef.current
-                ? "Microphone permission is needed for hands-free play."
-                : "Tap anywhere once to allow the microphone, then say “start the game”.",
-          );
-        },
-      });
-      if (!recognition) {
-        inputModeRef.current = "idle";
-        setVoiceStatus(
-          "Browser speech recognition is unavailable. Using the live transcription companion…",
-        );
-        void connectLiveVoice();
-        return;
-      }
-      recognitionRef.current = recognition;
-      inputModeRef.current = "browser";
-      setListening(true);
-      setVoiceCommandsPaused(false);
-      setVoiceStatus(
-        sessionRef.current ? "Voice companion is listening" : "Listening — say “start the game”",
-      );
-    } catch {
-      recognitionRef.current = null;
-      inputModeRef.current = "idle";
-      setListening(false);
-      setVoiceStatus("Tap anywhere once to allow the microphone, then say “start the game”.");
-    }
-  }
-
-  function resetVoiceGuide(status: string) {
-    setListening(false);
-    setVoiceCommandsPaused(false);
-    setVoiceStatus(status);
-  }
-
   async function askGuide(text = guideText) {
     const activeSession = sessionRef.current;
     if (!activeSession || !text.trim()) return;
@@ -1530,21 +1458,9 @@ export default function WerewolfApp({
     }
   }
 
-  function teardownLiveVoice() {
-    inputGenerationRef.current += 1;
-    liveTargetRef.current = null;
-    inputModeRef.current = "idle";
-    const live = liveConnectionRef.current;
-    liveConnectionRef.current = null;
-    setLiveConnected(false);
-    setLiveConnecting(false);
-    live?.stop();
-  }
-
   /** Recover cleanly if a local/dev server has restarted and lost its in-memory match. */
   function recoverExpiredSession() {
     storyAudio.stop();
-    teardownLiveVoice();
     cancelCreation();
     latestGameRef.current = undefined;
     presentedGameRef.current = undefined;
@@ -1569,81 +1485,8 @@ export default function WerewolfApp({
     guideAbortRef.current = undefined;
   }
 
-  async function connectLiveVoice() {
-    const activeSession = sessionRef.current;
-    if (
-      liveConnectionRef.current ||
-      inputModeRef.current === "connecting-live" ||
-      inputModeRef.current === "live"
-    )
-      return;
-    inputModeRef.current = "connecting-live";
-    const generation = ++inputGenerationRef.current;
-    const gameIdAtStart = activeSession?.game.id;
-    const target: LiveVoiceTarget = activeSession
-      ? { kind: "game", gameId: activeSession.game.id, sessionToken: activeSession.token }
-      : { kind: "lobby" };
-    const stale = () =>
-      inputGenerationRef.current !== generation ||
-      sessionRef.current?.game.id !== gameIdAtStart ||
-      inputModeRef.current !== "connecting-live";
-    const browserRecognition = recognitionRef.current;
-    recognitionRef.current = null;
-    browserRecognition?.stop();
-    resetVoiceGuide("Starting live voice companion…");
-    setLiveConnecting(true);
-    setError("");
-    let established = false;
-    try {
-      const live = await startLiveVoice({
-        target,
-        onStatus: setVoiceStatus,
-        onInputTranscript: () => undefined,
-        onInputTranscriptComplete: (text) => {
-          voiceCommandHandlerRef.current(text);
-        },
-        onClosed: () => {
-          liveConnectionRef.current = null;
-          liveTargetRef.current = null;
-          setLiveConnected(false);
-          setLiveConnecting(false);
-          if (inputModeRef.current === "connecting-live" || inputModeRef.current === "live") {
-            inputModeRef.current = "idle";
-          }
-          // Only retry an established connection. A rejected setup should not
-          // loop against the provider when its credentials or transport are bad.
-          if (established && autoVoiceRequestedRef.current && !voiceCommandsPausedRef.current) {
-            window.setTimeout(() => {
-              if (inputModeRef.current === "idle") startVoiceRef.current();
-            }, 700);
-          }
-        },
-      });
-      // A reset can happen while the provider is negotiating. Do not attach a
-      // late connection to another village or another setup screen.
-      if (stale()) {
-        live.stop();
-        return;
-      }
-      liveConnectionRef.current = live;
-      liveTargetRef.current = target.kind;
-      established = true;
-      inputModeRef.current = "live";
-      setLiveConnected(true);
-      setVoiceStatus("Voice companion is listening");
-    } catch (cause) {
-      if (stale()) return;
-      inputModeRef.current = "idle";
-      resetVoiceGuide(
-        cause instanceof Error ? cause.message : "Could not start the Live Voice Guide.",
-      );
-    } finally {
-      setLiveConnecting(false);
-    }
-  }
-
   useEffect(() => {
-    voiceCommandHandlerRef.current = (transcript) => {
+    voiceCommandHandlerRef.current = async (transcript) => {
       const text = transcript.trim();
       if (!text) return;
       setVoiceTranscript(text);
@@ -1661,64 +1504,46 @@ export default function WerewolfApp({
         void handleVoiceCommand(text);
         return;
       }
-      commandQueueRef.current = commandQueueRef.current
+      const queued = commandQueueRef.current
         .catch(() => undefined)
         .then(() => handleVoiceCommand(text));
+      commandQueueRef.current = queued;
+      await queued;
     };
   });
 
   useEffect(() => {
-    startVoiceRef.current = startAlwaysOnVoice;
-  });
-
-  useEffect(() => {
-    autoVoiceRequestedRef.current = true;
-    if (navigator.permissions) {
-      void navigator.permissions
-        .query({ name: "microphone" as PermissionName })
-        .then((permission) => {
-          if (permission.state === "granted") startVoiceRef.current();
-        })
-        .catch(() => undefined);
-    }
-    const enableVoice = () => {
-      if (inputModeRef.current !== "idle") return;
-      primeBrowserNarration();
-      startVoiceRef.current();
-    };
-    window.addEventListener("pointerdown", enableVoice, { passive: true });
+    const prime = () => primeBrowserNarration();
+    window.addEventListener("pointerdown", prime, { passive: true });
     return () => {
-      window.removeEventListener("pointerdown", enableVoice);
-      autoVoiceRequestedRef.current = false;
+      window.removeEventListener("pointerdown", prime);
       // Leaving while a village is being created must not navigate back into it.
       createControllerRef.current?.abort();
       createControllerRef.current = null;
       guideAbortRef.current?.abort();
       guideAbortRef.current = undefined;
-      recognitionRef.current?.stop();
-      const live = liveConnectionRef.current;
-      liveConnectionRef.current = null;
-      inputModeRef.current = "idle";
-      live?.stop();
     };
   }, []);
 
-  voiceActiveRef.current = listening || liveConnected;
-  voiceCommandsPausedRef.current = voiceCommandsPaused;
   countRef.current = count;
   explainGameRef.current = explainGame;
-  const voiceActive = listening && !voiceCommandsPaused;
-  const voiceDockStatus = liveConnecting
-    ? "Connecting voice"
-    : liveConnected
-      ? voiceCommandsPaused
-        ? "Voice commands paused"
-        : "Listening and answering"
-      : listening
-        ? voiceCommandsPaused
-          ? "Voice commands paused"
-          : "Listening"
-        : "Voice is off";
+  const voiceConnected = voice.status === "connected";
+  const voiceBusy = voice.status === "connecting" || voice.status === "closing";
+  const voiceActive = voiceConnected && !voiceCommandsPaused;
+  const voiceDockStatus =
+    voice.status === "connecting"
+      ? "Connecting voice"
+      : voice.status === "closing"
+        ? "Ending voice"
+        : voiceConnected
+          ? voiceCommandsPaused
+            ? "Voice commands paused"
+            : voice.microphoneMuted
+              ? "Microphone muted"
+              : "Listening and answering"
+          : voice.status === "error"
+            ? "Retry voice"
+            : "Voice is off";
   const latestGuideReply = [...guideMessages].reverse().find((entry) => entry.role === "assistant");
 
   function closeCommands() {
@@ -1727,7 +1552,8 @@ export default function WerewolfApp({
   }
 
   function toggleVoiceFromOrb() {
-    if (listening || liveConnected) {
+    primeBrowserNarration();
+    if (voiceConnected) {
       if (voiceCommandsPaused) {
         setVoiceCommandsPaused(false);
         setVoiceStatus("Voice guide is listening");
@@ -1737,9 +1563,11 @@ export default function WerewolfApp({
       }
       return;
     }
-    primeBrowserNarration();
-    autoVoiceRequestedRef.current = true;
-    startAlwaysOnVoice();
+    if (!voiceBusy) {
+      setVoiceCommandsPaused(false);
+      setVoiceStatus("Voice guide is listening");
+      void voice.start();
+    }
   }
 
   // The same dock, orb, and typed-command panel as Chess (src/components/PlayByVoice/CompanionDock.tsx).
@@ -1753,15 +1581,15 @@ export default function WerewolfApp({
           type="button"
           className="orb-button"
           aria-label={
-            listening || liveConnected
+            voiceConnected
               ? voiceCommandsPaused
                 ? "Resume voice commands"
                 : "Pause voice commands"
-              : liveConnecting
+              : voiceBusy || voice.status === "error"
                 ? voiceDockStatus
                 : "Start voice companion"
           }
-          disabled={liveConnecting}
+          disabled={voiceBusy}
           onClick={toggleVoiceFromOrb}
         >
           <LiquidOrb tone="amber" />
@@ -1770,6 +1598,11 @@ export default function WerewolfApp({
           </span>
         </button>
       </div>
+      {voice.error && (
+        <p className="voice-error" role="alert">
+          {voice.error}
+        </p>
+      )}
       {commandPanel.mounted && (
         <form
           id="command-panel"
@@ -1944,7 +1777,7 @@ export default function WerewolfApp({
     <header className={`ww-header${onArtwork ? " is-on-art" : ""}`}>
       <div className="ww-brand-group">
         <button className="ww-brand" type="button" onClick={requestHome}>
-          Play by Voice
+          Playora
           <span className="sr-only">, return to the game picker</span>
         </button>
         <img
@@ -2077,7 +1910,12 @@ export default function WerewolfApp({
         everyone else.
       </p>
       <p>
-        Voice: {voiceStatus}
+        Voice:{" "}
+        {voiceConnected
+          ? voiceStatus
+          : voiceBusy
+            ? voiceDockStatus
+            : (voice.error ?? "Voice is off. Press the orb to connect.")}
         {voiceTranscript ? ` You said: “${voiceTranscript}”.` : ""}
       </p>
       <p>

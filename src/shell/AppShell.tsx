@@ -7,7 +7,7 @@ import { LibraryVoiceContext } from "../voice/useLibraryVoice";
 import type { AvailableDestination } from "../voice/navigation";
 
 const EXPERIENCES = {
-  "play-by-voice": { title: "Play by Voice", themeColor: "#ffffff" },
+  "play-by-voice": { title: "Playora", themeColor: "#ffffff" },
   "loups-garous": { title: "Loups-Garous — A Village Game", themeColor: "#ffffff" },
   ludo: { title: "Voice Ludo", themeColor: "#101827" },
   intercept: { title: "The Intercept", themeColor: "#101c21" },
@@ -46,7 +46,10 @@ export default function AppShell() {
       setExperience("play-by-voice");
     } else setExperience(destination);
   }, []);
-  const playLoupsGarous = useCallback(() => setExperience("loups-garous"), []);
+  const playLoupsGarous = useCallback((voice = false) => {
+    setAutoVoice(voice);
+    setExperience("loups-garous");
+  }, []);
   const playLudo = useCallback((voice = false) => {
     setAutoVoice(voice);
     setExperience("ludo");
@@ -84,6 +87,7 @@ export default function AppShell() {
         onNarrationVolumeChange={changeNarrationVolume}
         onShowGamePicker={showGamePicker}
         onNavigateGame={navigateLibrary}
+        autoVoice={autoVoice}
       />
     );
 

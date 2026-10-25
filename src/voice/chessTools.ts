@@ -165,15 +165,16 @@ export function createChessToolExecutor(getBridge: () => ChessToolBridge) {
         });
       cancelRequests();
       const settingsAfter = { ...bridge.settings, ...changes.data };
-      bridge.updateSettings(changes.data);
       if (bridge.view === "chess-setup" && bridge.setupCommand) {
+        if (preference.data === "gameMode" && settingsAfter.gameMode !== "computer")
+          return json({ status: "error", message: "Player games are coming soon. Choose the computer." });
         const setupCommand: ChessSetupCommand | null =
           preference.data === "difficulty"
             ? { kind: "choose-difficulty", difficulty: settingsAfter.difficulty }
             : preference.data === "playerColor"
               ? { kind: "choose-color", color: settingsAfter.playerColor }
               : preference.data === "gameMode"
-                ? { kind: "choose-opponent", gameMode: settingsAfter.gameMode }
+                ? { kind: "choose-opponent", gameMode: "computer" }
                 : null;
         if (setupCommand)
           return json({
@@ -181,6 +182,7 @@ export function createChessToolExecutor(getBridge: () => ChessToolBridge) {
             message: `${describePreference(preference.data, settingsAfter)}. ${bridge.setupCommand(setupCommand)}`,
           });
       }
+      bridge.updateSettings(changes.data);
       const resets = preference.data === "playerColor" || preference.data === "gameMode";
       return json({
         status: "completed",

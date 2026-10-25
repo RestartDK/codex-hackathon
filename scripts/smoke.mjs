@@ -16,7 +16,7 @@ async function getHtml(path) {
 }
 
 const landing = await getHtml("/");
-assert.match(landing, /<title>Play by Voice — Play beyond the screen\.<\/title>/u);
+assert.match(landing, /<title>Playora — Play beyond the screen\.<\/title>/u);
 assert.match(landing, /href="\/dashboard\/"/u, "the landing play action opens the game picker");
 assert.match(
   landing,

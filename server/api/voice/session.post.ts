@@ -21,7 +21,12 @@ export default defineHandler(async (event) => {
   }
   if (mode === "lobby")
     return handleChessVoiceSession(event.req, chessVoiceSettings(process.env), transport, "lobby");
-  if (gameId === "ludo" || gameId === "intercept" || gameId === "tic-tac-toe")
+  if (
+    gameId === "loups-garous" ||
+    gameId === "ludo" ||
+    gameId === "intercept" ||
+    gameId === "tic-tac-toe"
+  )
     return handleLibraryVoiceSession(event.req);
   return handleChessVoiceSession(event.req, chessVoiceSettings(process.env), transport);
 });

@@ -83,8 +83,11 @@ function setupBridge() {
     setupCommand: (command) => {
       const outcome = reduceChessSetup(bridge.setup!, command);
       bridge.setup = outcome.state;
-      if (outcome.effect === "start")
-        started.push(chessSetupSelection(outcome.state));
+      if (outcome.effect === "start") {
+        const selection = chessSetupSelection(outcome.state);
+        started.push(selection);
+        bridge.settings = { ...bridge.settings, ...selection };
+      }
       if (outcome.effect === "cancel") controls.push("cancel");
       return outcome.effect === "start"
         ? `Starting ${outcome.state.draft.difficulty}.`
@@ -315,7 +318,7 @@ describe("immediate chess commands", () => {
     expect(difficulty.message).toContain("Choose your pieces");
     expect(bridge.setup?.step).toBe("color");
     expect(bridge.setup?.draft.difficulty).toBe("club");
-    expect(bridge.settings.difficulty).toBe("club");
+    expect(bridge.settings.difficulty).toBe("beginner");
 
     const color = JSON.parse(
       await executor.execute(
@@ -325,6 +328,17 @@ describe("immediate chess commands", () => {
     );
     expect(color.message).toContain("Current timer: off");
     expect(bridge.setup?.draft.color).toBe("b");
+  });
+
+  it("rejects coming-soon opponents without changing the saved game preferences", async () => {
+    const { bridge, executor } = setupBridge();
+    const direct = JSON.parse(await executor.execute("chess_setup", '{"action":"choose_opponent","value":"local"}'));
+    const preference = JSON.parse(await executor.execute("set_preference", '{"preference":"gameMode","value":"local"}'));
+    expect(direct.status).toBe("error");
+    expect(preference.status).toBe("error");
+    expect(bridge.setup?.draft.gameMode).toBe("computer");
+    expect(bridge.setup?.step).toBe("opponent");
+    expect(bridge.settings.gameMode).toBe("computer");
   });
 
   it("starts the game with the draft the wizard currently holds", async () => {

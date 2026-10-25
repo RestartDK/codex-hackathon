@@ -519,6 +519,51 @@ const ticTacToeTools = [
 
 const TIC_TAC_TOE_INSTRUCTIONS = `You are the reasoning layer for a voice-first Tic-Tac-Toe game. The browser owns the authoritative board, rules, AI, turn, and score. Never invent a mark, empty square, legal move, result, or computer action. Use a Tic-Tac-Toe function before stating current game facts. The human is X and the computer is O. A square explicitly ordered by the player uses place_tic_tac_toe_mark and plays immediately without confirmation. Use suggest_tic_tac_toe_move only when the player asks you to choose; follow its confirmation requirement. Board, cell, available-square, history, undo, pause, and resume requests need no confirmation. New round and reset match follow the tool result. Keep move acknowledgements brief because the browser supplies authoritative paced narration.`;
 
+const WEREWOLF_INSTRUCTIONS = `You are the routing layer for a Loups-Garous companion. The application owns the rules, hidden information, navigation, audio settings, and narration. For every player utterance, call submit_player_command with the player's exact words. Never answer a game question, reveal a fact, invent an outcome, or act on your own. Do not speak after a tool call.`;
+
+const werewolfTools = [
+  {
+    type: "function",
+    name: "submit_player_command",
+    description:
+      "Send the player's spoken words to the game. The application validates the command, applies it, and narrates the result.",
+    parameters: {
+      type: "object",
+      properties: { command: { type: "string" } },
+      required: ["command"],
+      additionalProperties: false,
+    },
+    strict: true,
+  },
+];
+
+const sharedLibraryTools = [
+  navigationTool,
+  voiceControlTool,
+  {
+    type: "function",
+    name: "get_preferences",
+    description: "Read shared audio preferences.",
+    parameters: { type: "object", properties: {}, additionalProperties: false },
+    strict: true,
+  },
+  {
+    type: "function",
+    name: "set_preference",
+    description: "Change shared narrator volume (0 to 100) or screen-reader mode (boolean).",
+    parameters: {
+      type: "object",
+      properties: {
+        preference: { type: "string", enum: ["voiceVolume", "screenReaderMode"] },
+        value: { anyOf: [{ type: "number" }, { type: "boolean" }] },
+      },
+      required: ["preference", "value"],
+      additionalProperties: false,
+    },
+    strict: true,
+  },
+];
+
 function allowedOrigins(): string[] {
   return (
     process.env.ALLOWED_ORIGINS ??
@@ -601,6 +646,7 @@ export async function handleLibraryVoiceSession(request: Request): Promise<Respo
   }
   if (
     body.gameId !== "chess" &&
+    body.gameId !== "loups-garous" &&
     body.gameId !== "ludo" &&
     body.gameId !== "intercept" &&
     body.gameId !== "tic-tac-toe"
@@ -612,27 +658,33 @@ export async function handleLibraryVoiceSession(request: Request): Promise<Respo
   }
   const gameId = body.gameId;
   const activeTools =
-    gameId === "ludo"
-      ? ludoTools
-      : gameId === "intercept"
-        ? interceptTools
-        : gameId === "tic-tac-toe"
-          ? ticTacToeTools
-          : tools;
+    gameId === "loups-garous"
+      ? werewolfTools
+      : gameId === "ludo"
+        ? ludoTools
+        : gameId === "intercept"
+          ? interceptTools
+          : gameId === "tic-tac-toe"
+            ? ticTacToeTools
+            : tools;
   const activeInstructions =
-    gameId === "ludo"
-      ? LUDO_INSTRUCTIONS
-      : gameId === "intercept"
-        ? INTERCEPT_INSTRUCTIONS
-        : gameId === "tic-tac-toe"
-          ? TIC_TAC_TOE_INSTRUCTIONS
-          : TOOL_INSTRUCTIONS;
+    gameId === "loups-garous"
+      ? WEREWOLF_INSTRUCTIONS
+      : gameId === "ludo"
+        ? LUDO_INSTRUCTIONS
+        : gameId === "intercept"
+          ? INTERCEPT_INSTRUCTIONS
+          : gameId === "tic-tac-toe"
+            ? TIC_TAC_TOE_INSTRUCTIONS
+            : TOOL_INSTRUCTIONS;
   const experienceInstructions =
-    gameId === "intercept"
-      ? `The Intercept is a solo authored mystery. The application supplies a spoiler-free introduction plus exact passages and choices. Use get_game_introduction when asked about the premise, goal, winning, losing, or endings. Speak each passage once, faithfully and in order. Do not summarize unless asked for a recap, and do not reveal or predict unseen consequences. Explicit choices play immediately; a choice you select for the player requires confirmation. Use get_story_state when a choice is unclear. Repeat, recap, undo, pause, and resume need no confirmation.`
-      : gameId === "tic-tac-toe"
-        ? `The human is X and moves first against computer O. Use natural positions or square numbers one through nine. An explicit square plays immediately; only a move you select for the player requires confirmation. Describe the full board only when asked. The browser announces each committed move and result. Use Tic-Tac-Toe tools for every current fact and action, including get_tic_tac_toe_introduction, get_tic_tac_toe_guide, and get_tic_tac_toe_dashboard for authored rules and layout text.`
-        : `If a saved game exists, ask resume or new game and wait. Resume immediately through the game-control tool; confirm only a new game that discards progress. An explicit move order plays immediately. A companion-selected move follows the tool's confirmation requirement. Board questions, rolling, pause, and resume need no confirmation.`;
+    gameId === "loups-garous"
+      ? `Every player utterance is a command or a question for the application, including navigation and audio requests. Call submit_player_command with the player's exact words and let the application validate, apply, and narrate the result. Never answer from your own knowledge.`
+      : gameId === "intercept"
+        ? `The Intercept is a solo authored mystery. The application supplies a spoiler-free introduction plus exact passages and choices. Use get_game_introduction when asked about the premise, goal, winning, losing, or endings. Speak each passage once, faithfully and in order. Do not summarize unless asked for a recap, and do not reveal or predict unseen consequences. Explicit choices play immediately; a choice you select for the player requires confirmation. Use get_story_state when a choice is unclear. Repeat, recap, undo, pause, and resume need no confirmation.`
+        : gameId === "tic-tac-toe"
+          ? `The human is X and moves first against computer O. Use natural positions or square numbers one through nine. An explicit square plays immediately; only a move you select for the player requires confirmation. Describe the full board only when asked. The browser announces each committed move and result. Use Tic-Tac-Toe tools for every current fact and action, including get_tic_tac_toe_introduction, get_tic_tac_toe_guide, and get_tic_tac_toe_dashboard for authored rules and layout text.`
+          : `If a saved game exists, ask resume or new game and wait. Resume immediately through the game-control tool; confirm only a new game that discards progress. An explicit move order plays immediately. A companion-selected move follows the tool's confirmation requirement. Board questions, rolling, pause, and resume need no confirmation.`;
 
   let upstream: Response;
   try {
@@ -661,35 +713,12 @@ Honor requests to repeat, add detail, speak more slowly, pause, or stop speaking
             responses: {
               model: process.env.OPENAI_DELEGATION_MODEL ?? "gpt-6-luna",
               reasoning: { effort: "low" },
-              instructions: `${activeInstructions} Use navigate_app to open the game library, another game, audio settings or help. Use get_preferences and set_preference for narrator volume or screen-reader mode.`,
-              tools: [
-                ...activeTools,
-                navigationTool,
-                voiceControlTool,
-                {
-                  type: "function",
-                  name: "get_preferences",
-                  description: "Read shared audio preferences.",
-                  parameters: { type: "object", properties: {}, additionalProperties: false },
-                  strict: true,
-                },
-                {
-                  type: "function",
-                  name: "set_preference",
-                  description:
-                    "Change shared narrator volume (0 to 100) or screen-reader mode (boolean).",
-                  parameters: {
-                    type: "object",
-                    properties: {
-                      preference: { type: "string", enum: ["voiceVolume", "screenReaderMode"] },
-                      value: { anyOf: [{ type: "number" }, { type: "boolean" }] },
-                    },
-                    required: ["preference", "value"],
-                    additionalProperties: false,
-                  },
-                  strict: true,
-                },
-              ],
+              instructions: `${activeInstructions} ${
+                gameId === "loups-garous"
+                  ? "Route every utterance, including navigation and audio requests, through submit_player_command."
+                  : "Use navigate_app to open the game library, another game, audio settings or help. Use get_preferences and set_preference for narrator volume or screen-reader mode."
+              }`,
+              tools: [...activeTools, ...(gameId === "loups-garous" ? [] : sharedLibraryTools)],
               tool_choice: "auto",
               parallel_tool_calls: false,
             },

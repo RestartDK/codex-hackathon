@@ -12,7 +12,7 @@ export type ChessSetupSelection = {
 };
 
 export type ChessSetupDraft = {
-  gameMode: GameMode;
+  gameMode: "computer";
   difficulty: Difficulty;
   color: ChessSetupColor;
   timerMinutes: 5 | 10 | null;
@@ -59,7 +59,7 @@ export function difficultyLabel(difficulty: Difficulty): string {
 }
 
 export type ChessSetupCommand =
-  | { kind: "choose-opponent"; gameMode: GameMode }
+  | { kind: "choose-opponent"; gameMode: "computer" }
   | { kind: "choose-difficulty"; difficulty: Difficulty }
   | { kind: "choose-color"; color: ChessSetupColor }
   | { kind: "choose-timer"; minutes: 5 | 10 | null }
@@ -215,17 +215,12 @@ function parseSetupDifficulty(value: string): Difficulty | null {
   }
 }
 
-function parseSetupGameMode(value: string): GameMode | null {
+function parseSetupGameMode(value: string): "computer" | null {
   switch (value) {
     case "computer":
     case "the computer":
     case "solo":
       return "computer";
-    case "local":
-    case "player":
-    case "two player":
-    case "another player":
-      return "local";
     default:
       return null;
   }
@@ -248,7 +243,7 @@ export function parseChessSetupCommand(action: string, rawValue: unknown): Chess
       const gameMode = parseSetupGameMode(value);
       return gameMode
         ? { ok: true, command: { kind: "choose-opponent", gameMode } }
-        : { ok: false, message: "Choose the computer or another player." };
+        : { ok: false, message: "Player games are coming soon. Choose the computer." };
     }
     case "choose_difficulty": {
       const difficulty = parseSetupDifficulty(value);
@@ -296,7 +291,7 @@ function stepSummary(state: ChessSetupState): string {
   const { draft } = state;
   switch (state.step) {
     case "opponent":
-      return `Current opponent: ${draft.gameMode === "computer" ? "Computer" : "another player"}.`;
+      return "Current opponent: Computer.";
     case "difficulty":
       return `Current difficulty: ${difficultyLabel(draft.difficulty)}.`;
     case "color":

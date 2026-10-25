@@ -2,6 +2,7 @@ interface PromotionDialogProps {
   color: "w" | "b";
   onPromote: (piece: "q" | "r" | "b" | "n") => void;
   onCancel: () => void;
+  commandControls?: React.ReactNode;
 }
 
 const PIECE_UNICODE: Record<string, Record<string, string>> = {
@@ -11,7 +12,7 @@ const PIECE_UNICODE: Record<string, Record<string, string>> = {
 
 const PIECES: Array<"q" | "r" | "b" | "n"> = ["q", "r", "b", "n"];
 
-export default function PromotionDialog({ color, onPromote, onCancel }: PromotionDialogProps) {
+export default function PromotionDialog({ color, onPromote, onCancel, commandControls }: PromotionDialogProps) {
   const titleId = useId();
   const { dialogRef, onKeyDown } = useDialogFocus(onCancel);
   return (
@@ -40,6 +41,7 @@ export default function PromotionDialog({ color, onPromote, onCancel }: Promotio
             </button>
           ))}
         </div>
+        {commandControls}
       </div>
     </div>
   );
