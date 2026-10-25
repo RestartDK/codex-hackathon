@@ -1,8 +1,7 @@
-import { useEffect, useRef, useState } from "react";
-import { ArrowUp, Keyboard, Square, X } from "lucide-react";
+import { useEffect, useRef } from "react";
+import { Square } from "lucide-react";
 import type { ChessCompanion } from "../../voice/useChessCompanion";
 import LiquidOrb from "./LiquidOrb";
-import { usePresence } from "../../hooks/usePresence";
 
 export default function CompanionDock({
   companion,
@@ -13,24 +12,9 @@ export default function CompanionDock({
   green: boolean;
   screenReaderMode: boolean;
 }) {
-  const [command, setCommand] = useState("");
-  const [typing, setTyping] = useState(false);
-  const toggleRef = useRef<HTMLButtonElement>(null);
-  const commandRef = useRef<HTMLInputElement>(null);
   const captionRef = useRef<HTMLParagraphElement>(null);
   const followCaption = useRef(true);
   const voice = companion.voice;
-  const commandPanel = usePresence(typing);
-
-  // Reopening during the closing animation reuses the panel, so focus the input explicitly.
-  useEffect(() => {
-    if (typing) commandRef.current?.focus();
-  }, [typing]);
-
-  function closeCommands() {
-    setTyping(false);
-    toggleRef.current?.focus();
-  }
 
   useEffect(() => {
     const element = captionRef.current;
@@ -79,19 +63,6 @@ export default function CompanionDock({
             {label}
           </span>
         </button>
-        <button
-          className={`dock-icon typed-toggle${typing ? " is-active" : ""}`}
-          ref={toggleRef}
-          onClick={() => {
-            if (typing) closeCommands();
-            else setTyping(true);
-          }}
-          aria-label={typing ? "Close typed commands" : "Type a command"}
-          aria-expanded={typing}
-          aria-controls="command-panel"
-        >
-          <Keyboard size={20} aria-hidden="true" />
-        </button>
         {(active || voice.status === "connecting") && (
           <button
             className="dock-icon end-voice"
@@ -122,59 +93,6 @@ export default function CompanionDock({
       >
         {voice.caption || companion.message}
       </p>
-      {commandPanel.mounted && (
-        <form
-          id="command-panel"
-          className={`command-panel${commandPanel.closing ? " is-closing" : ""}`}
-          inert={commandPanel.closing || undefined}
-          onKeyDown={(event) => {
-            if (event.key === "Escape") {
-              event.preventDefault();
-              closeCommands();
-            }
-          }}
-          onSubmit={(event) => {
-            event.preventDefault();
-            if (command.trim()) {
-              void companion.runCommand(command);
-              setCommand("");
-            }
-          }}
-        >
-          <div className="command-panel-heading">
-            <label htmlFor="typed-command">Type to your companion</label>
-            <button
-              type="button"
-              className="text-icon"
-              aria-label="Close typed commands"
-              onClick={closeCommands}
-            >
-              <X size={17} aria-hidden="true" />
-            </button>
-          </div>
-          <div className="command-input-row">
-            <input
-              id="typed-command"
-              ref={commandRef}
-              autoFocus
-              value={command}
-              onChange={(event) => setCommand(event.target.value)}
-              placeholder="Try e2 to e4, hint, or help"
-              autoComplete="off"
-              maxLength={300}
-            />
-            <button
-              className="send-command"
-              type="submit"
-              disabled={companion.busy || !command.trim()}
-              aria-label="Send command"
-            >
-              <ArrowUp size={20} aria-hidden="true" />
-            </button>
-          </div>
-          <p>No microphone needed. Typed commands run immediately.</p>
-        </form>
-      )}
     </footer>
   );
 }
