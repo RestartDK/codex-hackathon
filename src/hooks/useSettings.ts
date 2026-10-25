@@ -21,8 +21,8 @@ export function useSettings() {
     setSettings((prev: AppSettings) => ({ ...prev, playerColor }));
   }, []);
 
-  const setConfirmMoves = useCallback((confirmMoves: boolean) => {
-    setSettings((prev: AppSettings) => ({ ...prev, confirmMoves }));
+  const updateSettings = useCallback((changes: Partial<AppSettings>) => {
+    setSettings((prev) => ({ ...prev, ...changes }));
   }, []);
 
   const setScreenReaderMode = useCallback((screenReaderMode: boolean) => {
@@ -54,7 +54,7 @@ export function useSettings() {
     setGameMode,
     setDifficulty,
     setPlayerColor,
-    setConfirmMoves,
+    updateSettings,
     setScreenReaderMode,
     setVoiceVolume,
     setBoardOrientation,

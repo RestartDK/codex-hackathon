@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { Chess } from "chess.js";
 import {
   Headphones,
@@ -21,12 +20,13 @@ export default function ChessView({
   session,
   settings,
   companion,
+  flipped,
 }: {
   session: ChessSession;
   settings: AppSettings;
   companion: ChessCompanion;
+  flipped: boolean;
 }) {
-  const [flipped, setFlipped] = useState(false);
   const moves = session.game.history({ verbose: true });
   const last = session.reviewMode ? moves[session.reviewIndex] : moves.at(-1);
   const position = session.displayFen ? new Chess(session.displayFen) : session.game;
@@ -36,7 +36,6 @@ export default function ChessView({
         .flat()
         .find((piece) => piece?.type === "k" && piece.color === position.turn())
     : null;
-  const pending = companion.pending?.kind === "move" ? companion.pending : null;
   const controlsDisabled = session.awaitingStartChoice || Boolean(session.gameResult);
   return (
     <section className="chess-page" aria-labelledby="page-heading">
@@ -49,7 +48,7 @@ export default function ChessView({
           aria-label="Start a new game"
           title="Start a new game"
           onClick={() => {
-            void companion.runTool("propose_game_control", { action: "new_game" });
+            void companion.runTool("game_control", { action: "new_game" });
           }}
         >
           <RotateCw size={23} aria-hidden="true" />
@@ -141,7 +140,11 @@ export default function ChessView({
               )}{" "}
               {session.isPaused ? "Resume" : "Pause"}
             </button>
-            <button onClick={() => setFlipped(!flipped)}>
+            <button
+              onClick={() => {
+                void companion.runTool("game_control", { action: "flip_board" });
+              }}
+            >
               <FlipVertical2 size={15} aria-hidden="true" /> Flip
             </button>
             <button
@@ -202,8 +205,7 @@ export default function ChessView({
                         : undefined
                     }
                     onClick={() => {
-                      if (!session.reviewMode) session.enterReviewMode();
-                      session.goToMove(index);
+                      void companion.runTool("review_move", { move: index + 1 });
                     }}
                   >
                     <span>
@@ -273,30 +275,6 @@ export default function ChessView({
                 <span>Use voice to undo, repeat the last move, or start a new game.</span>
               </span>
             </button>
-            {pending && (
-              <div className="move-confirmation" role="group" aria-label="Move confirmation">
-                <p>{pending.description}. Confirm?</p>
-                <div>
-                  <button
-                    className="pill-button primary"
-                    disabled={companion.busy}
-                    onClick={() => {
-                      void companion.runCommand("yes");
-                    }}
-                  >
-                    Confirm move
-                  </button>
-                  <button
-                    className="pill-button"
-                    onClick={() => {
-                      void companion.runCommand("cancel");
-                    }}
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            )}
             <div className="guide-link">
               <button onClick={companion.guide}>New to chess? Hear the quick guide</button>
             </div>

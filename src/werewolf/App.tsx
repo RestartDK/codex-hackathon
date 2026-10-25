@@ -1190,8 +1190,7 @@ export default function WerewolfApp({
           <button
             className="text-button"
             onClick={() => {
-              if (window.confirm("Leave this Loups-Garous match? You cannot resume it from Games."))
-                onShowGamePicker();
+              onShowGamePicker();
             }}
           >
             Games
