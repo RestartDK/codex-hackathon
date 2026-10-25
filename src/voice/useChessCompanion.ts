@@ -30,7 +30,7 @@ function welcome(bridge: ChessToolBridge): string {
   if (bridge.view === "home")
     return `Welcome to Playora. ${PLAYABLE_GAMES_LABEL} are ready to play. Say a game name, or ask for help.`;
   if (bridge.view === "audio")
-    return "You are in Audio Settings. You can adjust narrator volume, game sounds, and chess preferences. Say play chess to return to the board, or home for the game picker.";
+    return "You are in Settings. You can adjust narrator volume, game sounds, and chess preferences. Say play chess to return to the board, or home for the game picker.";
   if (bridge.view === "help")
     return "You are in Help. Say play chess to begin, or ask me about chess rules and voice commands.";
   if (bridge.view === "loading") return "Chess is loading. You can return to the game picker.";
@@ -54,9 +54,7 @@ export function useChessCompanion(
   bridgeRef.current = bridge;
   const [executor] = useState(() => createChessToolExecutor(() => bridgeRef.current));
   const voice = useVoiceCompanion(executor, screenReaderMode, volume, bridge.view);
-  const [message, setMessage] = useState(
-    "Choose a game, or start voice to talk to your companion.",
-  );
+  const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const previousVoiceStatus = useRef(voice.status);
   const previousHistoryLength = useRef(bridge.history.length);

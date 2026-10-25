@@ -149,7 +149,7 @@ export default function ChessView({
             <div className="engine-notice" role="alert">
               <p>
                 The local engine could not load. Computer turns and hints need Stockfish. Retry the
-                engine, or choose Local two-player in Audio Settings.
+                engine, or choose Local two-player in Settings.
               </p>
               <button className="pill-button" onClick={session.retryStockfish}>
                 Retry engine

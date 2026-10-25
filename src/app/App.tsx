@@ -106,7 +106,7 @@ export default function PlayByVoiceApp({
         const returnTo = view.kind === "audio" || view.kind === "help" ? view.returnTo : view.kind;
         setView({ kind: destination, returnTo });
         return destination === "audio"
-          ? "Audio settings are open. Adjust narrator volume, game sounds, or chess preferences. Say play chess to return to the board."
+          ? "Settings are open. Adjust narrator volume, game sounds, or chess preferences. Say play chess to return to the board."
           : "Help is open. Ask about chess rules or commands, or say play chess to begin.";
       }
     }
@@ -344,26 +344,7 @@ export default function PlayByVoiceApp({
           Skip to main content
         </a>
         <header className="site-header" inert={hasDialog || undefined}>
-          <button
-            className="brand"
-            onClick={() => {
-              if (view.kind === "loading" || view.kind === "chess-setup") {
-                if (view.kind === "loading") session.cancelStockfishPreparation();
-                companion.cancelRequests();
-                setView({ kind: "home" });
-              } else {
-                void companion.navigate("home");
-              }
-            }}
-            aria-label="Playora, game picker"
-          >
-            Playora
-          </button>
-          {chessContextVisible && (
-            <span className="header-game">
-              <span aria-hidden="true">•</span> Chess
-            </span>
-          )}
+          {chessContextVisible && <span className="header-game">Chess</span>}
           <nav aria-label="Main navigation">
             <button
               aria-current={view.kind === "audio" ? "page" : undefined}
@@ -371,15 +352,7 @@ export default function PlayByVoiceApp({
                 void companion.navigate("audio");
               }}
             >
-              Audio Settings
-            </button>
-            <button
-              aria-current={view.kind === "help" ? "page" : undefined}
-              onClick={() => {
-                void companion.navigate("help");
-              }}
-            >
-              Help
+              Settings
             </button>
           </nav>
         </header>

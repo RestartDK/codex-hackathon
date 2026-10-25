@@ -13,16 +13,6 @@
   position: relative;
   z-index: 3;
 }
-.pbv-root .brand {
-  border: 0;
-  background: none;
-  padding: 0;
-  font-size: 24px;
-  line-height: 32px;
-  font-weight: 600;
-  letter-spacing: -0.6px;
-  white-space: nowrap;
-}
 .pbv-root .header-game {
   display: flex;
   align-items: center;
@@ -283,16 +273,6 @@
   background: #ffffffed;
   color: #333;
   z-index: 1;
-}
-.pbv-root .picker-hint {
-  text-align: center;
-  margin: 28px 24px 0;
-  font-size: 13px;
-  line-height: 22px;
-  color: #6b7280;
-}
-.pbv-root .picker-hint span {
-  color: #30394b;
 }
 .pbv-root .chess-page {
   position: relative;
@@ -775,14 +755,10 @@
   color: #52616c;
   pointer-events: auto;
 }
-.pbv-root .typed-toggle {
-  left: calc(50% + 112px);
-}
 .pbv-root .end-voice {
   right: calc(50% + 112px);
 }
-.pbv-root .dock-icon:hover,
-.pbv-root .dock-icon.is-active {
+.pbv-root .dock-icon:hover {
   background: #fff;
   color: #111;
   border-color: #9cb2c2;
@@ -814,99 +790,6 @@
   pointer-events: auto;
   max-height: 122px;
   overflow: auto;
-}
-.pbv-root .command-panel {
-  position: fixed;
-  top: auto;
-  right: max(24px, env(safe-area-inset-right, 0px));
-  bottom: max(24px, env(safe-area-inset-bottom, 0px));
-  left: auto;
-  z-index: 30;
-  width: min(480px, calc(100vw - 48px));
-  max-height: min(500px, calc(100svh - 48px));
-  overflow-y: auto;
-  border: 1px solid #e5e7eb;
-  border-radius: 24px;
-  padding: 20px;
-  background: white;
-  box-shadow: 0 12px 60px #243b2524;
-  pointer-events: auto;
-  transform-origin: bottom right;
-  animation: command-panel-in 200ms var(--ease-out) both;
-}
-.pbv-root .command-panel.is-closing {
-  pointer-events: none;
-  animation: command-panel-out 140ms ease-in both;
-}
-.pbv-root .companion-dock:has(.command-panel) {
-  z-index: 6;
-}
-@keyframes command-panel-in {
-  from {
-    opacity: 0;
-    transform: translateY(12px);
-  }
-}
-@keyframes command-panel-out {
-  to {
-    opacity: 0;
-    transform: translateY(8px);
-  }
-}
-.pbv-root .command-panel-heading {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 12px;
-}
-.pbv-root .command-panel-heading label {
-  font-size: 14px;
-  font-weight: 600;
-}
-.pbv-root .text-icon {
-  background: none;
-  border: 0;
-  display: grid;
-  place-items: center;
-  padding: 5px;
-  min-width: 44px;
-  min-height: 44px;
-}
-.pbv-root .command-input-row {
-  display: flex;
-  align-items: center;
-  border: 1px solid #dfe3dc;
-  border-radius: 24px;
-  padding: 4px;
-  gap: 6px;
-}
-.pbv-root .command-input-row:focus-within {
-  border-color: #7d9250;
-}
-.pbv-root .command-input-row input {
-  min-width: 0;
-  width: 100%;
-  border: 0;
-  padding: 8px 10px;
-  background: none;
-  font-size: 14px;
-  outline: 0;
-}
-.pbv-root .send-command {
-  width: 44px;
-  height: 44px;
-  border: 0;
-  border-radius: 50%;
-  background: #d4e89c;
-  display: grid;
-  place-items: center;
-  flex-shrink: 0;
-}
-.pbv-root .command-panel > p {
-  font-size: 11px;
-  line-height: 17px;
-  color: #768170;
-  margin-top: 10px;
 }
 .pbv-root .settings-page,
 .pbv-root .help-page {
@@ -1097,7 +980,6 @@
   background: #5b7928 url("/artwork/chess-loading.webp") center / cover;
   color: #fff;
 }
-.pbv-root .page-loading .brand,
 .pbv-root .page-loading .header-game,
 .pbv-root .page-loading .site-header nav button {
   color: #fff;
@@ -1653,19 +1535,9 @@
     width: 44px;
     height: 44px;
   }
-  .pbv-root .typed-toggle {
-    left: calc(50% + 82px);
-  }
   .pbv-root .end-voice {
     right: calc(50% + 82px);
   }
-  .pbv-root .command-panel {
-    right: max(16px, env(safe-area-inset-right, 0px));
-    bottom: max(16px, env(safe-area-inset-bottom, 0px));
-    width: min(480px, calc(100vw - 32px));
-    max-height: calc(100svh - 32px);
-  }
-  .pbv-root .command-input-row input,
   .pbv-root .preferences-grid select {
     font-size: 16px;
   }
@@ -1716,10 +1588,6 @@
     gap: 9px;
     flex-wrap: wrap;
     min-height: 80px;
-  }
-  .pbv-root .brand {
-    font-size: 20px;
-    letter-spacing: -0.5px;
   }
   .pbv-root .header-game {
     font-size: 18px;
@@ -1777,12 +1645,6 @@
   }
   .pbv-root .game-card-description {
     font-size: 15px;
-  }
-  .pbv-root .picker-hint {
-    max-width: 320px;
-    margin: 22px auto 0;
-    padding: 0 16px;
-    font-size: 12px;
   }
   .pbv-root .chess-page {
     padding-top: 8px;

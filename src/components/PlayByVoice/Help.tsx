@@ -24,10 +24,9 @@ export default function Help({
           <h2>Start with your voice</h2>
           <p>
             Select the orb, allow microphone access, and say "Play chess." Voice stays connected
-            between Chess, Audio Settings, and Help. Loups-Garous starts its own voice companion.
-            Select the orb again to mute your microphone. Use the stop button to end voice. Chess
-            live voice requires a server-side API key; typed commands and the quick guide work
-            without it.
+            between Chess, Settings, and Help. Loups-Garous starts its own voice companion. Select
+            the orb again to mute your microphone. Use the stop button to end voice. Chess live
+            voice requires a server-side API key; the quick guide works without it.
           </p>
         </section>
         <section>
@@ -50,11 +49,10 @@ export default function Help({
           </ul>
         </section>
         <section>
-          <h2>No microphone? No problem.</h2>
+          <h2>Play on the board</h2>
           <p>
-            Open the keyboard button beside the orb to type commands. Try "e2 to e4" to play
-            immediately. You can also play directly on the board. Tab into it, use the arrow keys to
-            explore, and press Enter or Space to select a piece and destination.
+            Tab into the board, use the arrow keys to explore, and press Enter or Space to select a
+            piece and destination.
           </p>
         </section>
         <section>

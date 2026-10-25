@@ -1,5 +1,5 @@
 {
-  description = "Loups-Garous development environment";
+  description = "Playora development environment";
 
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
 

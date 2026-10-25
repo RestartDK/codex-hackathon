@@ -1,4 +1,4 @@
-# Play by Voice landing page
+# Playora landing page
 
 ## Where it lives
 
@@ -87,4 +87,4 @@ Latest visual and interaction review: [DESIGN_AUDIT.md](DESIGN_AUDIT.md).
 
 Current design: [GLACIAL_DIRECTION.md](GLACIAL_DIRECTION.md), based on the user’s latest Glacia reference.
 
-Latest FAQ: question message bubbles with plus/close disclosures and white Play by Voice reply bubbles. The old typed chatbot was replaced. The footer wordmark is white. See GLACIAL_DIRECTION.md.
+Latest FAQ: question message bubbles with plus/close disclosures and white Playora reply bubbles. The old typed chatbot was replaced. The footer wordmark is white. See GLACIAL_DIRECTION.md.
