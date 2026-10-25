@@ -68,33 +68,97 @@ const normalize = (value: string) =>
     .toLocaleLowerCase()
     .trim();
 
+/** Keep name matching tolerant of normal speech-recognition punctuation and accents. */
+const words = (value: string) =>
+  normalize(value)
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .trim();
+
+const speechAliases: Record<string, string[]> = {
+  sofia: ["sophia", "sophie"],
+  noah: ["noa"],
+  mia: ["mya"],
+  ines: ["inez"],
+  louis: ["louie"],
+  raphael: ["rafael"],
+  zoe: ["zoey"],
+};
+
+function playerAliases(candidate: Game["players"][number]) {
+  const archetypeNoun = words(candidate.profile.archetype).split(" ").at(-1);
+  return [
+    words(candidate.name),
+    ...(speechAliases[words(candidate.name)] ?? []),
+    ...(archetypeNoun && archetypeNoun.length > 3 ? [archetypeNoun] : []),
+  ];
+}
+
 function mentionedPlayers(game: Game, text: string, actorId: string) {
-  const normalized = normalize(text);
-  return game.players
-    .filter((candidate) => candidate.alive && candidate.id !== actorId)
-    .filter((candidate) => normalized.includes(normalize(candidate.name)))
-    .sort((first, second) => second.name.length - first.name.length);
+  const candidates = game.players.filter(
+    (candidate) => candidate.alive && candidate.id !== actorId,
+  );
+  const aliases = new Map<string, number>();
+  for (const candidate of candidates) {
+    for (const alias of new Set(playerAliases(candidate)))
+      aliases.set(alias, (aliases.get(alias) ?? 0) + 1);
+  }
+
+  const spoken = ` ${words(text)} `;
+  return candidates
+    .flatMap((candidate) => {
+      const positions = playerAliases(candidate)
+        .filter((alias) => aliases.get(alias) === 1)
+        .map((alias) => spoken.indexOf(` ${alias} `))
+        .filter((position) => position >= 0);
+      const position = Math.min(...positions);
+      return Number.isFinite(position) ? [{ candidate, position }] : [];
+    })
+    .sort((first, second) => first.position - second.position)
+    .map(({ candidate }) => candidate);
 }
 
 function parseGameCommand(text: string, game: Game, actorId: string): ActionInput {
   const command = normalize(text);
   const actor = player(game, actorId);
   if (!actor) throw new Error("Your player is missing from this village.");
-  if (!command) throw new Error("Say a game command, such as ‘choose Camille’.");
+  if (!command) throw new Error("Say a game command, such as ‘choose Emma’.");
 
   const targets = mentionedPlayers(game, command, actorId);
   const target = targets[0];
-  const isExactTargetName = Boolean(target && command === normalize(target.name));
+  const targetOnly =
+    Boolean(target) &&
+    targets.length === 1 &&
+    words(command).split(" ").length <= 5 &&
+    !/\b(why|how|what|who|when|where|explain|tell|is|are|was|were|suspect|trust)\b/u.test(command);
   const choosesTarget =
-    isExactTargetName ||
-    /\b(choose|pick|select|target|go with|take|that one|this one)\b/u.test(command);
+    targetOnly ||
+    /\b(choose|pick|select|target|go with|take|that one|this one|make it|i want)\b/u.test(command);
   const movesOn =
-    /\b(pass|wait|skip|rest|dawn|continue|next|go on|nothing|do nothing|no action)\b/u.test(
+    /\b(pass|wait|skip|rest|dawn|morning|daybreak|continue|next|go on|move on|nothing|do nothing|no action|(?:i(?:'m| am)|we(?:'re| are)|all) done|that(?:'s| is) it|end (?:my )?turn|wrap (?:this|it) up|finish (?:the )?night|call it a night|go ahead|wake (?:everyone|everybody|the village)?|go to (?:the )?(?:morning|day|dawn)|ready (?:for|to) (?:morning|daylight|dawn))\b/u.test(
       command,
     );
   const chooseForMe =
     /\b(choose|pick|select|decide)\b.*\b(for me|someone|anyone|a player)\b/u.test(command) ||
-    /\b(surprise me|you decide)\b/u.test(command);
+    /\b(surprise me|you decide|you pick|your choice|whatever you think|anyone is fine|whoever you want|i don't mind|doesn't matter)\b/u.test(
+      command,
+    );
+  const huntIntent =
+    /\b(hunt|attack|kill|go after|get rid of|take out|finish off|take down|make .* disappear)\b/u.test(
+      command,
+    );
+  const investigateIntent =
+    /\b(investigate|check|inspect|see|look at|look into|check on|find out about|learn about|reveal|read)\b/u.test(
+      command,
+    );
+  const healIntent =
+    /\b(save|heal|rescue|protect|keep .* alive|use .* potion|help .* survive)\b/u.test(command);
+  const poisonIntent = /\b(poison|dose|kill|go after|get rid of|take out|finish off)\b/u.test(
+    command,
+  );
+  const voteIntent =
+    /\b(vote|choose|pick|select|eliminate|exile|remove|kick out|get rid of|take out|send (?:them|him|her|\w+) (?:home|away)|send home|drive out|banish|nominate|should (?:leave|go)|needs? to go|must go|goes home)\b/u.test(
+      command,
+    );
   const firstLivingOther = (
     predicate: (candidate: Game["players"][number]) => boolean = () => true,
   ) =>
@@ -102,15 +166,22 @@ function parseGameCommand(text: string, game: Game, actorId: string): ActionInpu
       (candidate) => candidate.alive && candidate.id !== actorId && predicate(candidate),
     );
 
-  if (/\b(pause|hold|freeze)\b.*\b(game|match|play)\b/u.test(command)) return { type: "pause" };
-  if (/\b(resume|continue|unpause)\b.*\b(game|match|play)\b/u.test(command))
+  if (
+    /\b(pause|hold|freeze|stop)\b.*\b(game|match|play|village)\b/u.test(command) ||
+    /\b(?:take|need) a break\b/u.test(command)
+  )
+    return { type: "pause" };
+  if (/\b(resume|continue|unpause|carry on)\b.*\b(game|match|play|village)\b/u.test(command))
     return { type: "resume" };
   if (game.paused) throw new Error("The game is paused. Say ‘resume game’ when you are ready.");
 
   if (game.phase === "prologue") {
-    if (/\b(begin|start|continue|skip|night|story|ready|next|go)\b/u.test(command))
+    if (
+      movesOn ||
+      /\b(begin|start|skip|night|story|ready|let(?:'s| us) go|get started)\b/u.test(command)
+    )
       return { type: "begin-story" };
-    throw new Error("Say ‘continue’, ‘I am ready’, or ‘begin the night’ when you are ready.");
+    throw new Error("Tell me when you are ready to move on, and I will begin the first night.");
   }
 
   if (game.phase === "cupid") {
@@ -123,37 +194,29 @@ function parseGameCommand(text: string, game: Game, actorId: string): ActionInpu
       if (choices.length === 2)
         return { type: "lovers", first: choices[0]!.id, second: choices[1]!.id };
     }
-    throw new Error(
-      "Name two players, for example ‘choose Camille and Jules’, or say ‘choose for me’.",
-    );
+    throw new Error("Name two players to bind together, or ask me to choose the pair for you.");
   }
 
   // Eliminated players retain only their Hunter shot or the ability to advance the story.
   if (!actor.alive && game.phase !== "hunter") {
-    if (/\b(continue|watch|keep going|next)\b/u.test(command)) return { type: "continue" };
-    throw new Error("You are out of the village. Say ‘continue watching’ to move the story on.");
+    if (movesOn || /\b(watch|keep going)\b/u.test(command)) return { type: "continue" };
+    throw new Error("You are out of the village. Tell me when you want the story to continue.");
   }
 
   if (game.phase === "night") {
     if (actor.role === "werewolf") {
       if (movesOn || /\b(delegate|pack decide|let the pack)\b/u.test(command))
         return { type: "night" };
-      if (target && (choosesTarget || /\b(hunt|attack|kill)\b/u.test(command)))
-        return { type: "night", target: target.id };
+      if (target && (choosesTarget || huntIntent)) return { type: "night", target: target.id };
       if (chooseForMe) {
         const automaticTarget = firstLivingOther((candidate) => candidate.role !== "werewolf");
         if (automaticTarget) return { type: "night", target: automaticTarget.id };
       }
-      throw new Error(
-        "Say ‘choose Camille’, ‘hunt Camille’, ‘choose for me’, or ‘let the pack decide’.",
-      );
+      throw new Error("Tell me who the pack should go after, or ask the pack to decide.");
     }
     if (actor.role === "seer") {
       if (movesOn) return { type: "night" };
-      if (
-        target &&
-        (choosesTarget || /\b(investigate|check|inspect|seer|see|look at|reveal)\b/u.test(command))
-      )
+      if (target && (choosesTarget || investigateIntent))
         return { type: "night", target: target.id };
       if (chooseForMe) {
         const automaticTarget = firstLivingOther(
@@ -162,13 +225,12 @@ function parseGameCommand(text: string, game: Game, actorId: string): ActionInpu
         if (automaticTarget) return { type: "night", target: automaticTarget.id };
       }
       throw new Error(
-        "Say ‘choose Camille’, ‘investigate Camille’, ‘choose for me’, or ‘wait for dawn’.",
+        "Tell me whom you want to look into, ask me to choose, or tell me to move on.",
       );
     }
     if (actor.role === "witch") {
-      if (/\b(save|heal|rescue)\b/u.test(command)) return { type: "night", heal: true };
-      if (target && (choosesTarget || /\b(poison|dose|kill)\b/u.test(command)))
-        return { type: "night", poison: target.id };
+      if (healIntent) return { type: "night", heal: true };
+      if (target && (choosesTarget || poisonIntent)) return { type: "night", poison: target.id };
       if (movesOn) return { type: "night" };
       if (chooseForMe) {
         if (game.wolfVictimId && game.witchHealAvailable) return { type: "night", heal: true };
@@ -176,15 +238,16 @@ function parseGameCommand(text: string, game: Game, actorId: string): ActionInpu
         if (automaticTarget && game.witchPoisonAvailable)
           return { type: "night", poison: automaticTarget.id };
       }
-      throw new Error("Say ‘save’, ‘choose Camille’ to poison, ‘choose for me’, or ‘pass’.");
+      throw new Error(
+        "Tell me whether to save the victim, poison someone, move on, or choose for you.",
+      );
     }
     if (movesOn) return { type: "night" };
-    throw new Error("It is night. Say ‘continue’, ‘wait for dawn’, or ‘do nothing’.");
+    throw new Error("It is night. Tell me when you are ready for morning.");
   }
 
   if (game.phase === "day") {
-    const directVote =
-      target && /\b(vote|choose|pick|select|eliminate|exile|remove|kick out)\b/u.test(command);
+    const directVote = target && voteIntent;
     // A spoken vote is complete in one sentence: it opens the vote, lets bots vote,
     // and records the player’s vote in the same authoritative action.
     if (directVote) return { type: "vote", target: target.id };
@@ -192,9 +255,14 @@ function parseGameCommand(text: string, game: Game, actorId: string): ActionInpu
       const automaticTarget = firstLivingOther();
       if (automaticTarget) return { type: "vote", target: automaticTarget.id };
     }
-    if (/\b(begin|start|call|open|time for)\b.*\bvote\b/u.test(command))
+    if (
+      /\b(begin|start|call|open|time for)\b.*\bvote\b/u.test(command) ||
+      /\b(?:time to|let(?:'s| us)|we should) (?:vote|decide)\b/u.test(command) ||
+      /\bmake (?:a )?decision\b/u.test(command)
+    )
       return { type: "begin-vote" };
-    if (/\b(discuss|discussion|hear|listen|talk)\b/u.test(command)) return { type: "discuss" };
+    if (!target && /\b(discuss|discussion|hear|listen|talk|what .* think)\b/u.test(command))
+      return { type: "discuss" };
     const speech = text
       .trim()
       .match(/^(?:say|speak|tell(?: the)? (?:village|everyone)|message)\s+(.+)$/iu)?.[1];
@@ -204,23 +272,26 @@ function parseGameCommand(text: string, game: Game, actorId: string): ActionInpu
   }
 
   if (game.phase === "vote") {
-    if (target && (choosesTarget || /\b(vote|eliminate|exile|remove)\b/u.test(command)))
-      return { type: "vote", target: target.id };
+    if (target && (choosesTarget || voteIntent)) return { type: "vote", target: target.id };
     if (chooseForMe) {
       const automaticTarget = firstLivingOther();
       if (automaticTarget) return { type: "vote", target: automaticTarget.id };
     }
-    throw new Error("Name someone to vote for, for example ‘choose Camille’ or ‘choose for me’.");
+    throw new Error("Tell me who should leave the village, or ask me to choose for you.");
   }
 
   if (game.phase === "hunter") {
-    if (target && (choosesTarget || /\b(shoot|fire|take|kill)\b/u.test(command)))
+    if (
+      target &&
+      (choosesTarget ||
+        /\b(shoot|fire|take|kill|take .* with me|go after|get rid of|take out)\b/u.test(command))
+    )
       return { type: "hunter-shot", target: target.id };
     if (chooseForMe) {
       const automaticTarget = firstLivingOther();
       if (automaticTarget) return { type: "hunter-shot", target: automaticTarget.id };
     }
-    throw new Error("Name a player to shoot, for example ‘choose Camille’ or ‘choose for me’.");
+    throw new Error("Tell me who you want to take with you, or ask me to choose for you.");
   }
 
   throw new Error("There is no available game action for that command.");
@@ -411,24 +482,24 @@ export const loupsGarous: GameModule<Game, CreateInput, ActionInput, GameView> =
             )?.id;
             if (!targetId) throw new Error("The pack has no one left to hunt.");
           }
+          const target = player(game, targetId);
+          if (!target?.alive || target.role === "werewolf")
+            throw new Error("Choose a living player outside the pack.");
           for (const wolf of game.players.filter(
             (candidate) => candidate.alive && candidate.role === "werewolf",
           ))
             wolf.nightAction = { kind: "wolf", targetId };
           game.wolfVictimId = targetId;
-          const target = player(game, targetId);
-          if (target) {
-            game.feed.push({
-              id: crypto.randomUUID(),
-              day: game.day,
-              speaker: "Private • Pack",
-              text: selectedByPlayer
-                ? `You chose ${target.name}. The pack carries out the hunt.`
-                : `The pack chose ${target.name}. The hunt is underway.`,
-              kind: "private",
-              recipientId: human.id,
-            });
-          }
+          game.feed.push({
+            id: crypto.randomUUID(),
+            day: game.day,
+            speaker: "Private • Pack",
+            text: selectedByPlayer
+              ? `You chose ${target.name}. The pack carries out the hunt.`
+              : `The pack chose ${target.name}. The hunt is underway.`,
+            kind: "private",
+            recipientId: human.id,
+          });
         } else if (human.role === "seer") {
           if (action.target)
             submitNightAction(game, human.id, { kind: "seer", targetId: action.target });
@@ -465,7 +536,7 @@ export const loupsGarous: GameModule<Game, CreateInput, ActionInput, GameView> =
         await fillAiVotes(game);
         break;
       case "vote":
-        // Voice users can say “vote for Camille” from discussion. Open the vote
+        // Voice users can say “vote for Emma” from discussion. Open the vote
         // first so that sentence performs the same complete action as the UI flow.
         if (game.phase === "day") {
           beginVote(game);

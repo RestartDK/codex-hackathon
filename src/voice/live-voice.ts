@@ -1,25 +1,19 @@
 export type LiveVoiceSession = {
   stop: () => void;
-  /**
-   * Live output is reserved for open guide questions. Game commands are spoken
-   * by the app after their result has been validated, so the two paths never
-   * narrate the same outcome.
-   */
-  setGuideAudioEnabled: (enabled: boolean) => void;
 };
 
 export type LiveVoiceCallbacks = {
   onStatus: (message: string) => void;
   onInputTranscript: (text: string) => void;
   onInputTranscriptComplete: (text: string) => void;
-  onGuideReply: (text: string) => void;
   onClosed: () => void;
 };
 
 export type StartLiveVoiceOptions = LiveVoiceCallbacks & {
   gameId: string;
   sessionToken: string;
-  signal: AbortSignal;
+  /** Lets an owning screen cancel startup before a microphone or connection leaks. */
+  signal?: AbortSignal;
 };
 
 type LiveTransportEvent = {
@@ -38,7 +32,6 @@ export async function startLiveVoice({
   onStatus,
   onInputTranscript,
   onInputTranscriptComplete,
-  onGuideReply,
   onClosed,
   signal,
 }: StartLiveVoiceOptions): Promise<LiveVoiceSession> {
@@ -48,102 +41,100 @@ export async function startLiveVoice({
   let peerConnection: RTCPeerConnection | undefined;
   let stream: MediaStream | undefined;
   let dataChannel: RTCDataChannel | undefined;
-  let audio: HTMLAudioElement | undefined;
   let closed = false;
-  let outputTranscript = "";
   let inputTranscript = "";
   let inputPauseTimer: number | undefined;
-  let outputPauseTimer: number | undefined;
-  let resumeAudioOnGesture: (() => void) | undefined;
-  let guideAudioEnabled = false;
+  let inputTurnFinalized = false;
+  let transcriptTransport: "live" | "compatibility" | undefined;
+  let stopOnAbort: (() => void) | undefined;
 
-  const applyGuideAudioState = () => {
-    if (audio) audio.muted = !guideAudioEnabled;
+  const throwIfAborted = () => {
+    if (signal?.aborted)
+      throw signal.reason ?? new DOMException("The operation was aborted.", "AbortError");
   };
 
-  const flushInputTranscript = () => {
-    const transcript = inputTranscript.trim();
+  const clearInputPauseTimer = () => {
+    if (inputPauseTimer !== undefined) window.clearTimeout(inputPauseTimer);
+    inputPauseTimer = undefined;
+  };
+
+  const finalizeInputTranscript = (completedTranscript?: string) => {
+    if (closed || inputTurnFinalized) return;
+    const transcript = (completedTranscript ?? inputTranscript).trim();
     inputTranscript = "";
-    if (transcript) onInputTranscriptComplete(transcript);
+    clearInputPauseTimer();
+    if (!transcript) return;
+    inputTurnFinalized = true;
+    onInputTranscriptComplete(transcript);
   };
 
-  const flushOutputTranscript = () => {
-    const transcript = outputTranscript.trim();
-    outputTranscript = "";
-    if (transcript && guideAudioEnabled) onGuideReply(transcript);
-    onStatus("Listening…");
+  const queueInputTranscript = (text: string) => {
+    if (inputTurnFinalized) inputTurnFinalized = false;
+    inputTranscript += text;
+    onInputTranscript(text);
+    clearInputPauseTimer();
+    // GPT-Live streams transcript fragments without a final-turn event. A
+    // short pause lets a natural multiword command complete without restoring
+    // the former near-second delay.
+    inputPauseTimer = window.setTimeout(() => finalizeInputTranscript(), 650);
   };
 
-  const release = () => {
-    if (inputPauseTimer) window.clearTimeout(inputPauseTimer);
-    if (outputPauseTimer) window.clearTimeout(outputPauseTimer);
-    if (resumeAudioOnGesture) window.removeEventListener("pointerdown", resumeAudioOnGesture);
+  const stop = (status = "Voice is off") => {
+    if (closed) return;
+    closed = true;
+    clearInputPauseTimer();
+    if (stopOnAbort) signal?.removeEventListener("abort", stopOnAbort);
     dataChannel?.close();
     dataChannel = undefined;
     stream?.getTracks().forEach((track) => track.stop());
     stream = undefined;
     peerConnection?.close();
     peerConnection = undefined;
-    if (audio) {
-      audio.pause();
-      audio.srcObject = null;
-      audio = undefined;
-    }
-  };
-
-  const stop = (status = "Voice is off") => {
-    release();
-    if (closed) return;
-    closed = true;
-    signal.removeEventListener("abort", stopOnAbort);
     onClosed();
     onStatus(status);
   };
 
-  const stopOnAbort = () => stop();
-
-  signal.addEventListener("abort", stopOnAbort, { once: true });
+  stopOnAbort = () => stop();
+  signal?.addEventListener("abort", stopOnAbort, { once: true });
 
   try {
-    signal.throwIfAborted();
+    throwIfAborted();
     onStatus("Requesting microphone…");
-    stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    signal.throwIfAborted();
+    stream = await navigator.mediaDevices.getUserMedia({
+      audio: {
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true,
+      },
+    });
+    throwIfAborted();
     peerConnection = new RTCPeerConnection();
     dataChannel = peerConnection.createDataChannel("oai-events");
     dataChannel.onmessage = (event) => {
       try {
         const payload = JSON.parse(String(event.data)) as LiveTransportEvent;
         const text = payload.delta ?? payload.transcript;
-        // GPT-Live streams transcript fragments without a final-turn event.
-        // A short quiet period marks one completed player command.
         if (payload.type === "session.input_transcript.delta" && text) {
-          inputTranscript += text;
-          onInputTranscript(text);
-          if (inputPauseTimer) window.clearTimeout(inputPauseTimer);
-          inputPauseTimer = window.setTimeout(flushInputTranscript, 900);
+          transcriptTransport = "live";
+          queueInputTranscript(text);
         }
-        if (payload.type === "session.output_transcript.delta" && text) {
-          outputTranscript += text;
-          if (guideAudioEnabled) onStatus("Guide is speaking…");
-          if (outputPauseTimer) window.clearTimeout(outputPauseTimer);
-          outputPauseTimer = window.setTimeout(flushOutputTranscript, 900);
-        }
-        // Realtime compatibility remains useful for a future Realtime transport,
-        // but GPT-Live sessions use the two session transcript events above.
-        if (payload.type === "conversation.item.input_audio_transcription.delta" && text)
-          onInputTranscript(text);
-        if (payload.type === "conversation.item.input_audio_transcription.completed" && text)
-          onInputTranscriptComplete(text);
+        // Retain a Realtime-compatible input path for older transports. Once
+        // GPT-Live transcript events arrive, ignore a later compatibility
+        // completion event so one spoken command cannot run twice.
         if (
-          (payload.type === "response.output_audio_transcript.done" ||
-            payload.type === "session.output_transcript.done") &&
-          (text || outputTranscript.trim())
+          transcriptTransport !== "live" &&
+          payload.type === "conversation.item.input_audio_transcription.delta" &&
+          text
         ) {
-          const transcript = (payload.transcript ?? outputTranscript).trim();
-          if (transcript && guideAudioEnabled) onGuideReply(transcript);
-          outputTranscript = "";
-          onStatus("Listening…");
+          transcriptTransport = "compatibility";
+          queueInputTranscript(text);
+        }
+        if (
+          transcriptTransport !== "live" &&
+          payload.type === "conversation.item.input_audio_transcription.completed"
+        ) {
+          transcriptTransport = "compatibility";
+          finalizeInputTranscript(text);
         }
         if (payload.type === "error") stop("Live voice reported an error. End and try again.");
       } catch {
@@ -151,28 +142,15 @@ export async function startLiveVoice({
       }
     };
     dataChannel.onerror = () => stop("Live voice connection had an error.");
-    peerConnection.ontrack = (event) => {
-      audio = new Audio();
-      audio.autoplay = true;
-      audio.srcObject = event.streams[0] ?? new MediaStream([event.track]);
-      applyGuideAudioState();
-      void audio.play().catch(() => {
-        onStatus("Tap anywhere once to hear the guide.");
-        resumeAudioOnGesture = () => {
-          void audio?.play().catch(() => undefined);
-        };
-        window.addEventListener("pointerdown", resumeAudioOnGesture, { once: true, passive: true });
-      });
-    };
+    // This connection is transcription-only. Deliberately leave incoming model
+    // media unattached so it can never overlap the app's single narrator.
     peerConnection.onconnectionstatechange = () => {
       if (peerConnection?.connectionState === "failed")
         stop("Live voice connection failed. End and try again.");
     };
     stream.getTracks().forEach((track) => peerConnection!.addTrack(track, stream!));
     const offer = await peerConnection.createOffer();
-    signal.throwIfAborted();
     await peerConnection.setLocalDescription(offer);
-    signal.throwIfAborted();
     const response = await fetch(`/api/games/${gameId}/voice`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "X-Game-Session": sessionToken },
@@ -181,16 +159,10 @@ export async function startLiveVoice({
     });
     const data = await response.json();
     if (!response.ok) throw new Error(data.error ?? "Could not start live voice.");
-    signal.throwIfAborted();
+    throwIfAborted();
     await peerConnection.setRemoteDescription({ type: "answer", sdp: data.sdp });
-    signal.throwIfAborted();
-    return {
-      stop: () => stop(),
-      setGuideAudioEnabled(enabled) {
-        guideAudioEnabled = enabled;
-        applyGuideAudioState();
-      },
-    };
+    throwIfAborted();
+    return { stop: () => stop() };
   } catch (cause) {
     stop();
     throw cause;

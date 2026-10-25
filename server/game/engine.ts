@@ -19,36 +19,35 @@ const villagerProfiles = [
   {
     archetype: "The observant baker",
     speakingStyle: "Measured, precise, and fond of asking one more question.",
-    introduction:
-      "I am Camille. I notice who arrives late for bread, and who avoids meeting my eyes.",
-    voiceKey: "camille",
+    introduction: "I am Emma. I notice who arrives late for bread, and who avoids meeting my eyes.",
+    voiceKey: "emma",
   },
   {
     archetype: "The travelling cartographer",
     speakingStyle: "Warm, curious, and always compares two stories before deciding.",
     introduction:
-      "Jules here. A map only makes sense when every path joins up, and so should our stories.",
-    voiceKey: "jules",
+      "Lucas here. A map only makes sense when every path joins up, and so should our stories.",
+    voiceKey: "lucas",
   },
   {
     archetype: "The village herbalist",
     speakingStyle: "Quiet, thoughtful, and unexpectedly direct when pressed.",
     introduction:
-      "I am Noémie. I prefer evidence to noise, but I will say when something does not add up.",
-    voiceKey: "noemie",
+      "I am Sofia. I prefer evidence to noise, but I will say when something does not add up.",
+    voiceKey: "sofia",
   },
   {
     archetype: "The night watchmaker",
     speakingStyle: "Dry, blunt, and alert to small inconsistencies.",
-    introduction: "Théo. Clocks do not lie, though people sometimes do. I will be listening.",
-    voiceKey: "theo",
+    introduction: "Noah. Clocks do not lie, though people sometimes do. I will be listening.",
+    voiceKey: "noah",
   },
   {
     archetype: "The innkeeper",
     speakingStyle: "Protective, practical, and willing to change her mind.",
     introduction:
-      "Manon. I have heard every excuse made over my tables. Give me a reason, not a performance.",
-    voiceKey: "manon",
+      "Mia. I have heard every excuse made over my tables. Give me a reason, not a performance.",
+    voiceKey: "mia",
   },
   {
     archetype: "The schoolmaster",
@@ -99,6 +98,19 @@ const humanProfile = {
   introduction: "",
   voiceKey: "player",
 };
+const villagerNames = [
+  "Emma",
+  "Lucas",
+  "Sofia",
+  "Noah",
+  "Mia",
+  "Hugo",
+  "Inès",
+  "Louis",
+  "Mila",
+  "Raphaël",
+  "Zoé",
+] as const;
 const roleSequence = (counts: RoleCounts): Role[] =>
   (Object.entries(counts) as [Role, number][]).flatMap(([role, count]) =>
     Array.from({ length: count }, () => role),
@@ -142,24 +154,12 @@ export function createGame(
     hasDawned: false,
     players: roles.map((role, i) => ({
       id: i === 0 ? "human" : `npc-${i}`,
-      name:
-        i === 0
-          ? name.trim().slice(0, 32) || "You"
-          : ([
-              "Camille",
-              "Jules",
-              "Noémie",
-              "Théo",
-              "Manon",
-              "Hugo",
-              "Inès",
-              "Louis",
-              "Mila",
-              "Raphaël",
-              "Zoé",
-            ][i - 1] ?? `Villager ${i}`),
+      name: i === 0 ? name.trim().slice(0, 32) || "You" : (villagerNames[i - 1] ?? `Villager ${i}`),
       role,
-      controller: i === 0 ? "human" : (options.controllers?.[`npc-${i}`] ?? "agent"),
+      // Local bots are the standard game mode: each choice is computed from the
+      // current public state synchronously, so a turn never waits on several
+      // model calls. A caller can still opt a specific NPC into an LLM agent.
+      controller: i === 0 ? "human" : (options.controllers?.[`npc-${i}`] ?? "bot"),
       alive: true,
       bio:
         i === 0 ? "A new face in a village full of secrets." : villagerProfiles[i - 1]!.archetype,
@@ -486,6 +486,13 @@ export function resolveVote(game: Game, random: () => number = Math.random) {
       : game.tieRule === "random-among-tied"
         ? tied[Math.floor(random() * tied.length)]
         : undefined;
+  game.lastVoteResult = {
+    day: game.day,
+    ballots,
+    tally: [...counts].map(([target, votes]) => ({ target, votes })),
+    tiedTargetIds: tied,
+    ...(exiledId ? { exiledPlayerId: exiledId } : {}),
+  };
   game.players.forEach((p) => {
     p.voteId = undefined;
   });
@@ -553,7 +560,7 @@ export function view(game: Game, viewerId: string): GameView {
       controller,
       bio,
       profile,
-      ...(game.phase === "over" ? { revealedRole: role } : {}),
+      ...(game.phase === "over" || !alive ? { revealedRole: role } : {}),
       ...(controller === "agent" ? { agentMode } : {}),
     })),
     me: {
@@ -575,7 +582,9 @@ export function view(game: Game, viewerId: string): GameView {
       hunterActionPending: game.pendingHunters[0] === me.id,
     },
     feed: publicFeed,
-    ...(game.phase === "over" ? { lastVotes: game.lastVotes, winner: game.winner } : {}),
+    ...(game.lastVotes ? { lastVotes: game.lastVotes } : {}),
+    ...(game.lastVoteResult ? { lastVoteResult: game.lastVoteResult } : {}),
+    ...(game.phase === "over" ? { winner: game.winner } : {}),
     tieRule: game.tieRule,
     modelMode: game.players.some((p) => p.controller === "agent" && p.agentMode === "llm")
       ? "llm"
