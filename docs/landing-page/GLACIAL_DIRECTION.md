@@ -61,5 +61,7 @@ high-density resizing are handled by the landing-page adapter.
 Validated in the browser: all three orbs render without console errors, pause
 produces identical orb pixels across separate captures, and the 390px mobile
 layout has no horizontal overflow. The production bundle builds successfully.
-The full TypeScript check remains blocked by the existing plugin type mismatch
-at `vite.config.ts:29` on the current main branch.
+At the time of that update, the full TypeScript check was blocked by a plugin type
+mismatch at `vite.config.ts:29`. The local baseline on 25 October 2026 passed
+`bun run typecheck` and the production build with the frozen lockfile; that
+mismatch did not reproduce and required no configuration workaround.

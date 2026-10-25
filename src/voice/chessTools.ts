@@ -28,7 +28,7 @@ export interface ChessToolBridge {
   game: Chess;
   history: string[];
   playerColor: Color;
-  view: AvailableDestination | "loading";
+  view: AvailableDestination | "loading" | "chess-setup";
   navigate: (destination: AvailableDestination) => string;
   awaitingStartChoice?: boolean;
   isTerminated?: boolean;
@@ -47,6 +47,7 @@ export interface ChessToolBridge {
     | { ok: false; message: string }
   >;
   newGame: () => void;
+  startDefaultGame?: () => void;
   resumeGame?: () => void | { ok: boolean; message: string };
   pauseGame?: () => void | { ok: boolean; message: string };
   undoMove: () => void | { ok: boolean; message: string };
@@ -154,7 +155,7 @@ export function createChessToolExecutor(
       invalidatePending();
       if (
         (destination === "home" || destination === "loups-garous") &&
-        bridge.view !== "home" &&
+        bridge.view === "chess" &&
         bridge.history.length > 0 &&
         !bridge.awaitingStartChoice &&
         !bridge.isPaused &&
@@ -461,7 +462,10 @@ export function createChessToolExecutor(
           "Start a new game and clear the current position",
           () => {
             bridge.newGame();
-            return { ok: true, message: "A new game has started. Would you like the quick guide?" };
+            return {
+              ok: true,
+              message: "Chess setup is open. Choose your preferences before starting.",
+            };
           },
           "game-control",
         );

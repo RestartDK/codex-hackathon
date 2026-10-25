@@ -7,6 +7,7 @@ import { useChessCompanion } from "../voice/useChessCompanion";
 import { PLAYABLE_GAMES_LABEL, type AvailableDestination } from "../voice/navigation";
 import GamePicker from "../components/PlayByVoice/GamePicker";
 import ChessView from "../components/PlayByVoice/ChessView";
+import ChessSetup, { type ChessSetupSelection } from "../components/PlayByVoice/ChessSetup";
 import AudioSettings from "../components/PlayByVoice/AudioSettings";
 import Help from "../components/PlayByVoice/Help";
 import CompanionDock from "../components/PlayByVoice/CompanionDock";
@@ -19,9 +20,20 @@ import "./App.css";
 type View =
   | { kind: "home" }
   | { kind: "loading" }
+  | { kind: "chess-setup" }
   | { kind: "chess" }
-  | { kind: "audio" | "help"; returnTo: "home" | "chess" };
+  | { kind: "audio" | "help"; returnTo: "home" | "loading" | "chess-setup" | "chess" };
 type PreferenceChange = { kind: "color"; value: Color } | { kind: "mode"; value: GameMode };
+
+function defaultChessSetup(): ChessSetupSelection {
+  return {
+    gameMode: "computer",
+    difficulty: "beginner",
+    playerColor: "w",
+    timerMinutes: null,
+    explainRules: false,
+  };
+}
 
 export default function PlayByVoiceApp({
   preferences,
@@ -47,27 +59,19 @@ export default function PlayByVoiceApp({
     switch (destination) {
       case "chess":
         if (view.kind !== "chess") setView({ kind: "loading" });
-        if (session.awaitingStartChoice)
-          return `Chess is open. A saved game with ${session.history.length} moves is waiting. Would you like to resume or start a new game?`;
-        if (session.isPaused)
-          return "Chess is open. Your position is saved. Say resume to continue.";
-        if (resultMessage)
-          return `Chess is open. ${resultMessage} You can review the moves or request a new game.`;
-        return `Chess is ready. ${settings.gameMode === "local" ? "This is a local two-player game." : `You play ${settings.playerColor === "w" ? "White" : "Black"}.`} ${session.history.length > 0 ? "Ask about the current board or request your next move." : "Would you like a quick spoken guide, or do you already know the rules?"}`;
+        return view.kind === "chess"
+          ? "Chess is already open. You can make a move, ask for a hint, or start a new game."
+          : "Chess is loading. Setup will open when the chess engine is ready.";
       case "loups-garous":
         onPlayLoupsGarous();
         return "Loups-Garous is open. Say start the game. Use Games to return to the game picker.";
       case "home":
+        if (view.kind === "loading") session.cancelStockfishPreparation();
         setView({ kind: "home" });
         return `You are back at the game picker. ${session.history.length > 0 ? "Your chess position is saved. Say play chess to return." : "Say play chess to begin."} ${PLAYABLE_GAMES_LABEL} are ready to play. Tic-Tac-Toe is coming soon.`;
       case "audio":
       case "help": {
-        const returnTo =
-          view.kind === "chess" || view.kind === "loading"
-            ? "chess"
-            : view.kind === "home"
-              ? "home"
-              : view.returnTo;
+        const returnTo = view.kind === "audio" || view.kind === "help" ? view.returnTo : view.kind;
         setView({ kind: destination, returnTo });
         return destination === "audio"
           ? "Audio settings are open. Adjust narrator volume, game sounds, or chess preferences. Say play chess to return to the board."
@@ -90,8 +94,10 @@ export default function PlayByVoiceApp({
       makeMove: session.makeMove,
       getHint: session.getHint,
       newGame: () => {
-        session.newGame();
-        setView({ kind: "chess" });
+        setView({ kind: "chess-setup" });
+      },
+      startDefaultGame: () => {
+        if (view.kind === "chess-setup") startChess(defaultChessSetup());
       },
       resumeGame: session.resumeGame,
       pauseGame: session.pauseGame,
@@ -103,16 +109,40 @@ export default function PlayByVoiceApp({
     resultMessage,
   );
 
+  function startChess(selection: ChessSetupSelection) {
+    const applied = {
+      gameMode: selection.gameMode,
+      difficulty: selection.difficulty,
+      playerColor: selection.playerColor,
+    };
+    preferences.applyChessSetup(applied);
+    session.startConfiguredGame(applied);
+    setDismissedResult(null);
+    setView({ kind: "chess" });
+    const color = selection.playerColor === "w" ? "White" : "Black";
+    const turn = selection.playerColor === "b" ? "White" : color;
+    companion.announce(
+      `You play ${color}. ${turn} to move.${selection.explainRules ? " Use the board or say a move such as e2 to e4. You can ask for a hint, board description, undo, pause, or help." : ""}`,
+    );
+  }
+
+  const stockfishStatus = session.stockfishStatus;
+  const prepareStockfish = session.prepareStockfish;
+  const announce = companion.announce;
+
   useEffect(() => {
     if (view.kind !== "loading") return;
-    if (
-      settings.gameMode === "computer" &&
-      (session.stockfishStatus === "loading" || session.stockfishStatus === "unloaded")
-    )
+    if (stockfishStatus === "unloaded") {
+      prepareStockfish();
       return;
-    const frame = requestAnimationFrame(() => setView({ kind: "chess" }));
+    }
+    if (stockfishStatus === "loading" || stockfishStatus === "error") return;
+    const frame = requestAnimationFrame(() => {
+      announce("Chess setup is ready. Choose each preference, or say start with the defaults.");
+      setView({ kind: "chess-setup" });
+    });
     return () => cancelAnimationFrame(frame);
-  }, [view.kind, session.stockfishStatus, settings.gameMode]);
+  }, [view.kind, stockfishStatus, prepareStockfish, announce]);
 
   useEffect(() => {
     window.scrollTo(0, 0);
@@ -135,6 +165,8 @@ export default function PlayByVoiceApp({
     showResult,
   );
   const chessVisible = view.kind === "chess";
+  const chessContextVisible =
+    view.kind === "loading" || view.kind === "chess-setup" || view.kind === "chess";
 
   useEffect(() => {
     if (!hasDialog) return;
@@ -148,7 +180,7 @@ export default function PlayByVoiceApp({
   return (
     <>
       <div
-        className={`pbv-shell page-${view.kind}${chessVisible ? " theme-green" : ""}`}
+        className={`pbv-shell page-${view.kind}${view.kind === "chess-setup" || chessVisible ? " theme-green" : ""}`}
         inert={hasDialog || undefined}
       >
         <a href="#main-content" className="skip-link">
@@ -158,13 +190,19 @@ export default function PlayByVoiceApp({
           <button
             className="brand"
             onClick={() => {
-              void companion.navigate("home");
+              if (view.kind === "loading" || view.kind === "chess-setup") {
+                if (view.kind === "loading") session.cancelStockfishPreparation();
+                companion.cancelPending();
+                setView({ kind: "home" });
+              } else {
+                void companion.navigate("home");
+              }
             }}
             aria-label="Play by Voice, game picker"
           >
             Play by Voice
           </button>
-          {(chessVisible || view.kind === "loading") && (
+          {chessContextVisible && (
             <span className="header-game">
               <span aria-hidden="true">•</span> Chess
             </span>
@@ -192,22 +230,61 @@ export default function PlayByVoiceApp({
           {view.kind === "home" && <GamePicker companion={companion} />}
           {view.kind === "loading" && (
             <section className="loading-page" aria-labelledby="page-heading">
-              <div className="loading-center" role="status">
-                <span className="game-shape triangle rotating-shape" aria-hidden="true" />
-                <h1 id="page-heading" tabIndex={-1}>
-                  Loading
-                </h1>
-                <p>Getting your chessboard ready.</p>
-              </div>
-              <button
-                className="loading-back"
-                onClick={() => {
-                  void companion.navigate("home");
-                }}
-              >
-                Go back to main
-              </button>
+              {session.stockfishStatus === "error" ? (
+                <div className="loading-error" role="alert">
+                  <h1 id="page-heading" tabIndex={-1}>
+                    Chess could not load
+                  </h1>
+                  <p>{session.stockfishError ?? "The chess engine could not be initialized."}</p>
+                  <div>
+                    <button type="button" onClick={session.retryStockfish}>
+                      Retry
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        session.cancelStockfishPreparation();
+                        companion.cancelPending();
+                        setView({ kind: "home" });
+                      }}
+                    >
+                      Back to games
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="loading-center" role="status" aria-live="polite">
+                  <div className="loading-visual" aria-hidden="true">
+                    <span className="loading-triangle" />
+                    <h1 id="page-heading" tabIndex={-1}>
+                      Loading
+                    </h1>
+                  </div>
+                  <span className="sr-only">Preparing the chess engine and board.</span>
+                </div>
+              )}
+              {session.stockfishStatus !== "error" && (
+                <button
+                  className="loading-back"
+                  onClick={() => {
+                    session.cancelStockfishPreparation();
+                    companion.cancelPending();
+                    setView({ kind: "home" });
+                  }}
+                >
+                  Go back to main
+                </button>
+              )}
             </section>
+          )}
+          {view.kind === "chess-setup" && (
+            <ChessSetup
+              onCancel={() => {
+                companion.cancelPending();
+                setView({ kind: "home" });
+              }}
+              onStart={startChess}
+            />
           )}
           {view.kind === "chess" && (
             <ChessView session={session} settings={settings} companion={companion} />
@@ -216,7 +293,7 @@ export default function PlayByVoiceApp({
             <AudioSettings
               preferences={preferences}
               onBack={() => {
-                void companion.navigate(view.returnTo);
+                setView({ kind: view.returnTo });
               }}
               onColorChange={(value) => {
                 if (value !== settings.playerColor) setPreferenceChange({ kind: "color", value });
@@ -230,14 +307,14 @@ export default function PlayByVoiceApp({
             <Help
               companion={companion}
               onBack={() => {
-                void companion.navigate(view.returnTo);
+                setView({ kind: view.returnTo });
               }}
             />
           )}
         </main>
         <CompanionDock
           companion={companion}
-          green={chessVisible}
+          green={view.kind === "chess-setup" || chessVisible}
           screenReaderMode={settings.screenReaderMode}
         />
       </div>

@@ -19,17 +19,24 @@ The locked shell provides Nix-packaged Node 26.12.1, matching `.node-version`, a
 Without Nix, install a Node version allowed by `package.json` and the declared Bun version (`bun@1.4.4`). In either environment, run:
 
 ```sh
-bun install
+bun install --frozen-lockfile
 bun run dev
 ```
 
-Open http://localhost:3000. Games run without a provider key; the guide responds from local game rules and NPCs use deterministic bots. To enable model-driven guide and NPC replies, copy `.env.example` to `.env` and set `OPENAI_API_KEY`. The configured defaults are `OPENAI_VOICE_MODEL=gpt-live-1`, `OPENAI_DELEGATION_MODEL=gpt-6-luna`, and `OPENAI_NPC_MODEL=gpt-6-luna`. Provider credentials are read only by Nitro and are never sent to the browser.
+Open the URL printed by Vite+ (normally http://localhost:3000; it selects another port when occupied). Games run without a provider key; the guide responds from local game rules and NPCs use deterministic bots. To enable model-driven guide and NPC replies, copy `.env.example` to `.env` and set `OPENAI_API_KEY`. The configured defaults are `OPENAI_VOICE_MODEL=gpt-live-1`, `OPENAI_DELEGATION_MODEL=gpt-6-luna`, and `OPENAI_NPC_MODEL=gpt-6-luna`. Provider credentials are read only by Nitro and are never sent to the browser.
+
+Chess live voice also requires this server-side key, provider model access, network connectivity, and microphone permission. Without credentials, use the board or typed commands; the quick guide uses browser speech synthesis. Loups-Garous can use browser speech recognition and browser narration without an API key, where supported; recognition may use the browser vendor's network service. Its guide and NPCs fall back to local behavior. Provider narration and the WebRTC fallback require credentials. Restart the server after editing `.env`.
+
+For a user-local Bun installation, run `npm install --global --prefix "$HOME/.bun" bun@1.4.4`, then add `$HOME/.bun/bin` to your shell's `PATH` (or use `~/.bun/bin/bun` directly).
 
 ## Checks and production
+
+See [the verified local baseline](docs/local-baseline.md) for setup results, browser smoke coverage, and remaining limitations.
 
 ```sh
 bun run check
 bun run typecheck
+bun run lint
 bun run test
 bun run build
 bun run start

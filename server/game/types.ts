@@ -114,6 +114,8 @@ export interface GameView {
   me: PlayerPrivateView;
   feed: FeedEntry[];
   lastVotes?: Array<{ voter: string; target: string }>;
+  /** Current voting round only: votes received by each living player. */
+  voteTally?: Record<string, number>;
   winner?: Winner;
   tieRule: TieRule;
   modelMode: "llm" | "fallback";

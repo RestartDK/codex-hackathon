@@ -46,6 +46,8 @@ const actionSchema = z.discriminatedUnion("type", [
     type: z.literal("night"),
     target: z.string().optional(),
     heal: z.boolean().optional(),
+    /** The Witch saves this player; it must be tonight's Werewolf target. */
+    save: z.string().optional(),
     poison: z.string().optional(),
   }),
   z.object({ type: z.literal("speak"), message: z.string().max(400) }),
@@ -166,7 +168,22 @@ function parseGameCommand(text: string, game: Game, actorId: string): ActionInpu
       );
     }
     if (actor.role === "witch") {
-      if (/\b(save|heal|rescue)\b/u.test(command)) return { type: "night", heal: true };
+      const victimId = game.witchHealAvailable ? game.wolfVictimId : undefined;
+      // Naming tonight's victim, including “me” when the Witch is the victim, uses the heal,
+      // matching the victim's card on screen.
+      const savesSelf =
+        victimId === actor.id &&
+        /\b(me|myself|my own|you)\b/u.test(command) &&
+        /\b(save|heal|rescue|choose|pick|select)\b/u.test(command);
+      if (savesSelf) return { type: "night", save: actor.id };
+      if (
+        victimId &&
+        target?.id === victimId &&
+        (choosesTarget || /\b(save|heal|rescue)\b/u.test(command))
+      )
+        return { type: "night", save: victimId };
+      if (/\b(save|heal|rescue)\b/u.test(command))
+        return victimId ? { type: "night", save: victimId } : { type: "night", heal: true };
       if (target && (choosesTarget || /\b(poison|dose|kill)\b/u.test(command)))
         return { type: "night", poison: target.id };
       if (movesOn) return { type: "night" };
@@ -433,13 +450,15 @@ export const loupsGarous: GameModule<Game, CreateInput, ActionInput, GameView> =
           if (action.target)
             submitNightAction(game, human.id, { kind: "seer", targetId: action.target });
           else submitNightAction(game, human.id, { kind: "pass" });
-        } else if (human.role === "witch")
+        } else if (human.role === "witch") {
+          if (action.save !== undefined && action.save !== game.wolfVictimId)
+            throw new Error("You can only save the player the Werewolves chose tonight.");
           submitNightAction(game, human.id, {
             kind: "witch",
-            heal: action.heal,
+            heal: action.heal || action.save !== undefined,
             poisonTargetId: action.poison,
           });
-        else submitNightAction(game, human.id, { kind: "pass" });
+        } else submitNightAction(game, human.id, { kind: "pass" });
         if (
           game.players.some(
             (candidate) =>

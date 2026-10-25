@@ -26,7 +26,9 @@ export default function ChessView({
   settings: AppSettings;
   companion: ChessCompanion;
 }) {
-  const [flipped, setFlipped] = useState(false);
+  const [flipped, setFlipped] = useState(
+    settings.gameMode === "computer" && settings.playerColor === "b",
+  );
   const moves = session.game.history({ verbose: true });
   const last = session.reviewMode ? moves[session.reviewIndex] : moves.at(-1);
   const position = session.displayFen ? new Chess(session.displayFen) : session.game;

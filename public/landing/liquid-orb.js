@@ -1,13 +1,13 @@
 // Adapted from the user's Liquid Orb export. The shader and thinking preset
 // retain the supplied liquid/refraction model; the landing page owns lifecycle.
-export async function enhanceLiquidOrbs(onReady) {
+export async function enhanceLiquidOrbs(onReady, root = document) {
   if (!navigator.gpu) return; // Keep the existing WebGL/SVG fallback.
   const adapter = await navigator.gpu.requestAdapter();
   if (!adapter) return;
   const device = await adapter.requestDevice();
   const [shaderResponse, presetResponse] = await Promise.all([
-    fetch(new URL("./assets/liquid-glass.wgsl", import.meta.url)),
-    fetch(new URL("./assets/liquid-glass-preset.json", import.meta.url)),
+    fetch("/landing/assets/liquid-glass.wgsl"),
+    fetch("/landing/assets/liquid-glass-preset.json"),
   ]);
   if (!shaderResponse.ok || !presetResponse.ok) {
     device.destroy();
@@ -138,7 +138,8 @@ export async function enhanceLiquidOrbs(onReady) {
   device.lost.then(dispose);
   device.addEventListener("uncapturederror", dispose);
   try {
-    for (const host of document.querySelectorAll(".orb")) {
+    const hosts = root.matches?.(".orb") ? [root] : root.querySelectorAll(".orb");
+    for (const host of hosts) {
       const canvas = document.createElement("canvas");
       canvas.className = "orb-glass";
       canvas.setAttribute("aria-hidden", "true");
@@ -156,6 +157,12 @@ export async function enhanceLiquidOrbs(onReady) {
         // Chess keeps its own game palette while sharing the liquid geometry.
         values.set(
           [0.96, 0.98, 0.89, 1, 0.82, 0.9, 0.65, 1, 0.63, 0.76, 0.43, 1, 0.38, 0.55, 0.27, 1],
+          40,
+        );
+      } else if (host.classList.contains("orb-amber")) {
+        // Loups-Garous uses the same liquid geometry with its warm village palette.
+        values.set(
+          [1, 0.95, 0.76, 1, 0.99, 0.79, 0.42, 1, 0.95, 0.58, 0.2, 1, 0.82, 0.38, 0.09, 1],
           40,
         );
       }
@@ -192,6 +199,7 @@ export async function enhanceLiquidOrbs(onReady) {
     reducedMotion.addEventListener("change", sync);
     window.addEventListener("pagehide", dispose);
     sync();
+    return dispose;
   } catch {
     dispose();
   }

@@ -5,7 +5,7 @@ import WerewolfApp from "../werewolf/App";
 
 const EXPERIENCES = {
   "play-by-voice": { title: "Play by Voice", themeColor: "#ffffff" },
-  "loups-garous": { title: "Loups-Garous — A Village Game", themeColor: "#111313" },
+  "loups-garous": { title: "Loups-Garous — A Village Game", themeColor: "#ffffff" },
 } as const;
 
 type Experience = keyof typeof EXPERIENCES;

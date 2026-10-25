@@ -2,7 +2,7 @@
 
 ## Where it lives
 
-The new website is served at **`/landing/`** (explicit entry: `/landing/index.html`). The existing application remains at `/`. All launch actions open its existing game picker, where Chess can be selected. Loups-Garous is marked coming soon.
+The new website is served at **`/landing/`** (explicit entry: `/landing/index.html`). The existing application remains at `/`. All launch actions open its existing game picker, where Chess and Loups-Garous can be selected. Tic-Tac-Toe is coming soon.
 
 This implementation adds files only in `public/landing/` and `docs/landing-page/`. It does not modify existing application files, package definitions, lockfiles, server routes, deployment settings, or product styles. Vite/Nitro copies `public/landing/` into its existing production public output automatically.
 
@@ -30,15 +30,15 @@ Open the local URL printed by the server, followed by `/landing/`. For productio
 
 ## Content verified against the repository
 
-| Published capability | Source |
-| --- | --- |
-| Chess available; Loups-Garous and Tic-Tac-Toe planned | `GamePicker.tsx`, `navigation.ts`, README |
-| Typed commands and explicit voice start/stop | `CompanionDock.tsx` |
-| Spoken board descriptions, hints, confirmation, history | `ChessView.tsx`, voice tools, README |
-| Narrator volume and optional screen-reader mode | `AudioSettings.tsx` |
-| Initial action and microphone permission required | Voice implementation and README |
-| Audio is sent to OpenAI during live voice; no landing capture | Voice implementation; landing script has no capture code |
-| Saved game and preferences; no raw transcripts in local storage | Repository README and storage implementation |
+| Published capability                                            | Source                                                   |
+| --------------------------------------------------------------- | -------------------------------------------------------- |
+| Chess and Loups-Garous available; Tic-Tac-Toe planned           | `GamePicker.tsx`, `navigation.ts`, README                |
+| Typed commands and explicit voice start/stop                    | `CompanionDock.tsx`                                      |
+| Spoken board descriptions, hints, confirmation, history         | `ChessView.tsx`, voice tools, README                     |
+| Narrator volume and optional screen-reader mode                 | `AudioSettings.tsx`                                      |
+| Initial action and microphone permission required               | Voice implementation and README                          |
+| Audio is sent to OpenAI during live voice; no landing capture   | Voice implementation; landing script has no capture code |
+| Saved game and preferences; no raw transcripts in local storage | Repository README and storage implementation             |
 
 The illustrated transcript is labeled as an example. Full accessibility conformance, hands-free first launch, production voice availability, data-retention guarantees, and unimplemented game modes are not claimed.
 

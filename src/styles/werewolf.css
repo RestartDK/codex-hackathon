@@ -1340,3 +1340,1203 @@ textarea {
     font-size: 8px;
   }
 }
+
+/* Loups-Garous screens from the DevDay Hackathon Figma file. */
+.ww-app {
+  --ww-line: #f1f1f1;
+  --ww-muted: #707070;
+  --ww-orange: #ffb326;
+  --ww-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  position: relative;
+  display: flex;
+  min-height: 100svh;
+  flex-direction: column;
+  overflow: hidden;
+  background: #fff;
+  color: #000;
+  font-family: Inter, Arial, Helvetica, sans-serif;
+  isolation: isolate;
+}
+.ww-app h1,
+.ww-app h2,
+.ww-app h3,
+.ww-app p {
+  margin: 0;
+}
+.ww-app h1:focus,
+.ww-app h2:focus {
+  outline: none;
+}
+.ww-app .sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* Animated village sky (src/werewolf/VillageSky.tsx) */
+.ww-sky {
+  position: absolute;
+  z-index: -1;
+  inset: 0 0 auto;
+  height: 760px;
+  overflow: hidden;
+  pointer-events: none;
+  /* Every sky layer, including clouds and light, dissolves into the white page. */
+  -webkit-mask-image: linear-gradient(
+    180deg,
+    #000 0%,
+    #000 36%,
+    rgb(0 0 0 / 84%) 48%,
+    rgb(0 0 0 / 55%) 61%,
+    rgb(0 0 0 / 24%) 75%,
+    rgb(0 0 0 / 6%) 87%,
+    transparent 96%
+  );
+  mask-image: linear-gradient(
+    180deg,
+    #000 0%,
+    #000 36%,
+    rgb(0 0 0 / 84%) 48%,
+    rgb(0 0 0 / 55%) 61%,
+    rgb(0 0 0 / 24%) 75%,
+    rgb(0 0 0 / 6%) 87%,
+    transparent 96%
+  );
+}
+.ww-sky-layer {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  transition: opacity 2600ms cubic-bezier(0.45, 0, 0.25, 1);
+}
+.ww-sky.is-night .ww-sky-night,
+.ww-sky.is-day .ww-sky-day,
+.ww-sky.is-victory .ww-sky-victory {
+  opacity: 1;
+}
+.ww-sky-night {
+  background: linear-gradient(
+    180deg,
+    #24458c 0%,
+    #3a5ca3 18%,
+    #6f8bc6 36%,
+    #b0c1e4 52%,
+    #dde5f4 68%,
+    #f6f8fc 82%,
+    #fff 94%
+  );
+}
+.ww-stars {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  -webkit-mask-image: linear-gradient(#000 0%, #000 55%, transparent 88%);
+  mask-image: linear-gradient(#000 0%, #000 55%, transparent 88%);
+}
+.ww-sky-day {
+  background: linear-gradient(
+    180deg,
+    #6dbdec 0%,
+    #8fcbf0 16%,
+    #b4dcf5 32%,
+    #d4ebf9 48%,
+    #ebf6fc 64%,
+    #f8fcfe 78%,
+    #fff 90%
+  );
+}
+.ww-sky-warmth {
+  position: absolute;
+  inset: 0;
+  /* Morning warmth comes from the sun's side of the sky, never as a band near the content. */
+  background:
+    radial-gradient(70% 60% at 80% 0%, rgb(255 214 170 / 65%), rgb(255 214 170 / 0%) 72%),
+    linear-gradient(180deg, rgb(255 230 204 / 40%) 0%, rgb(255 230 204 / 0%) 50%);
+  opacity: 0.15;
+  animation: ww-sky-warm 36s ease-in-out infinite alternate;
+}
+.ww-sky-sun {
+  position: absolute;
+  top: -120px;
+  right: 8%;
+  width: 520px;
+  height: 520px;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle,
+    rgb(255 251 226 / 85%) 0%,
+    rgb(255 240 200 / 35%) 32%,
+    transparent 68%
+  );
+  animation: ww-sun-breathe 14s ease-in-out infinite alternate;
+}
+.ww-cloud {
+  position: absolute;
+  left: 0;
+  width: 460px;
+  height: 120px;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, rgb(255 255 255 / 78%), rgb(255 255 255 / 0%));
+  will-change: transform;
+  animation: ww-cloud-drift 120s linear infinite;
+}
+.ww-cloud.is-1 {
+  top: 40px;
+  animation-duration: 140s;
+  animation-delay: -30s;
+}
+.ww-cloud.is-2 {
+  top: 120px;
+  width: 620px;
+  height: 150px;
+  opacity: 0.8;
+  animation-duration: 170s;
+  animation-delay: -95s;
+}
+.ww-cloud.is-3 {
+  top: 210px;
+  width: 380px;
+  opacity: 0.7;
+  animation-duration: 110s;
+  animation-delay: -60s;
+}
+.ww-cloud.is-4 {
+  top: 70px;
+  width: 300px;
+  height: 90px;
+  opacity: 0.6;
+  animation-duration: 95s;
+  animation-delay: -12s;
+}
+.ww-cloud.is-5 {
+  top: 260px;
+  width: 540px;
+  height: 130px;
+  opacity: 0.55;
+  animation-duration: 190s;
+  animation-delay: -140s;
+}
+.ww-sky-victory {
+  height: 428px;
+  background: rgb(3 74 128 / 87%);
+  -webkit-mask: url("/artwork/loups-garous/sky-mask.svg") center top / 100% 100% no-repeat;
+  mask: url("/artwork/loups-garous/sky-mask.svg") center top / 100% 100% no-repeat;
+}
+.ww-sky-victory::after {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  width: min(1122px, 100%);
+  height: 478px;
+  background: url("/artwork/loups-garous/victory-fireworks.png") center / cover no-repeat;
+  content: "";
+  transform: translateX(-50%);
+}
+@keyframes ww-cloud-drift {
+  from {
+    transform: translateX(-40vw);
+  }
+  to {
+    transform: translateX(110vw);
+  }
+}
+@keyframes ww-sky-warm {
+  to {
+    opacity: 0.85;
+  }
+}
+@keyframes ww-sun-breathe {
+  from {
+    opacity: 0.65;
+    transform: translate(0, 0) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-40px, 18px) scale(1.04);
+  }
+}
+
+/* Header and left navigation */
+.ww-header {
+  position: relative;
+  z-index: 3;
+  display: flex;
+  min-height: 96px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 24px 32px;
+}
+.ww-brand-group {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 12px;
+  font-size: 24px;
+  font-weight: 600;
+  line-height: 32px;
+  white-space: nowrap;
+}
+.ww-brand {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font-weight: 600;
+}
+.ww-header-game {
+  color: var(--ww-muted);
+}
+.ww-header-nav {
+  display: flex;
+  align-items: center;
+  gap: 26px;
+}
+.ww-header-nav button {
+  min-height: 44px;
+  padding: 8px 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font-size: 16px;
+  line-height: 24px;
+}
+.ww-header-nav button:hover,
+.ww-brand:hover {
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+.ww-header.is-on-art {
+  color: #fff;
+}
+.ww-header.is-on-art .ww-header-game {
+  color: #d1d1d1;
+}
+.ww-rail {
+  position: absolute;
+  z-index: 4;
+  top: 50%;
+  left: 15px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  transform: translateY(-50%);
+}
+.ww-round-control {
+  display: grid;
+  width: 50px;
+  height: 50px;
+  place-items: center;
+  padding: 12px;
+  border: 1px solid #dedede;
+  border-radius: 999px;
+  background: #fff;
+  color: #000;
+  transition: background-color 180ms ease-out;
+}
+.ww-round-control:hover {
+  background: #fff7ea;
+}
+.ww-round-control:active {
+  transform: scale(0.97);
+}
+
+/* Loading */
+.ww-scene-loading {
+  background: #000;
+}
+.ww-loading-art {
+  position: absolute;
+  z-index: -1;
+  inset: -18% -12%;
+  background:
+    url("/artwork/loups-garous/loading-artwork-overlay.jpg") center / cover no-repeat,
+    url("/artwork/loups-garous/loading-artwork-base.jpg") center / cover no-repeat;
+  filter: blur(56px) saturate(1.05);
+}
+.ww-loading {
+  position: relative;
+  display: flex;
+  min-height: calc(100svh - 96px);
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 24px 120px;
+  color: #fff;
+}
+.ww-loading-center {
+  display: grid;
+  justify-items: center;
+}
+.ww-loading-visual {
+  position: relative;
+  display: block;
+  width: 360px;
+  max-width: 82vw;
+  height: 300px;
+  margin-bottom: -188px;
+}
+.ww-loading-shape {
+  position: absolute;
+  top: 9%;
+  left: 50%;
+  width: 136px;
+  height: auto;
+  transform: translate(-50%, -50%) rotate(0deg);
+  animation: ww-loading-orbit 2.8s cubic-bezier(0.65, 0, 0.35, 1) infinite;
+}
+.ww-loading-center h1 {
+  position: relative;
+  margin-top: 64px;
+  font-size: 48px;
+  font-weight: 700;
+  letter-spacing: -0.96px;
+  line-height: 56px;
+}
+.ww-app .ww-loading-back {
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  padding: 10px 26px;
+  border: 0;
+  border-bottom: 1px solid #f5f5f5;
+  border-radius: 32px 32px 0 0;
+  background: #fff;
+  color: #000;
+  font-size: 18px;
+  line-height: 28px;
+  transform: translateX(-50%);
+}
+.ww-loading-error {
+  width: min(480px, calc(100% - 32px));
+  padding: 32px;
+  border-radius: 28px;
+  background: #fff;
+  color: #111;
+  text-align: center;
+}
+.ww-loading-error h1 {
+  font-size: 28px;
+  line-height: 36px;
+}
+.ww-loading-error p {
+  margin-top: 12px;
+  color: var(--ww-muted);
+  line-height: 24px;
+}
+.ww-loading-error div {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 24px;
+}
+.ww-loading-error button {
+  min-height: 48px;
+  padding: 10px 20px;
+  border: 1px solid #ededed;
+  border-radius: 16px;
+  background: #fff;
+}
+.ww-loading-error button:first-child {
+  border-color: #111;
+  background: #111;
+  color: #fff;
+}
+@keyframes ww-loading-orbit {
+  0%,
+  100% {
+    top: 9%;
+    left: 50%;
+    transform: translate(-50%, -50%) rotate(0deg);
+  }
+  25% {
+    top: 50%;
+    left: 86%;
+    transform: translate(-50%, -50%) rotate(90deg);
+  }
+  50% {
+    top: 91%;
+    left: 50%;
+    transform: translate(-50%, -50%) rotate(180deg);
+  }
+  75% {
+    top: 50%;
+    left: 14%;
+    transform: translate(-50%, -50%) rotate(270deg);
+  }
+}
+
+/* Shared stage */
+.ww-stage {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  width: min(708px, calc(100% - 140px));
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+  margin: 0 auto;
+  padding: 93px 0 48px;
+  text-align: center;
+}
+.ww-phase {
+  padding-top: 150px;
+}
+.ww-stage-intro {
+  display: grid;
+  width: min(353px, 100%);
+  gap: 14px;
+  margin-bottom: 10px;
+}
+.ww-stage-intro h1,
+.ww-section-title,
+.ww-panel h2 {
+  font-size: 24px;
+  font-weight: 600;
+  line-height: 32px;
+}
+.ww-stage-intro p {
+  color: var(--ww-muted);
+  font-size: 16px;
+  line-height: 24px;
+}
+.ww-display {
+  font-size: 48px;
+  font-weight: 700;
+  letter-spacing: -0.96px;
+  line-height: 56px;
+}
+.ww-question {
+  font-size: 36px;
+  font-weight: 600;
+  letter-spacing: -0.36px;
+  line-height: 44px;
+}
+.ww-stage-copy {
+  font-size: 16px;
+  line-height: 24px;
+}
+.ww-test-banner {
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: #fff;
+  font-size: 14px;
+}
+.ww-error {
+  color: #c23b3b;
+}
+.ww-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 24px;
+  border: 1px solid var(--ww-line);
+  border-radius: 28px;
+  background: #fff;
+  text-align: left;
+}
+.ww-pill {
+  min-height: 52px;
+  padding: 16px 32px;
+  border: 0;
+  border-radius: 999px;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 20px;
+  transition:
+    background-color 180ms ease-out,
+    transform 180ms var(--ww-ease);
+}
+.ww-pill:active:not(:disabled) {
+  transform: scale(0.97);
+}
+.ww-pill.is-primary {
+  background: var(--ww-orange);
+  color: #000;
+}
+.ww-pill.is-primary:hover:not(:disabled) {
+  background: #f2a40f;
+}
+.ww-pill.is-dark {
+  background: #000;
+  color: #fff;
+}
+.ww-pill.is-dark:hover:not(:disabled) {
+  background: #2b2b2b;
+}
+.ww-pill.is-light {
+  border: 1px solid var(--ww-line);
+  background: #fff;
+  color: #000;
+}
+.ww-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+}
+
+/* Setup */
+.ww-setup {
+  gap: 16px;
+}
+.ww-mode-panel {
+  width: min(403px, 100%);
+  gap: 14px;
+}
+.ww-mode-options {
+  display: grid;
+  gap: 10px;
+}
+.ww-mode-option {
+  display: flex;
+  min-height: 108px;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--ww-line);
+  border-radius: 16px;
+  background: #fff;
+  color: rgb(0 0 0 / 50%);
+  font-size: 18px;
+  line-height: 28px;
+  text-align: left;
+}
+.ww-mode-option.is-selected {
+  border-color: #000;
+  background: #000;
+  color: #fff;
+}
+.ww-mode-option.is-selected:hover {
+  background: #2b2b2b;
+}
+.ww-mode-option:disabled {
+  min-height: 0;
+  opacity: 1;
+}
+.ww-app .ww-text-button {
+  min-height: 44px;
+  border: 0;
+  background: none;
+  color: var(--ww-muted);
+  font-size: 14px;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+.ww-village-setup {
+  display: flex;
+  width: 100%;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+}
+.ww-village-config {
+  display: grid;
+  width: 100%;
+  grid-template-columns: 369px 1fr;
+  gap: 20px;
+}
+.ww-count-setting {
+  display: grid;
+  gap: 8px;
+}
+.ww-stepper {
+  display: flex;
+  gap: 10px;
+  padding: 10px;
+}
+.ww-step-button {
+  display: grid;
+  width: 56px;
+  height: 81px;
+  place-items: center;
+  border: 0;
+  border-radius: 24px;
+  background: #000;
+  transition: transform 180ms var(--ww-ease);
+}
+.ww-step-button.is-increase {
+  background: #e58c39;
+}
+.ww-step-button:active:not(:disabled) {
+  transform: scale(0.96);
+}
+.ww-count-value {
+  display: grid;
+  height: 81px;
+  flex: 1;
+  place-items: center;
+  border: 1px solid var(--ww-line);
+  border-radius: 24px;
+  font-size: 24px;
+  font-weight: 600;
+  line-height: 32px;
+}
+.ww-count-label {
+  color: rgb(0 0 0 / 60%);
+  font-size: 16px;
+  line-height: 24px;
+  text-align: center;
+}
+.ww-roles-panel h3 {
+  font-size: 18px;
+  font-weight: 400;
+  line-height: 28px;
+}
+.ww-roles-panel ul {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.ww-roles-panel li {
+  display: flex;
+  gap: 8px;
+  font-size: 18px;
+  line-height: 28px;
+}
+.ww-role-total {
+  color: rgb(0 0 0 / 60%);
+}
+.ww-village-footer {
+  display: grid;
+  width: min(369px, 100%);
+  justify-items: center;
+  gap: 16px;
+}
+.ww-guidance {
+  position: relative;
+  width: 100%;
+  min-height: 62px;
+  flex-direction: row;
+  align-items: center;
+  gap: 14px;
+  padding: 16px;
+  font-size: 18px;
+  line-height: 28px;
+  cursor: pointer;
+}
+.ww-guidance input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  border-radius: 28px;
+  opacity: 0;
+  cursor: pointer;
+}
+.ww-check-box {
+  display: grid;
+  width: 20px;
+  height: 20px;
+  flex: none;
+  place-items: center;
+  border: 1px solid #000;
+  border-radius: 8px;
+  background: #000;
+}
+.ww-guidance input:not(:checked) + .ww-check-box {
+  background: #fff;
+}
+.ww-guidance input:not(:checked) + .ww-check-box img {
+  visibility: hidden;
+}
+.ww-guidance:has(input:focus-visible) {
+  outline: 3px solid #1b80cf;
+  outline-offset: 3px;
+}
+.ww-app .ww-start-button {
+  display: grid;
+  width: 100%;
+  min-height: 54px;
+  place-items: center;
+  padding: 12px 24px;
+  border: 0;
+  border-radius: 16px;
+  background: #000;
+  color: #fff;
+  font-size: 18px;
+  line-height: 28px;
+  text-align: center;
+  transition:
+    background-color 180ms ease-out,
+    transform 180ms var(--ww-ease);
+}
+.ww-start-button:active:not(:disabled) {
+  transform: scale(0.98);
+}
+.ww-start-button:hover:not(:disabled) {
+  background: #2b2b2b;
+}
+
+/* Player cards */
+.ww-players {
+  display: flex;
+  width: 100%;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 20px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.ww-players li {
+  display: flex;
+  width: calc((100% - 100px) / 6);
+  min-width: 96px;
+}
+.ww-app .ww-player {
+  display: flex;
+  width: 100%;
+  min-height: 118px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 24px 8px;
+  border: 1px solid var(--ww-line);
+  border-radius: 28px;
+  background: #fff;
+  color: #000;
+  font-size: 18px;
+  line-height: 28px;
+  transition:
+    border-color 180ms ease-out,
+    background-color 180ms ease-out,
+    transform 180ms var(--ww-ease);
+}
+button.ww-player:hover:not(:disabled) {
+  border-color: #ffd27f;
+}
+button.ww-player:active:not(:disabled) {
+  transform: scale(0.97);
+}
+.ww-player.is-selected {
+  border-color: #000;
+  background: #000;
+  color: #fff;
+}
+.ww-player.is-speaking {
+  border-color: var(--ww-orange);
+  box-shadow: 0 0 0 3px rgb(255 179 38 / 30%);
+}
+.ww-player.is-dead {
+  color: rgb(0 0 0 / 45%);
+  background: #f7f7f7;
+}
+.ww-player.is-dead .ww-dot {
+  opacity: 0.35;
+}
+.ww-player-votes {
+  margin-top: -6px;
+  color: rgb(0 0 0 / 60%);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  line-height: 18px;
+}
+.ww-player.is-selected .ww-player-votes {
+  color: rgb(255 255 255 / 78%);
+}
+.ww-player-name {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ww-player-detail {
+  margin-top: -8px;
+  font-size: 13px;
+  line-height: 18px;
+  opacity: 0.75;
+}
+.ww-dot {
+  display: block;
+  width: 24px;
+  height: 24px;
+  flex: none;
+  border-radius: 64px;
+}
+
+/* Village introduction and role reveal */
+.ww-intro-notes {
+  display: grid;
+  justify-items: center;
+  gap: 16px;
+}
+.ww-note {
+  padding: 16px;
+  border: 1px solid var(--ww-line);
+  border-radius: 28px;
+  background: #fff;
+  font-size: 18px;
+  line-height: 28px;
+}
+.ww-note.is-dark {
+  background: #000;
+  color: #fff;
+}
+.ww-role-card {
+  position: relative;
+  display: flex;
+  width: min(369px, 100%);
+  min-height: 384px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  overflow: hidden;
+  padding: 32px;
+  border: 1px solid var(--ww-line);
+  border-radius: 28px;
+  background: #fff;
+  isolation: isolate;
+}
+.ww-role-flip {
+  width: min(369px, 100%);
+  perspective: 1400px;
+}
+.ww-role-inner {
+  display: grid;
+  transform-style: preserve-3d;
+  transition: transform 720ms cubic-bezier(0.45, 0.05, 0.25, 1);
+}
+.ww-role-flip.is-flipped .ww-role-inner {
+  transform: rotateY(180deg);
+}
+.ww-role-face {
+  grid-area: 1 / 1;
+  width: 100%;
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+}
+.ww-role-face.is-back {
+  transform: rotateY(180deg);
+}
+.ww-role-face h2:focus {
+  outline: none;
+}
+.ww-role-glow {
+  position: absolute;
+  z-index: -1;
+  right: 0;
+  bottom: -40px;
+  left: 0;
+  height: 155px;
+  background: var(--role-color);
+  filter: blur(31px);
+}
+.ww-role-front {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  gap: 40px;
+}
+.ww-role-identity {
+  display: grid;
+  justify-items: center;
+  gap: 22px;
+}
+.ww-role-identity h2,
+.ww-role-back h2,
+.ww-role-back h3 {
+  font-size: 24px;
+  font-weight: 600;
+  line-height: 32px;
+}
+.ww-role-front p,
+.ww-role-back p,
+.ww-role-back li {
+  font-size: 16px;
+  line-height: 24px;
+}
+.ww-role-back {
+  display: grid;
+  width: 100%;
+  gap: 16px;
+  text-align: left;
+}
+.ww-role-back ul {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.ww-role-back li::before {
+  content: "• ";
+}
+.ww-role-shape {
+  display: block;
+  border-radius: 50%;
+}
+.ww-result-card {
+  display: grid;
+  justify-items: center;
+  gap: 16px;
+  margin-top: 10vh;
+  padding: 24px;
+  border: 1px solid var(--ww-line);
+  border-radius: 28px;
+  background: #fff;
+}
+.ww-result-card h1 {
+  font-size: 36px;
+  font-weight: 600;
+  letter-spacing: -0.36px;
+  line-height: 44px;
+}
+.ww-result-card h2 {
+  font-size: 24px;
+  font-weight: 600;
+  line-height: 32px;
+}
+.ww-result-card p {
+  font-size: 16px;
+  line-height: 24px;
+}
+
+/* Phase details */
+.ww-update {
+  max-width: 560px;
+  padding: 12px 16px;
+  border: 1px solid var(--ww-line);
+  border-radius: 64px;
+  background: rgb(255 255 255 / 92%);
+  font-size: 16px;
+  line-height: 24px;
+}
+.ww-update.is-loss {
+  border-color: #ec4c4c;
+  background: #ec4c4c;
+  color: #fff;
+}
+.ww-update.is-empty {
+  display: none;
+}
+.ww-examples {
+  display: grid;
+  gap: 12px;
+  color: rgb(0 0 0 / 40%);
+  font-size: 16px;
+  line-height: 24px;
+}
+.ww-speak {
+  display: grid;
+  width: min(560px, 100%);
+  gap: 10px;
+  text-align: left;
+}
+.ww-speak label {
+  font-size: 14px;
+  font-weight: 500;
+}
+.ww-speak textarea {
+  min-height: 84px;
+  padding: 14px 16px;
+  border: 1px solid #e3e3e3;
+  border-radius: 20px;
+  background: #fff;
+  resize: vertical;
+}
+.ww-outcome {
+  color: rgb(0 0 0 / 70%);
+  font-size: 24px;
+  font-weight: 600;
+  line-height: 32px;
+}
+.ww-final-role {
+  display: grid;
+  gap: 24px;
+  margin: 8px 0;
+}
+.ww-final-role p:first-child {
+  color: rgb(0 0 0 / 60%);
+  font-size: 24px;
+  font-weight: 600;
+  line-height: 32px;
+}
+.ww-final-role-name {
+  font-size: 36px;
+  font-weight: 600;
+  letter-spacing: -0.36px;
+  line-height: 44px;
+}
+.ww-final-votes {
+  width: min(480px, 100%);
+  text-align: left;
+}
+
+/* Voice companion: the shared Chess dock, orb, and typed-command panel. */
+.ww-app.pbv-root .companion-dock {
+  width: 100%;
+  margin-top: auto;
+}
+.ww-app.pbv-root .companion-dock::before {
+  background:
+    radial-gradient(ellipse at 50% 110%, #fadc57, transparent 72%),
+    linear-gradient(transparent, #fff1df 45%, #f6c48f);
+}
+.ww-app.pbv-root .companion-dock::after {
+  opacity: 0;
+}
+.ww-app .ww-rail .dock-icon {
+  position: static;
+  transform: none;
+}
+.ww-app .ww-command-reply {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: 16px;
+  background: #fff7ea;
+  font-size: 13px;
+  line-height: 20px;
+  max-height: 120px;
+  overflow: auto;
+}
+.ww-app.pbv-root .ww-dialog {
+  width: min(560px, 100%);
+  max-height: calc(100svh - 48px);
+  overflow-y: auto;
+  text-align: left;
+}
+.ww-dialog-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.ww-dialog .audio-controls {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+}
+.ww-dialog .ww-help {
+  display: grid;
+  gap: 12px;
+  font-size: 15px;
+  line-height: 22px;
+}
+.ww-dialog .ww-help h3 {
+  font-size: 15px;
+  font-weight: 600;
+}
+.ww-history {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  color: #4b4b4b;
+}
+.ww-dialog .confirm-actions {
+  justify-content: flex-start;
+}
+
+@media (max-width: 760px) {
+  .ww-header {
+    min-height: 72px;
+    padding: 16px;
+  }
+  .ww-brand-group {
+    font-size: 18px;
+    gap: 8px;
+  }
+  .ww-header-nav {
+    gap: 14px;
+  }
+  .ww-header-nav button {
+    font-size: 14px;
+  }
+  .ww-rail {
+    position: fixed;
+    top: auto;
+    bottom: calc(190px + env(safe-area-inset-bottom, 0px));
+    left: 12px;
+    transform: none;
+  }
+  .ww-stage {
+    width: calc(100% - 32px);
+  }
+  .ww-stage {
+    padding-top: 40px;
+    padding-left: 48px;
+  }
+  .ww-phase {
+    padding-top: 56px;
+  }
+  .ww-village-config {
+    grid-template-columns: 1fr;
+  }
+  .ww-display {
+    font-size: 36px;
+    line-height: 44px;
+  }
+  .ww-question {
+    font-size: 26px;
+    line-height: 34px;
+  }
+  .ww-players {
+    gap: 12px;
+  }
+  .ww-players li {
+    width: calc((100% - 24px) / 3);
+    min-width: 0;
+  }
+  .ww-loading-center h1 {
+    font-size: 40px;
+  }
+}
+@media (max-width: 420px) {
+  .ww-header-game,
+  .ww-brand-group img {
+    display: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ww-loading-shape {
+    animation: none;
+  }
+  .ww-role-inner,
+  .ww-role-flip.is-flipped .ww-role-inner,
+  .ww-role-face.is-back {
+    transform: none;
+    transition: none;
+  }
+  .ww-role-flip:not(.is-flipped) .ww-role-face.is-back,
+  .ww-role-flip.is-flipped .ww-role-face.is-front {
+    visibility: hidden;
+  }
+  .ww-sky-layer {
+    transition-duration: 0ms;
+  }
+  .ww-sky-warmth,
+  .ww-sky-sun,
+  .ww-cloud {
+    animation: none;
+  }
+}
+
+/* Below 900px the shared voice dock is fixed to the viewport, as in Chess; keep content clear of it. */
+@media (max-width: 900px) {
+  .ww-app .ww-stage {
+    padding-bottom: calc(190px + env(safe-area-inset-bottom, 0px));
+  }
+}
+@media (max-width: 900px) and (max-height: 600px) {
+  .ww-app .ww-stage {
+    padding-bottom: calc(154px + env(safe-area-inset-bottom, 0px));
+  }
+}

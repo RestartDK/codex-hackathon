@@ -1,5 +1,13 @@
 # Voice system handoff
 
+## Scope and local requirements
+
+This guide describes Loups-Garous in `src/werewolf/App.tsx`. The shared picker and Chess use `src/app/App.tsx`, `src/voice/useChessCompanion.ts`, and `src/voice/useVoiceCompanion.ts`. The shell in `src/shell/AppShell.tsx` mounts one experience at a time; switching to Loups-Garous closes the Chess voice connection.
+
+No API key is needed for Chess board play, typed chess commands, Werewolf rules, deterministic NPC bots, or local guide replies. Chess live voice uses `/api/voice/session` and requires a server-side `OPENAI_API_KEY`, provider model access, network connectivity, and browser microphone permission. Its quick guide can use browser speech synthesis without credentials.
+
+Werewolf browser transcription requires browser support and microphone permission, and may depend on the browser's network speech service. Narration falls back to browser speech synthesis; guide replies and NPC decisions fall back to local rules and bots. Provider TTS, model replies, and the WebRTC fallback require the server key. Text controls remain available when speech is unavailable. Restart the server after changing `.env`; never put credentials in `VITE_` variables.
+
 This game has one player-facing assistant voice. It reads every public NPC line and narration with speaker attribution, listens for the player's commands, and can open a full-duplex private guide conversation. NPCs generate text and make decisions, but never receive their own synthetic voice.
 
 ```mermaid
@@ -21,7 +29,7 @@ flowchart LR
 | Change the one assistant browser voice     | `src/voice/browser-narration.ts`  | `browserVoiceProfiles.assistant` selects one installed browser voice, speed, and pitch for all public lines.                              |
 | Replace browser speech with a TTS provider | `src/voice/browser-narration.ts`  | Implement `NarrationBackend` and pass it to `useStoryAudio`. Preserve the `onFinished` callback so the shared queue cannot overlap lines. |
 | Change microphone transcription behavior   | `src/voice/speech-recognition.ts` | Persistent browser speech recognition. It restarts after normal recognition ends while Voice Guide is enabled.                            |
-| Change the optional Live integration       | `src/voice/live-voice.ts`         | Browser microphone/WebRTC lifecycle for a future dedicated Live surface.                                                                  |
+| Change the Live fallback                   | `src/voice/live-voice.ts`         | Browser microphone/WebRTC lifecycle when browser transcription fails during a Werewolf game.                                              |
 | Change the server Live request             | `server/game/live-voice.ts`       | Server-only provider session creation, model/voice configuration, player-safe context.                                                    |
 | Change NPC wording and decisions           | `server/game/agents.ts`           | Text generation only. NPCs never get a direct provider audio session.                                                                     |
 
@@ -33,7 +41,7 @@ NPC lines, narrator events, and typed guide replies pass through `useStoryAudio`
 
 The app prefers `createOpenAINarrationBackend()` for an active game session. It sends text to the authenticated `/api/games/:id/narration` route, which keeps the API key on the server and asks OpenAI TTS for a smooth `marin` narration. If credentials or TTS are unavailable, it falls back to `createBrowserNarrationBackend()` and `window.speechSynthesis`. The one `assistant` profile supplies a compatible browser-voice fallback.
 
-The voice-control router in `src/App.tsx` handles start-game, question, audio-control, pause/resume, and validated game-command intents. All game-changing language goes through `POST /api/games/:id/action` as `{ command }`; the server parses it with the current state and rejects illegal actions transactionally.
+The voice-control router in `src/werewolf/App.tsx` handles start-game, question, audio-control, pause/resume, and validated game-command intents. All game-changing language goes through `POST /api/games/:id/action` as `{ command }`; the server parses it with the current state and rejects illegal actions transactionally.
 
 ### Always-on Voice Companion
 
@@ -82,6 +90,6 @@ For a provider-specific voice ID, add it to the one `assistant` profile. The que
 
 - **Every NPC sounds identical:** expected. The assistant identifies each speaker in words and deliberately uses one voice identity for every public line.
 - **Two speakers overlap:** check that a custom backend calls `onFinished()` only after audio playback ends, and that `cancel()` stops its active audio.
-- **Guide does not answer a spoken question:** check `src/App.tsx` routing and the `/assistant` route response. The Voice Guide speaks guide replies with the same narration queue.
+- **Guide does not answer a spoken question:** check `src/werewolf/App.tsx` routing and the `/assistant` route response. The Voice Guide speaks guide replies with the same narration queue.
 - **Optional Live integration fails:** inspect `server/game/live-voice.ts`, the `/voice` route response, the configured model access, and the browser microphone permission.
 - **A voice change exposes secrets:** preserve the player-scoped `guideContext` and keep private feed entries out of `useStoryAudio`.

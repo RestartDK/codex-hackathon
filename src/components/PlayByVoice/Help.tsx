@@ -24,8 +24,10 @@ export default function Help({
           <h2>Start with your voice</h2>
           <p>
             Select the orb, allow microphone access, and say "Play chess." You only need one voice
-            connection as you move around the app. Select the orb again to mute your microphone. Use
-            the stop button to end voice.
+            connection within the picker and Chess screens. Loups-Garous starts its own voice
+            companion. Select the orb again to mute your microphone. Use the stop button to end
+            voice. Chess live voice requires a server-side API key; typed commands and the quick
+            guide work without it.
           </p>
         </section>
         <section>
@@ -59,8 +61,8 @@ export default function Help({
           <h2>Pick up later</h2>
           <p>
             Your chess position and preferences stay on this device. Leaving a game saves and pauses
-            it. Return to Chess and select Resume. Loups-Garous and Tic-Tac-Toe are previews, not
-            playable games yet.
+            it. Return to Chess and select Resume. Loups-Garous is also playable, but leaving its
+            match returns you to setup. Tic-Tac-Toe is coming soon.
           </p>
         </section>
       </div>
