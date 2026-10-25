@@ -202,10 +202,6 @@ export default function GamePicker({ companion }: { companion: ChessCompanion })
           </div>
         </div>
       </div>
-      <p className="picker-hint">
-        Choose a game, or start voice and say its name: Chess, Loups-Garous, Ludo, The Intercept,
-        or Tic-Tac-Toe.
-      </p>
     </section>
   );
 }

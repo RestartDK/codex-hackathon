@@ -24,7 +24,7 @@ export default function AudioSettings({
         <ArrowLeft size={17} aria-hidden="true" /> Go back
       </button>
       <h1 id="page-heading" tabIndex={-1}>
-        Audio settings
+        Settings
       </h1>
       <p className="page-intro">Make your companion sound right for you.</p>
       <div className="settings-fields">
