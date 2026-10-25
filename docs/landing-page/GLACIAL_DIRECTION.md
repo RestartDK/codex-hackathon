@@ -46,3 +46,20 @@ The hero shader clock increased from 0.12 to 0.4, with wider fold displacement a
 The large decorative PLAY BY VOICE lettering is pure white; its existing fade and blue footer background remain. The user clarified that white applies to the letters. FAQ now uses right-aligned question bubbles with circular plus controls and left-aligned white Play by Voice reply bubbles, replacing the text composer and chatbot transcript. The selected question becomes dark ice blue and its plus rotates to a close mark. Eight verified answers live in semantic HTML, with native details/summary behavior as the no-JavaScript fallback. The first answer starts open; enhancement allows one active reply, animates measured height/opacity, and supports keyboard and reduced motion. No FAQ API or microphone behavior was introduced.
 
 Verified pointer expansion, keyboard opening/closing, switching replies, long privacy text, 320/390/768/1024/1440px layouts without overflow, pure-white footer text, and empty browser error logs. The production build and source checks passed.
+
+## Liquid-glass orb update
+
+The main landing-page orbs now progressively use the user-supplied Liquid Orb
+WebGPU shader and its thinking preset. `assets/liquid-glass.wgsl` preserves the
+liquid and glass-refraction model; the unused particle pass was omitted. The
+renderer in `liquid-orb.js` shares one GPU device and pipeline, uses transparent
+edges against the light page, and retains Chess's green palette only in its demo.
+The existing WebGL/SVG rendering remains the fallback for unsupported browsers.
+Pause, reduced motion, page visibility, offscreen suspension, GPU loss, and
+high-density resizing are handled by the landing-page adapter.
+
+Validated in the browser: all three orbs render without console errors, pause
+produces identical orb pixels across separate captures, and the 390px mobile
+layout has no horizontal overflow. The production bundle builds successfully.
+The full TypeScript check remains blocked by the existing plugin type mismatch
+at `vite.config.ts:29` on the current main branch.
