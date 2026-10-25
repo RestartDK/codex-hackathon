@@ -38,7 +38,18 @@ export async function createLiveSession(game: Game, actorId: string, sdp: string
       session: {
         model: voiceModel,
         instructions: liveInstructions(context),
-        audio: { output: { voice } },
+        audio: {
+          input: {
+            noise_reduction: { type: "near_field" },
+            transcription: {
+              model: "gpt-live-transcribe",
+              languages: ["en", "fr"],
+              prompt:
+                "A voice-controlled Loups-Garous game. Player names and role names may include Werewolf, Seer, Witch, Cupid, Hunter, vote, wait for dawn, and start the game.",
+            },
+          },
+          output: { voice },
+        },
         delegation: {
           type: "responses",
           responses: {

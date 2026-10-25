@@ -137,6 +137,7 @@ function parseGameCommand(text: string, game: Game, actorId: string): ActionInpu
       throw new Error("Say ‘choose Camille’, ‘hunt Camille’, ‘choose for me’, or ‘let the pack decide’.");
     }
     if (actor.role === "seer") {
+      if (movesOn) return { type: "night" };
       if (
         target &&
         (choosesTarget || /\b(investigate|check|inspect|seer|see|look at|reveal)\b/u.test(command))
@@ -148,7 +149,7 @@ function parseGameCommand(text: string, game: Game, actorId: string): ActionInpu
         );
         if (automaticTarget) return { type: "night", target: automaticTarget.id };
       }
-      throw new Error("Say ‘choose Camille’, ‘investigate Camille’, or ‘choose for me’.");
+      throw new Error("Say ‘choose Camille’, ‘investigate Camille’, ‘choose for me’, or ‘wait for dawn’.");
     }
     if (actor.role === "witch") {
       if (/\b(save|heal|rescue)\b/u.test(command)) return { type: "night", heal: true };
@@ -417,8 +418,10 @@ export const loupsGarous: GameModule<Game, CreateInput, ActionInput, GameView> =
               recipientId: human.id,
             });
           }
-        } else if (human.role === "seer")
-          submitNightAction(game, human.id, { kind: "seer", targetId: action.target });
+        } else if (human.role === "seer") {
+          if (action.target) submitNightAction(game, human.id, { kind: "seer", targetId: action.target });
+          else submitNightAction(game, human.id, { kind: "pass" });
+        }
         else if (human.role === "witch")
           submitNightAction(game, human.id, {
             kind: "witch",

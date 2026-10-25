@@ -257,7 +257,9 @@ export default function App() {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [commandText, setCommandText] = useState("");
-  const [voiceStatus, setVoiceStatus] = useState("Voice companion starts when you begin a game");
+  const [voiceStatus, setVoiceStatus] = useState(
+    "Tap anywhere once to allow the microphone, then say “start the game”",
+  );
   const [listening, setListening] = useState(false);
   const [voiceCommandsPaused, setVoiceCommandsPaused] = useState(false);
   const [guideMessages, setGuideMessages] = useState<GuideMessage[]>([]);
@@ -314,14 +316,36 @@ export default function App() {
     setPresentedGame(game);
   }
 
-  useEffect(
-    () => () => {
+  useEffect(() => {
+    // Browsers only allow a first microphone permission prompt from a user gesture.
+    // After one tap, recognition runs on the landing screen and throughout a game.
+    autoVoiceRequestedRef.current = true;
+    // When the player has already granted microphone access, begin immediately.
+    // For a first visit, wait for the one permission gesture below so the browser
+    // can actually show its microphone prompt instead of silently rejecting it.
+    if (navigator.permissions) {
+      void navigator.permissions
+        .query({ name: "microphone" as PermissionName })
+        .then((permission) => {
+          if (permission.state === "granted") startAlwaysOnVoice();
+        })
+        .catch(() => undefined);
+    }
+    const enableVoice = () => {
+      if (recognitionRef.current || liveConnectionRef.current) return;
+      primeBrowserNarration();
+      startAlwaysOnVoice();
+    };
+    // Keep this listener until the page closes: if permission was declined or a
+    // microphone was connected later, the next ordinary tap can retry it.
+    window.addEventListener("pointerdown", enableVoice, { passive: true });
+    return () => {
+      window.removeEventListener("pointerdown", enableVoice);
       autoVoiceRequestedRef.current = false;
       recognitionRef.current?.stop();
       stopLiveVoice();
-    },
-    [],
-  );
+    };
+  }, []);
 
   async function create(event?: FormEvent, testMode = false) {
     event?.preventDefault();
@@ -526,7 +550,10 @@ export default function App() {
     }
     if (voiceCommandsPaused) return;
     if (!session) {
-      if (/\b(start|new)\b.*\b(game|match|village)\b/iu.test(command)) {
+      const startsGame =
+        /\b(start|new|begin|play)\b.*\b(game|match|village|loups)\b/iu.test(command) ||
+        /\b(start|begin|play)\b.*\b(quick|test|demo)\b/iu.test(command);
+      if (startsGame) {
         queueAssistant("Starting a new village. I will introduce the characters first.");
         await create(undefined, /\b(quick|test)\b/iu.test(command));
         return;
@@ -713,7 +740,9 @@ export default function App() {
             return;
           }
           if (["not-allowed", "service-not-allowed"].includes(reason)) {
-            setVoiceStatus("Microphone permission is needed for hands-free play.");
+            setVoiceStatus(
+              "Tap anywhere once to allow the microphone, then say “start the game”.",
+            );
             return;
           }
           setVoiceStatus(`Voice input interrupted (${reason}). Reconnecting when possible…`);
@@ -736,7 +765,9 @@ export default function App() {
           resetVoiceGuide(
             failure === "audio-capture"
               ? "No microphone was found. Connect one, then refresh the game."
-              : "Microphone permission is needed for hands-free play.",
+              : sessionRef.current
+                ? "Microphone permission is needed for hands-free play."
+                : "Tap anywhere once to allow the microphone, then say “start the game”.",
           );
         },
       });
@@ -747,11 +778,13 @@ export default function App() {
       recognitionRef.current = recognition;
       setListening(true);
       setVoiceCommandsPaused(false);
-      setVoiceStatus("Voice companion is listening");
+      setVoiceStatus(
+        sessionRef.current ? "Voice companion is listening" : "Listening — say “start the game”",
+      );
     } catch {
       recognitionRef.current = null;
       setListening(false);
-      setVoiceStatus("Microphone permission is needed for hands-free play.");
+      setVoiceStatus("Tap anywhere once to allow the microphone, then say “start the game”.");
     }
   }
 
@@ -826,9 +859,11 @@ export default function App() {
         gameId: activeSession.game.id,
         sessionToken: activeSession.token,
         onStatus: setVoiceStatus,
-        onInputTranscript: (text) =>
-          setVoiceTranscript((current) => `${current}${text}`.slice(-900)),
-        onInputTranscriptComplete: (text) => void handleVoiceCommand(text),
+        onInputTranscript: (text) => setVoiceTranscript(text.slice(-900)),
+        onInputTranscriptComplete: (text) => {
+          setVoiceTranscript(text);
+          void handleVoiceCommand(text);
+        },
         onGuideReply: (reply) =>
           setGuideMessages((current) => [
             ...current,
@@ -854,6 +889,7 @@ export default function App() {
 
   // The persistent recognizer reads this ref, avoiding stale game state after a new game starts.
   voiceCommandHandlerRef.current = (transcript) => {
+    setVoiceTranscript(transcript);
     void handleVoiceCommand(transcript);
   };
 
@@ -879,7 +915,9 @@ export default function App() {
                   ? "Commands paused — say resume listening"
                   : "Always listening"
                 : voiceStatus
-            : "Starts listening when you begin"}
+            : listening
+              ? "Listening — say “start the game”"
+              : voiceStatus}
         </small>
       </span>
     </aside>
@@ -924,8 +962,8 @@ export default function App() {
               <span>4 players · Seer role · bot opponents</span>
             </button>
             <p className="voice-entry-status" aria-live="polite">
-              Start the game once to allow microphone access. Your voice companion then stays on for
-              the match, ready for game moves, messages, and questions.
+              Tap anywhere once to allow the browser microphone, then say “start the game” or
+              “start a quick test”. Your voice companion stays on for the whole match.
             </p>
             <details className="game-options">
               <summary>Game options</summary>

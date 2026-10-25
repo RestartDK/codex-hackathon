@@ -43,6 +43,7 @@ export async function startLiveVoice({
   let outputTranscript = "";
   let inputTranscript = "";
   let inputPauseTimer: number | undefined;
+  let resumeAudioOnGesture: (() => void) | undefined;
 
   const flushInputTranscript = () => {
     const transcript = inputTranscript.trim();
@@ -54,6 +55,8 @@ export async function startLiveVoice({
     if (closed) return;
     closed = true;
     if (inputPauseTimer) window.clearTimeout(inputPauseTimer);
+    if (resumeAudioOnGesture)
+      window.removeEventListener("pointerdown", resumeAudioOnGesture);
     dataChannel?.close();
     stream?.getTracks().forEach((track) => track.stop());
     peerConnection?.close();
@@ -74,6 +77,14 @@ export async function startLiveVoice({
       try {
         const payload = JSON.parse(String(event.data)) as LiveTransportEvent;
         const text = payload.delta ?? payload.transcript;
+        if (payload.type === "conversation.item.input_audio_transcription.delta" && text) {
+          onInputTranscript(text);
+        }
+        if (payload.type === "conversation.item.input_audio_transcription.completed" && text) {
+          onInputTranscriptComplete(text);
+        }
+        // Backward-compatible handling for the preview event names used by an
+        // earlier Realtime transport. Current sessions use the two events above.
         if (payload.type === "session.input_transcript.delta" && text) {
           inputTranscript += text;
           onInputTranscript(text);
@@ -82,12 +93,20 @@ export async function startLiveVoice({
           // A brief silence lets the same command router handle a spoken sentence once.
           inputPauseTimer = window.setTimeout(flushInputTranscript, 900);
         }
-        if (payload.type === "session.output_transcript.delta" && text) {
+        if (
+          (payload.type === "response.output_audio_transcript.delta" ||
+            payload.type === "session.output_transcript.delta") &&
+          text
+        ) {
           outputTranscript += text;
           onStatus("Guide is speaking…");
         }
-        if (payload.type === "session.output_transcript.done" && outputTranscript.trim()) {
-          onGuideReply(outputTranscript.trim());
+        if (
+          (payload.type === "response.output_audio_transcript.done" ||
+            payload.type === "session.output_transcript.done") &&
+          (text || outputTranscript.trim())
+        ) {
+          onGuideReply((payload.transcript ?? outputTranscript).trim());
           outputTranscript = "";
           onStatus("Listening…");
         }
@@ -101,7 +120,13 @@ export async function startLiveVoice({
       audio = new Audio();
       audio.autoplay = true;
       audio.srcObject = event.streams[0] ?? new MediaStream([event.track]);
-      void audio.play().catch(() => onStatus("Tap the voice button again to hear the guide."));
+      void audio.play().catch(() => {
+        onStatus("Tap anywhere once to hear the guide.");
+        resumeAudioOnGesture = () => {
+          void audio?.play().catch(() => undefined);
+        };
+        window.addEventListener("pointerdown", resumeAudioOnGesture, { once: true, passive: true });
+      });
     };
     peerConnection.onconnectionstatechange = () => {
       if (peerConnection?.connectionState === "failed")

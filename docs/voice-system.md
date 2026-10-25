@@ -35,11 +35,11 @@ The app prefers `createOpenAINarrationBackend()` for an active game session. It 
 
 The voice-control router in `src/App.tsx` handles start-game, question, audio-control, pause/resume, and validated game-command intents. All game-changing language goes through `POST /api/games/:id/action` as `{ command }`; the server parses it with the current state and rejects illegal actions transactionally.
 
-### One Voice Guide button
+### Always-on Voice Companion
 
-The browser exposes one **Enable voice guide** button. It starts persistent browser transcription for the whole match. Game language is sent to `POST /api/games/:id/action`; questions are sent to `POST /api/games/:id/assistant`; every reply is read by the same assistant narration queue. If embedded browser transcription reports a `network` failure during a game, that same button switches once to the server-backed GPT-Live guide instead of retrying forever. GPT-Live transcript fragments are grouped after a short silence and use the same command router, so validated game commands still reach the action route. There is no second microphone control.
+On a first visit, the player taps anywhere once to approve the browser microphone. The companion then starts persistent browser transcription on the landing screen and throughout the match, so “start the game” works by voice before a game exists. Game language is sent to `POST /api/games/:id/action`; questions are sent to `POST /api/games/:id/assistant`; every reply is read by the same assistant narration queue. If embedded browser transcription reports a `network` failure during a game, the app switches once to the server-backed GPT-Live guide instead of retrying forever. The Live session requests input transcription and waits for the final `conversation.item.input_audio_transcription.completed` event before routing a command, so a partial phrase never triggers a game action. There is no microphone button to operate.
 
-The `/api/games/:id/voice` WebRTC endpoint and its `gpt-live-1` configuration remain available as a server integration point. Keep it behind a future dedicated experience unless that experience can route game commands through the same validated action interface.
+The `/api/games/:id/voice` WebRTC endpoint uses `gpt-live-1`, input transcription, and a player-scoped context. Its transcript and its captions share the same command router as browser recognition, so every game-changing sentence still passes through the validated action interface.
 
 The server sends only `guideContext(game, actorId)`, which is already filtered to the player. Never replace it with the raw `Game` object.
 

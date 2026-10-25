@@ -281,8 +281,8 @@ export function submitNightAction(game: Game, actorId: string, action: NightActi
   if (!actor?.alive) throw new Error("Only a living player can act at night.");
   if (actor.nightAction) throw new Error("Your night action is already locked in.");
   if (action.kind === "pass") {
-    if (["werewolf", "seer", "witch"].includes(actor.role))
-      throw new Error("Your role has a night action to take.");
+    // A player may deliberately leave a private ability unused for this night.
+    // The round resolves once the Werewolf pack has chosen its target.
   } else if (action.kind === "wolf") {
     if (actor.role !== "werewolf") throw new Error("Only Werewolves can choose a hunt target.");
     const target = player(game, action.targetId ?? "");
