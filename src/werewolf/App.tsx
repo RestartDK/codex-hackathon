@@ -1411,13 +1411,8 @@ export default function WerewolfApp({
     setDialog(section);
   }
 
+  // Leaving no longer asks for confirmation, matching origin/main (#15).
   function requestHome() {
-    if (
-      session &&
-      session.game.phase !== "over" &&
-      !window.confirm("Leave this Loups-Garous match? You cannot resume it from Games.")
-    )
-      return;
     leaveToGamePicker();
   }
 

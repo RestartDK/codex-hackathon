@@ -207,7 +207,7 @@ motionControl.addEventListener("click", () => {
   const label = paused ? "Resume animations" : "Pause animations";
   motionControl.setAttribute("aria-label", label);
   motionControl.setAttribute("title", label);
-  motionIcon.setAttribute("href", `./assets/icons.svg#${paused ? "play" : "pause"}`);
+  motionIcon.setAttribute("href", `/landing/assets/icons.svg#${paused ? "play" : "pause"}`);
 });
 const motionObserver =
   "IntersectionObserver" in window
@@ -410,7 +410,7 @@ function prepareLiquidOrb(orb) {
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
       drawLiquidOrb(state);
     };
-    image.src = "./assets/ice-flow.svg";
+    image.src = "/landing/assets/ice-flow.svg";
   }
 }
 function drawLiquidOrb(state) {
@@ -477,7 +477,7 @@ reducedOrbMotion.addEventListener("change", () => {
 syncLiquidMotion();
 
 // Prefer the user's liquid-glass export where WebGPU is available.
-import("./liquid-orb.js")
+import("/landing/liquid-orb.js")
   .then(({ enhanceLiquidOrbs }) =>
     enhanceLiquidOrbs((orb) => {
       const previous = liquidOrbs.get(orb);

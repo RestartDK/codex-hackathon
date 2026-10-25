@@ -32,11 +32,11 @@ function welcome(bridge: ChessToolBridge): string {
   if (bridge.view === "chess-setup")
     return "Chess setup is open. Choose each preference, or say start with the defaults.";
   if (bridge.awaitingStartChoice)
-    return `Welcome back. A saved chess game with ${bridge.history.length} moves is waiting. Say resume or new game. A new game needs confirmation.`;
+    return `Welcome back. A saved chess game with ${bridge.history.length} moves is waiting. Say resume or new game.`;
   if (bridge.isTerminated)
     return "Your last game has finished. You can review the moves or ask to start a new game.";
   if (bridge.isPaused) return "Your chess game is paused. Say resume to continue.";
-  return "Welcome to Chess. Would you like a quick spoken guide, or do you already know how to play? Moves are confirmed before they are played. You can ask for a hint or ask me to choose a move for you.";
+  return "Welcome to Chess. Say your move to play it immediately, ask for a hint, or say quick guide to hear the rules.";
 }
 
 export function useChessCompanion(
@@ -47,13 +47,7 @@ export function useChessCompanion(
 ) {
   const bridgeRef = useRef(bridge);
   bridgeRef.current = bridge;
-  const [, refreshPending] = useState(0);
-  const [executor] = useState(() =>
-    createChessToolExecutor(
-      () => bridgeRef.current,
-      () => refreshPending((value) => value + 1),
-    ),
-  );
+  const [executor] = useState(() => createChessToolExecutor(() => bridgeRef.current));
   const voice = useVoiceCompanion(executor, screenReaderMode, volume, bridge.view);
   const [message, setMessage] = useState(
     "Choose a game, or start voice to talk to your companion.",
@@ -72,10 +66,9 @@ export function useChessCompanion(
     if (voice.status === "connected" && previousVoiceStatus.current !== "connected") {
       const greeting = welcome(bridgeRef.current);
       setMessage(greeting);
-      voice.announce(`Greet the player now in English. ${greeting} Then pause and listen.`);
     }
     previousVoiceStatus.current = voice.status;
-  }, [voice.status, voice.announce]);
+  }, [voice.status]);
 
   useEffect(() => {
     if (
@@ -157,7 +150,7 @@ export function useChessCompanion(
     const intent = localIntent(command);
     if (!intent) {
       setMessage(
-        "Try play chess, play Loups-Garous, e2 to e4, what is on e4, hint, yes, cancel, resume, undo, or help. Live voice understands more natural language.",
+        "Try play chess, e2 to e4, what is on e4, hint, resume, undo, new game, or help. Commands run immediately. Live voice understands more natural language.",
       );
       return;
     }
@@ -173,8 +166,7 @@ export function useChessCompanion(
     runCommand,
     runTool,
     navigate: (destination: AvailableDestination) => runTool("navigate_app", { destination }),
-    pending: executor.getPending(),
-    cancelPending: executor.invalidatePending,
+    cancelRequests: executor.cancelRequests,
   };
 }
 

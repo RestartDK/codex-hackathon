@@ -32,11 +32,6 @@ export default function CompanionDock({
     toggleRef.current?.focus();
   }
 
-  async function confirmFromPanel(action: "yes" | "cancel") {
-    await companion.runCommand(action);
-    commandRef.current?.focus();
-  }
-
   useEffect(() => {
     const element = captionRef.current;
     if (element && followCaption.current) element.scrollTop = element.scrollHeight;
@@ -177,33 +172,7 @@ export default function CompanionDock({
               <ArrowUp size={20} aria-hidden="true" />
             </button>
           </div>
-          {companion.pending?.kind === "move" && (
-            <div className="move-confirmation" role="group" aria-label="Confirm typed move">
-              <p>{companion.pending.description}. Play this move?</p>
-              <div>
-                <button
-                  type="button"
-                  className="pill-button primary"
-                  disabled={companion.busy}
-                  onClick={() => {
-                    void confirmFromPanel("yes");
-                  }}
-                >
-                  Yes, play
-                </button>
-                <button
-                  type="button"
-                  className="pill-button"
-                  onClick={() => {
-                    void confirmFromPanel("cancel");
-                  }}
-                >
-                  Cancel move
-                </button>
-              </div>
-            </div>
-          )}
-          <p>No microphone needed. Say "yes" or type it to confirm a move.</p>
+          <p>No microphone needed. Typed commands run immediately.</p>
         </form>
       )}
     </footer>

@@ -27,7 +27,7 @@ export function parseDestination(value: unknown): Destination | null {
 export const navigationTool = {
   type: "function",
   name: "navigate_app",
-  description: `Open a game, the game picker, audio settings, or help. ${PLAYABLE_GAMES_LABEL} are playable. Leaving an active chess game requires confirmation and saves it for later.`,
+  description: `Open a game, the game picker, audio settings, or help. ${PLAYABLE_GAMES_LABEL} are playable. Navigation runs immediately. Leaving an active chess game saves and pauses it for later.`,
   parameters: {
     type: "object",
     properties: {

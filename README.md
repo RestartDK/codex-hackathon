@@ -2,7 +2,7 @@
 
 Choose Chess or Loups-Garous from the game picker. Audio Settings and Help are available from the shared shell. Tic-Tac-Toe is not playable yet.
 
-Chess runs in the browser with Stockfish and saves your position locally. Loups-Garous is a single-player social deduction game with NPC villagers. Use **Games** to return to the picker. Leaving a Loups-Garous match asks for confirmation because it cannot be resumed from the picker.
+Chess runs in the browser with Stockfish and saves your position locally. Loups-Garous is a single-player social deduction game with NPC villagers. Use **Games** to return to the picker. Commands execute immediately without confirmation prompts. Leaving a Loups-Garous match returns directly to the picker; that match cannot be resumed.
 
 The project uses the supplied React, Vite+, and Nitro application. Vite+ builds the browser app and Nitro API into `.output/` for a regular Node server.
 
@@ -23,7 +23,7 @@ bun install --frozen-lockfile
 bun run dev
 ```
 
-Open the URL printed by Vite+ (normally http://localhost:3000; it selects another port when occupied). Games run without a provider key; the guide responds from local game rules and NPCs use deterministic bots. To enable model-driven guide and NPC replies, copy `.env.example` to `.env` and set `OPENAI_API_KEY`. The configured defaults are `OPENAI_VOICE_MODEL=gpt-live-1`, `OPENAI_DELEGATION_MODEL=gpt-6-luna`, and `OPENAI_NPC_MODEL=gpt-6-luna`. Provider credentials are read only by Nitro and are never sent to the browser.
+Open http://localhost:3000 for the landing page. The game picker and games are served at http://localhost:3000/dashboard/. Vite+ selects another port when 3000 is occupied; use the URL it prints. Games run without a provider key; the guide responds from local game rules and NPCs use deterministic bots. To enable model-driven guide and NPC replies, copy `.env.example` to `.env` and set `OPENAI_API_KEY`. The configured defaults are `OPENAI_VOICE_MODEL=gpt-live-1`, `OPENAI_DELEGATION_MODEL=gpt-6-luna`, and `OPENAI_NPC_MODEL=gpt-6-luna`. Provider credentials are read only by Nitro and are never sent to the browser.
 
 Chess live voice also requires this server-side key, provider model access, network connectivity, and microphone permission. Without credentials, use the board or typed commands; the quick guide uses browser speech synthesis. Loups-Garous can use browser speech recognition and browser narration without an API key, where supported; recognition may use the browser vendor's network service. Its guide and NPCs fall back to local behavior. Provider narration and the WebRTC fallback require credentials. Restart the server after editing `.env`.
 
@@ -42,7 +42,7 @@ bun run build
 bun run start
 ```
 
-The production server listens on port 3000 by default. `bun run smoke http://127.0.0.1:3000` checks the app shell, browser entry, health route, Stockfish worker and WebAssembly assets, and both voice endpoints without calling a provider.
+The production server listens on port 3000 by default. `bun run smoke http://127.0.0.1:3000` checks the landing page at `/`, the dashboard app at `/dashboard` and `/dashboard/`, the health route, Stockfish worker and WebAssembly assets, and both voice endpoints without calling a provider.
 
 The dev and build scripts copy the engine assets from pinned `stockfish@19.0.1` into `public/stockfish/`. The generated JavaScript and WebAssembly files are not committed. The Stockfish license remains in `public/stockfish/Copying.txt`.
 

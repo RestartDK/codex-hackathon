@@ -39,11 +39,26 @@ export default function GamePicker({ companion }: { companion: ChessCompanion })
       else carousel.scrollLeft *= cycleWidth / previousWidth;
     };
 
+    // A vertical mouse wheel browses the cards sideways, as on origin/main (#16).
+    const wheel = (event: WheelEvent) => {
+      if (event.ctrlKey || Math.abs(event.deltaX) >= Math.abs(event.deltaY)) return;
+      event.preventDefault();
+      const unit = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? carousel.clientWidth : 1;
+      carousel.scrollLeft = normalizeLoopPosition(
+        carousel.scrollLeft + event.deltaY * unit,
+        cycleWidthRef.current,
+      );
+    };
+
     positionAtCenter();
     const resize = new ResizeObserver(positionAtCenter);
     resize.observe(carousel);
     resize.observe(centerGroup);
-    return () => resize.disconnect();
+    carousel.addEventListener("wheel", wheel, { passive: false });
+    return () => {
+      resize.disconnect();
+      carousel.removeEventListener("wheel", wheel);
+    };
   }, []);
 
   function beginDrag(event: ReactPointerEvent<HTMLDivElement>) {
@@ -90,80 +105,101 @@ export default function GamePicker({ companion }: { companion: ChessCompanion })
       <h1 id="page-heading" className="sr-only" tabIndex={-1}>
         Choose your game
       </h1>
-      <div
-        ref={carouselRef}
-        className={`game-carousel${dragging ? " is-dragging" : ""}`}
-        aria-label="Choose a game"
-        onPointerDown={beginDrag}
-        onPointerMove={continueDrag}
-        onPointerUp={endDrag}
-        onPointerCancel={endDrag}
-        onScroll={(event) => {
-          if (dragRef.current) return;
-          const carousel = event.currentTarget;
-          const normalized = normalizeLoopPosition(carousel.scrollLeft, cycleWidthRef.current);
-          if (normalized !== carousel.scrollLeft) carousel.scrollLeft = normalized;
-        }}
-        onClickCapture={(event) => {
-          if (!suppressClickRef.current) return;
-          event.preventDefault();
-          event.stopPropagation();
-        }}
-      >
-        <div className="game-cards">
-          {Array.from({ length: LOOP_COPIES }, (_, copyIndex) => (
-            <div
-              className="game-loop-group"
-              key={copyIndex}
-              ref={copyIndex === LOOP_CENTER ? centerGroupRef : undefined}
-              aria-hidden={copyIndex === LOOP_CENTER ? undefined : true}
-            >
-              {GAME_CARDS.map((game) => {
-                const semantic = copyIndex === LOOP_CENTER;
-                return (
-                  <article
-                    className={`game-card game-card-${game.id}${game.launch ? " is-playable" : ""}`}
-                    key={game.id}
-                    aria-labelledby={semantic ? `${game.id}-title` : undefined}
-                  >
-                    {!game.launch && <span className="coming-soon">Coming soon</span>}
-                    <button
-                      type="button"
-                      className="game-card-control"
-                      disabled={!game.launch || companion.busy}
-                      tabIndex={semantic ? undefined : -1}
-                      onMouseDown={semantic ? undefined : (event) => event.preventDefault()}
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        launchGame(game.launch);
-                      }}
-                      aria-label={
-                        game.launch
-                          ? `Start the game: ${game.title}`
-                          : `${game.title} is coming soon`
-                      }
+      <div className="game-carousel-frame">
+        <div
+          ref={carouselRef}
+          className={`game-carousel${dragging ? " is-dragging" : ""}`}
+          role="region"
+          aria-roledescription="carousel"
+          aria-label="Choose a game. Scroll or use the left and right arrow keys to browse."
+          tabIndex={0}
+          onKeyDown={(event) => {
+            if (event.target !== event.currentTarget) return;
+            if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+            if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+            const group = centerGroupRef.current;
+            const card = group?.firstElementChild;
+            if (!group || !card) return;
+            event.preventDefault();
+            const gap = Number.parseFloat(getComputedStyle(group).columnGap) || 0;
+            const carousel = event.currentTarget;
+            carousel.scrollLeft = normalizeLoopPosition(
+              carousel.scrollLeft +
+                (card.getBoundingClientRect().width + gap) * (event.key === "ArrowRight" ? 1 : -1),
+              cycleWidthRef.current,
+            );
+          }}
+          onPointerDown={beginDrag}
+          onPointerMove={continueDrag}
+          onPointerUp={endDrag}
+          onPointerCancel={endDrag}
+          onScroll={(event) => {
+            if (dragRef.current) return;
+            const carousel = event.currentTarget;
+            const normalized = normalizeLoopPosition(carousel.scrollLeft, cycleWidthRef.current);
+            if (normalized !== carousel.scrollLeft) carousel.scrollLeft = normalized;
+          }}
+          onClickCapture={(event) => {
+            if (!suppressClickRef.current) return;
+            event.preventDefault();
+            event.stopPropagation();
+          }}
+        >
+          <div className="game-cards">
+            {Array.from({ length: LOOP_COPIES }, (_, copyIndex) => (
+              <div
+                className="game-card-cycle"
+                key={copyIndex}
+                ref={copyIndex === LOOP_CENTER ? centerGroupRef : undefined}
+                aria-hidden={copyIndex === LOOP_CENTER ? undefined : true}
+              >
+                {GAME_CARDS.map((game) => {
+                  const semantic = copyIndex === LOOP_CENTER;
+                  return (
+                    <article
+                      className={`game-card game-card-${game.id}${game.launch ? " is-playable" : ""}`}
+                      key={game.id}
+                      aria-labelledby={semantic ? `${game.id}-title` : undefined}
                     >
-                      <span className={`game-shape ${game.shape}`} aria-hidden="true" />
-                      <span className="game-card-copy">
-                        <span
-                          className="game-card-title"
-                          id={semantic ? `${game.id}-title` : undefined}
-                          role="heading"
-                          aria-level={2}
-                        >
-                          {game.title}
+                      {!game.launch && <span className="coming-soon">Coming soon</span>}
+                      <button
+                        type="button"
+                        className="game-card-control"
+                        disabled={!game.launch || companion.busy}
+                        tabIndex={semantic ? undefined : -1}
+                        onMouseDown={semantic ? undefined : (event) => event.preventDefault()}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          launchGame(game.launch);
+                        }}
+                        aria-label={
+                          game.launch
+                            ? `Start the game: ${game.title}`
+                            : `${game.title} is coming soon`
+                        }
+                      >
+                        <span className={`game-shape ${game.shape}`} aria-hidden="true" />
+                        <span className="game-card-copy">
+                          <span
+                            className="game-card-title"
+                            id={semantic ? `${game.id}-title` : undefined}
+                            role="heading"
+                            aria-level={2}
+                          >
+                            {game.title}
+                          </span>
+                          <span className="game-card-description">{game.description}</span>
                         </span>
-                        <span className="game-card-description">{game.description}</span>
-                      </span>
-                      <span className="start-game" aria-hidden="true">
-                        <span>{game.launch ? "Start the game" : "Coming soon"}</span>
-                      </span>
-                    </button>
-                  </article>
-                );
-              })}
-            </div>
-          ))}
+                        <span className="start-game" aria-hidden="true">
+                          <span>{game.launch ? "Start the game" : "Coming soon"}</span>
+                        </span>
+                      </button>
+                    </article>
+                  );
+                })}
+              </div>
+            ))}
+          </div>
         </div>
       </div>
       <p className="picker-hint">
