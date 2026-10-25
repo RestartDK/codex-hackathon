@@ -183,10 +183,7 @@ export default function AudioSettings({
             </select>
           </label>
         </div>
-        <p>
-          Changing your side or opponent starts a new game. We will ask before clearing your current
-          position.
-        </p>
+        <p>Changing your side or opponent starts a new chess game immediately.</p>
       </details>
     </section>
   );

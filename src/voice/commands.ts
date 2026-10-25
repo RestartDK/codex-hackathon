@@ -4,12 +4,55 @@ export const QUICK_GUIDE =
   "Your goal is to checkmate the opposing king. Files are letters a through h, and ranks are numbers one through eight. Pawns move forward and capture diagonally. Knights move in an L shape. Bishops move diagonally. Rooks move straight. Queens move straight or diagonally, and kings move one square. Say a move like e two to e four, ask about a square, ask for legal moves, or request a hint. Legal moves and game controls run immediately. I announce what happened after it is done. You can also ask me to choose a move for you. Say help for more commands.";
 
 export function localIntent(command: string): { name: string; args: object } | null {
+  const numberWords: Record<string, string> = {
+    one: "1",
+    two: "2",
+    three: "3",
+    four: "4",
+    five: "5",
+    six: "6",
+    seven: "7",
+    eight: "8",
+  };
   const text = command
     .trim()
     .toLowerCase()
     .replace(/[,.?!]/g, "")
-    .replace(/[“”"]/g, "");
+    .replace(/[“”"]/g, "")
+    .replace(
+      /\b([a-h])\s+(one|two|three|four|five|six|seven|eight)\b/g,
+      (_match, file: string, rank: string) => file + numberWords[rank],
+    )
+    .replace(/\b([a-h])\s+([1-8])\b/g, "$1$2")
+    .replace(/\s+/g, " ");
   if (/^(no|cancel|never mind|nevermind)$/.test(text)) return { name: "cancel_action", args: {} };
+  const promotion = text.match(/^(?:promote(?: pawn)?(?: to)? )?(queen|rook|bishop|knight)$/);
+  if (promotion) return { name: "promote_pawn", args: { piece: promotion[1] } };
+  if (/^(start game|start with (?:the )?defaults?|start defaults?)$/.test(text))
+    return { name: "game_control", args: { action: "start_game" } };
+  if (/^(board|board configuration|describe board|give me the board configuration)$/.test(text))
+    return { name: "read_board", args: { scope: "all", value: null } };
+  const locate = text.match(
+    /^(?:where (?:are|is)|locate|find) (?:my|the opponent'?s?|opponent) (pawns?|knights?|bishops?|rooks?|queens?|kings?|pieces)$/,
+  );
+  if (locate)
+    return {
+      name: "locate_pieces",
+      args: {
+        owner: /\bmy\b/.test(text) ? "player" : "opponent",
+        piece: locate[1] === "pieces" ? "all" : locate[1].replace(/s$/, ""),
+      },
+    };
+  if (/^(legal moves|available moves)$/.test(text))
+    return { name: "get_legal_moves", args: { from: null } };
+  if (/^(explain last move|explain the last move)$/.test(text))
+    return { name: "explain_last_move", args: {} };
+  const setting = text.match(/^(?:play as|i play|i am) (white|black)$/);
+  if (setting)
+    return {
+      name: "set_preference",
+      args: { preference: "playerColor", value: setting[1] === "white" ? "w" : "b" },
+    };
   if (/^(chess|play chess|start chess|open chess)$/.test(text))
     return { name: "navigate_app", args: { destination: "chess" } };
   if (
@@ -18,6 +61,12 @@ export function localIntent(command: string): { name: string; args: object } | n
     )
   )
     return { name: "navigate_app", args: { destination: "loups-garous" } };
+  if (/^(ludo|play ludo|start ludo|open ludo)$/.test(text))
+    return { name: "navigate_app", args: { destination: "ludo" } };
+  if (/^(the intercept|intercept|play (?:the )?intercept|open (?:the )?intercept)$/.test(text))
+    return { name: "navigate_app", args: { destination: "intercept" } };
+  if (/^(tic tac toe|tic-tac-toe|play tic tac toe|open tic tac toe)$/.test(text))
+    return { name: "navigate_app", args: { destination: "tic-tac-toe" } };
   if (/^(home|go home|leave game|leave the game|game picker)$/.test(text))
     return { name: "navigate_app", args: { destination: "home" } };
   if (/^(settings|audio|audio settings|open settings)$/.test(text))
@@ -49,6 +98,12 @@ export function localIntent(command: string): { name: string; args: object } | n
   if (/^(retry engine|restart engine)$/.test(text))
     return { name: "game_control", args: { action: "retry_engine" } };
   if (/^(read settings|read preferences)$/.test(text)) return { name: "get_preferences", args: {} };
+  const screenReader = text.match(/^(?:set )?screen reader(?: mode)? (on|off)$/);
+  if (screenReader)
+    return {
+      name: "set_preference",
+      args: { preference: "screenReaderMode", value: screenReader[1] === "on" },
+    };
   const review = text.match(/^(?:review|review move) (\d+)$/);
   if (review) return { name: "review_move", args: { move: Number(review[1]) } };
   const volume = text.match(/^(?:volume|set volume to) (\d+)$/);
@@ -60,12 +115,20 @@ export function localIntent(command: string): { name: string; args: object } | n
   const square = text.match(/^(?:what(?: is|'s) on |inspect )([a-h][1-8])$/);
   if (square) return { name: "inspect_square", args: { square: square[1] } };
   const move = text.match(
-    /^(?:move )?([a-h][1-8])\s*(?:to|→|-)\s*([a-h][1-8])(?:\s+(queen|rook|bishop|knight))?$/,
+    /^(?:(?:move|play) )?(?:(?:my |the )?(king|queen|rook|bishop|knight|pawn) (?:from )?)?([a-h][1-8])\s*(?:to|→|-)\s*([a-h][1-8])(?:\s+(?:promote (?:to )?)?(queen|rook|bishop|knight))?$/,
   );
   if (move)
     return {
       name: "make_move",
-      args: { from: move[1], to: move[2], piece: null, promotion: move[3] ?? null },
+      args: { from: move[2], to: move[3], piece: move[1] ?? null, promotion: move[4] ?? null },
+    };
+  const pieceMove = text.match(
+    /^(?:move |play )?(?:my )?(king|queen|rook|bishop|knight|pawn) to ([a-h][1-8])$/,
+  );
+  if (pieceMove)
+    return {
+      name: "make_move",
+      args: { from: null, to: pieceMove[2], piece: pieceMove[1], promotion: null },
     };
   const legal = text.match(/^(?:legal moves|moves from)\s+([a-h][1-8])$/);
   if (legal) return { name: "get_legal_moves", args: { from: legal[1] } };
@@ -84,6 +147,8 @@ export function formatToolReply(raw: string): string {
   }
   if ("description" in result && typeof result.description === "string")
     return result.description + ".";
+  if ("verifiedEffects" in result && "move" in result && typeof result.move === "string")
+    return result.move + ".";
   if ("occupant" in result && "square" in result)
     return `${String(result.occupant)} on ${String(result.square)}.`;
   if ("turn" in result && "latestMove" in result)

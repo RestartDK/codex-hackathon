@@ -1,20 +1,59 @@
-import { useCallback, useEffect, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useState } from "react";
 import PlayByVoiceApp from "../app/App";
 import { useSettings } from "../hooks/useSettings";
 import WerewolfApp from "../werewolf/App";
+import "../styles/library-games.css";
+import { LibraryVoiceContext } from "../voice/useLibraryVoice";
+import type { AvailableDestination } from "../voice/navigation";
 
 const EXPERIENCES = {
   "play-by-voice": { title: "Playora", themeColor: "#ffffff" },
   "loups-garous": { title: "Loups-Garous — A Village Game", themeColor: "#ffffff" },
+  ludo: { title: "Voice Ludo", themeColor: "#101827" },
+  intercept: { title: "The Intercept", themeColor: "#101c21" },
+  "tic-tac-toe": { title: "Voice Tic-Tac-Toe", themeColor: "#0b1724" },
 } as const;
 
 type Experience = keyof typeof EXPERIENCES;
+const LudoPage = lazy(() => import("../components/LudoGame/LudoPage"));
+const InterceptPage = lazy(() => import("../components/InterceptGame/InterceptPage"));
+const TicTacToePage = lazy(() => import("../components/TicTacToeGame/TicTacToePage"));
 
 export default function AppShell() {
   const preferences = useSettings();
   const [experience, setExperience] = useState<Experience>("play-by-voice");
+  const [initialDestination, setInitialDestination] = useState<AvailableDestination>("home");
+  const [autoVoice, setAutoVoice] = useState(false);
+  const navigateLibrary = useCallback((destination: AvailableDestination, startVoice = false) => {
+    setAutoVoice(startVoice);
+    if (
+      destination === "home" ||
+      destination === "chess" ||
+      destination === "audio" ||
+      destination === "help"
+    ) {
+      setInitialDestination(destination);
+      setExperience("play-by-voice");
+    } else setExperience(destination);
+  }, []);
   const playLoupsGarous = useCallback(() => setExperience("loups-garous"), []);
-  const showGamePicker = useCallback(() => setExperience("play-by-voice"), []);
+  const playLudo = useCallback((voice = false) => {
+    setAutoVoice(voice);
+    setExperience("ludo");
+  }, []);
+  const playIntercept = useCallback((voice = false) => {
+    setAutoVoice(voice);
+    setExperience("intercept");
+  }, []);
+  const playTicTacToe = useCallback((voice = false) => {
+    setAutoVoice(voice);
+    setExperience("tic-tac-toe");
+  }, []);
+  const showGamePicker = useCallback(() => {
+    setAutoVoice(false);
+    setInitialDestination("home");
+    setExperience("play-by-voice");
+  }, []);
   const setVoiceVolume = preferences.setVoiceVolume;
   const changeNarrationVolume = useCallback(
     (volume: number) => setVoiceVolume(Math.round(volume * 100)),
@@ -34,12 +73,52 @@ export default function AppShell() {
         narrationVolume={preferences.settings.voiceVolume / 100}
         onNarrationVolumeChange={changeNarrationVolume}
         onShowGamePicker={showGamePicker}
+        onNavigateGame={navigateLibrary}
       />
+    );
+
+  const shared = { preferences, navigate: navigateLibrary, autoVoice };
+  const loading = (
+    <main role="status" aria-live="polite">
+      Loading game…
+    </main>
+  );
+  if (experience === "ludo")
+    return (
+      <LibraryVoiceContext.Provider value={shared}>
+        <Suspense fallback={loading}>
+          <LudoPage onExit={showGamePicker} preferences={preferences} />
+        </Suspense>
+      </LibraryVoiceContext.Provider>
+    );
+  if (experience === "intercept")
+    return (
+      <LibraryVoiceContext.Provider value={shared}>
+        <Suspense fallback={loading}>
+          <InterceptPage onExit={showGamePicker} preferences={preferences} />
+        </Suspense>
+      </LibraryVoiceContext.Provider>
+    );
+  if (experience === "tic-tac-toe")
+    return (
+      <LibraryVoiceContext.Provider value={shared}>
+        <Suspense fallback={loading}>
+          <TicTacToePage onExit={showGamePicker} preferences={preferences} />
+        </Suspense>
+      </LibraryVoiceContext.Provider>
     );
 
   return (
     <div className="pbv-root">
-      <PlayByVoiceApp preferences={preferences} onPlayLoupsGarous={playLoupsGarous} />
+      <PlayByVoiceApp
+        preferences={preferences}
+        initialDestination={initialDestination}
+        autoVoice={autoVoice}
+        onPlayLoupsGarous={playLoupsGarous}
+        onPlayLudo={playLudo}
+        onPlayIntercept={playIntercept}
+        onPlayTicTacToe={playTicTacToe}
+      />
     </div>
   );
 }

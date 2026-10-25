@@ -26,6 +26,19 @@ const tools = [
   navigationTool,
   {
     type: "function",
+    name: "promote_pawn",
+    description:
+      "Choose queen, rook, bishop or knight when a board move is waiting for pawn promotion.",
+    parameters: {
+      type: "object",
+      properties: { piece: { type: "string", enum: ["queen", "rook", "bishop", "knight"] } },
+      required: ["piece"],
+      additionalProperties: false,
+    },
+    strict: true,
+  },
+  {
+    type: "function",
     name: "get_position",
     description: "Get a concise, authoritative summary of the current chess position.",
     parameters: { type: "object", properties: {}, additionalProperties: false },
@@ -159,6 +172,7 @@ const tools = [
           type: "string",
           enum: [
             "pause",
+            "start_game",
             "resume",
             "new_game",
             "undo",
@@ -213,7 +227,7 @@ const tools = [
 ];
 
 const GREETINGS = {
-  home: `Welcome to Playora. Say play chess or play Loups-Garous.`,
+  home: `Welcome to Playora. ${PLAYABLE_GAMES_LABEL} are ready. Say a game name to begin.`,
   chess:
     "Welcome to Chess. The application will provide the current game context. Tell the player they can say a move to play immediately or ask for a quick guide, then listen.",
   loading: "Welcome to Chess. The board is getting ready. Pause and listen.",
@@ -223,6 +237,7 @@ const GREETINGS = {
 } as const;
 
 const INSTRUCTIONS = `You are the calm English-speaking companion in Playora for blind and low-vision players.
+In chess setup, "start with defaults" or "start game" must call game_control with start_game. Use set_preference for color, opponent and difficulty selections before starting.
 
 Backchannel policy:
 Use sparse, brief backchannels. A short command such as play chess, undo, pause, or help is an action, never a backchannel to ignore.
@@ -241,7 +256,7 @@ Generate <|SpawnThinking|> before answering anything that needs backend work. Ne
 
 Execute clear commands immediately, without confirmation prompts or required clicks. Use make_move, play_best_move, game_control, navigate_app, review_move, get_preferences, and set_preference. Only ask for missing information such as an ambiguous origin or promotion piece. Illegal moves leave the position unchanged. Never invent an outcome.
 
-Welcome the player briefly on the page supplied by the application, then listen. On the picker they can play chess or Loups-Garous. Tic-Tac-Toe is unavailable. Opening Chess resumes the saved position automatically. Never make a tutorial or yes/no question a prerequisite for playing. Give the quick guide only when requested.
+Welcome the player briefly on the page supplied by the application, then listen. On the picker they can play ${PLAYABLE_GAMES_LABEL}. Opening Chess resumes the saved position automatically. Never make a tutorial or yes/no question a prerequisite for playing. Give the quick guide only when requested.
 
 The guide covers checkmate, files a-h, ranks 1-8, piece movement and voice commands. Requested actions execute immediately and are announced afterward. get_hint suggests without moving; play_best_move plays for the player. Honor requests to repeat, shorten, slow down or stop speaking. Use get_history for what did I miss, review_move for history, and return_live for the live board. The app supplies authoritative move/game-over narration; do not duplicate it.`;
 

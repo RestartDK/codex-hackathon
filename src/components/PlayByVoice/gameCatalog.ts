@@ -26,10 +26,26 @@ export const GAME_CARDS: readonly GameCard[] = [
     launch: "loups-garous",
   },
   {
+    id: "ludo",
+    title: "Ludo",
+    description: "Roll, move four numbered tokens, and race the computer home.",
+    shape: "diamond",
+    launch: "ludo",
+  },
+  {
+    id: "intercept",
+    title: "The Intercept",
+    description: "Explore an authored wartime mystery where every spoken choice shapes the story.",
+    shape: "triangle",
+    launch: "intercept",
+  },
+  {
     id: "tic-tac-toe",
     title: "Tic-Tac-Toe",
     description: "Three in a row. A familiar little challenge, played your way.",
     shape: "diamond",
-    launch: null,
+    launch: "tic-tac-toe",
   },
 ];
+
+

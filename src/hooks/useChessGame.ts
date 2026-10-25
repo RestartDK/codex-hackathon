@@ -23,6 +23,7 @@ import {
 
 interface UseChessGameOptions {
   settings: AppSettings;
+  active?: boolean;
 }
 
 export type GameResult = {
@@ -56,7 +57,7 @@ function rebuildFensFromHistory(history: string[]): string[] {
   return rebuildMoveFens(history);
 }
 
-export function useChessGame({ settings }: UseChessGameOptions) {
+export function useChessGame({ settings, active = true }: UseChessGameOptions) {
   const [game] = useState(() => {
     const g = new Chess();
     return g;
@@ -99,7 +100,8 @@ export function useChessGame({ settings }: UseChessGameOptions) {
   const computerMoveActiveRef = useRef(false);
   const computerSearchFenRef = useRef<string | null>(null);
   const pausedRef = useRef(false);
-  const initialBlackMoveScheduledRef = useRef(false);
+  const activeRef = useRef(active);
+  activeRef.current = active;
 
   const preMoveFenRef = useRef<string | null>(null);
 
@@ -263,7 +265,7 @@ export function useChessGame({ settings }: UseChessGameOptions) {
   }, [initStockfish, terminateStockfish]);
 
   const scheduleComputerMoveViaStockfish = useCallback(async () => {
-    if (pausedRef.current) return;
+    if (pausedRef.current || !activeRef.current) return;
     setIsComputerThinking(true);
     computerMoveActiveRef.current = true;
 
@@ -312,7 +314,7 @@ export function useChessGame({ settings }: UseChessGameOptions) {
   }, [updateState]);
 
   const scheduleComputerMove = useCallback(() => {
-    if (pausedRef.current) return;
+    if (pausedRef.current || !activeRef.current) return;
     if (computerMoveTimeoutRef.current) {
       clearTimeout(computerMoveTimeoutRef.current);
     }
@@ -865,18 +867,30 @@ export function useChessGame({ settings }: UseChessGameOptions) {
   }, []);
 
   useEffect(() => {
-    if (initialBlackMoveScheduledRef.current) return;
-    initialBlackMoveScheduledRef.current = true;
     if (
+      active &&
+      stockfishStatus === "ready" &&
+      !isPaused &&
+      !awaitingStartChoice &&
+      !isComputerThinking &&
       settings.gameMode === "computer" &&
-      settings.playerColor === "b" &&
-      game.turn() === "w" &&
-      game.history().length === 0 &&
+      game.turn() !== settings.playerColor &&
       !game.isGameOver()
     ) {
       scheduleComputerMove();
     }
-  }, [game, scheduleComputerMove, settings.gameMode, settings.playerColor]);
+  }, [
+    active,
+    fen,
+    stockfishStatus,
+    isPaused,
+    awaitingStartChoice,
+    isComputerThinking,
+    game,
+    scheduleComputerMove,
+    settings.gameMode,
+    settings.playerColor,
+  ]);
 
   useEffect(() => terminateStockfish, [terminateStockfish]);
 

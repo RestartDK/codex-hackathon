@@ -1,8 +1,8 @@
 # Play by Voice
 
-Choose Chess or Loups-Garous from the game picker. Audio Settings and Help are available from the shared shell. Tic-Tac-Toe is not playable yet.
+Choose Chess, Loups-Garous, Ludo, The Intercept, or Tic-Tac-Toe from the shared game picker. Audio Settings and Help remain available from the Play by Voice shell.
 
-Chess runs in the browser with Stockfish and saves your position locally. Loups-Garous is a single-player social deduction game with NPC villagers. Use **Games** to return to the picker. Commands execute immediately without confirmation prompts. Leaving a Loups-Garous match returns directly to the picker; that match cannot be resumed.
+Chess runs in the browser with Stockfish and saves your position locally. Loups-Garous is a single-player social deduction game with NPC villagers. Ludo is a two-player race against the computer, The Intercept is an authored interactive mystery, and Tic-Tac-Toe is a three-by-three match against the computer. The three added games keep separate local saves and support live voice plus typed-command fallbacks. Direct player moves execute immediately; only companion-selected suggestions and destructive resets require confirmation. Use **Games** or **Game library** to return to the picker.
 
 The project uses the supplied React, Vite+, and Nitro application. Vite+ builds the browser app and Nitro API into `.output/` for a regular Node server.
 
@@ -25,7 +25,7 @@ bun run dev
 
 Open http://localhost:3000 for the landing page. The game picker and games are served at http://localhost:3000/dashboard/. Vite+ selects another port when 3000 is occupied; use the URL it prints. Games run without a provider key; the guide responds from local game rules and NPCs use deterministic bots. To enable model-driven guide and NPC replies, copy `.env.example` to `.env` and set `OPENAI_API_KEY`. The configured defaults are `OPENAI_VOICE_MODEL=gpt-live-1`, `OPENAI_DELEGATION_MODEL=gpt-6-luna`, and `OPENAI_NPC_MODEL=gpt-6-luna`. Provider credentials are read only by Nitro and are never sent to the browser.
 
-Chess live voice also requires this server-side key, provider model access, network connectivity, and microphone permission. Without credentials, use the board or typed commands; the quick guide uses browser speech synthesis. Loups-Garous can use browser speech recognition and browser narration without an API key, where supported; recognition may use the browser vendor's network service. Its guide and NPCs fall back to local behavior. Provider narration and the WebRTC fallback require credentials. Restart the server after editing `.env`.
+Chess, Ludo, The Intercept, and Tic-Tac-Toe live voice require this server-side key, provider model access, network connectivity, and microphone permission. Without credentials, all four remain playable through their visual controls and typed-command fallbacks. Loups-Garous can use browser speech recognition and browser narration without an API key, where supported; recognition may use the browser vendor's network service. Its guide and NPCs fall back to local behavior. Provider narration and the WebRTC fallback require credentials. Restart the server after editing `.env`.
 
 For a user-local Bun installation, run `npm install --global --prefix "$HOME/.bun" bun@1.4.4`, then add `$HOME/.bun/bin` to your shell's `PATH` (or use `~/.bun/bin/bun` directly).
 

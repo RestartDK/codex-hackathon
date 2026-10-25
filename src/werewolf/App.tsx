@@ -6,6 +6,8 @@ import LiquidOrb from "../components/PlayByVoice/LiquidOrb";
 import { useDialogFocus } from "../hooks/useDialogFocus";
 import VillageSky from "./VillageSky";
 import { usePresence } from "../hooks/usePresence";
+import { localIntent } from "../voice/commands";
+import { parseDestination, type AvailableDestination } from "../voice/navigation";
 import { DEFAULT_ROLE_COUNTS } from "../../server/game/rules.js";
 import type {
   FeedEntry,
@@ -505,10 +507,12 @@ export default function WerewolfApp({
   narrationVolume,
   onNarrationVolumeChange,
   onShowGamePicker,
+  onNavigateGame,
 }: {
   narrationVolume: number;
   onNarrationVolumeChange: (volume: number) => void;
   onShowGamePicker: () => void;
+  onNavigateGame?: (destination: AvailableDestination) => void;
 }) {
   const [session, setSession] = useState<Session>();
   const [presentedGame, setPresentedGame] = useState<GameView>();
@@ -878,6 +882,21 @@ export default function WerewolfApp({
     const command = transcript.trim();
     if (!command) return;
     setVoiceTranscript(command);
+    const navigation = localIntent(command);
+    if (navigation?.name === "navigate_app") {
+      const destination = parseDestination(
+        (navigation.args as { destination?: unknown }).destination,
+      );
+      if (destination === "audio" || destination === "help") {
+        openTools(destination);
+        return;
+      }
+      if (destination && destination !== "loups-garous") {
+        leaveToGamePicker();
+        onNavigateGame?.(destination);
+        return;
+      }
+    }
     if (/\bpause\b.*\b(listening|voice control|microphone)\b/iu.test(command)) {
       setVoiceCommandsPaused(true);
       setVoiceStatus("Voice commands are paused. Say ‘resume listening’ to continue.");
@@ -918,6 +937,32 @@ export default function WerewolfApp({
       }
       queueAssistant("Tell me when you want to play, and I will start a new village.");
       return;
+    }
+
+    if (
+      /^(?:continue|next|go on|i(?:'m| am) ready|ready)[.!]?$/iu.test(command) &&
+      session.game.phase !== "prologue"
+    ) {
+      if (introStep) {
+        setIntroStep(null);
+        return;
+      }
+      if (voteOutcome) {
+        setVoteOutcome(
+          voteOutcome.revealing || !voteOutcome.result.exiledPlayerId
+            ? undefined
+            : { ...voteOutcome, revealing: true },
+        );
+        return;
+      }
+      if (pendingFinding) {
+        setSeenInvestigations(session.game.me.investigations.length);
+        return;
+      }
+      if (storyAudio.phaseTransitioning) {
+        storyAudio.stop();
+        return;
+      }
     }
 
     // Voice follows the same introduction as the screen: village, role card,

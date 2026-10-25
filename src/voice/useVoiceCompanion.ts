@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { ChessToolExecutor } from "./chessTools";
 import type { AvailableDestination } from "./navigation";
+
+export type VoiceToolExecutor = {
+  execute: (name: string, rawArguments: string) => Promise<string>;
+  cancelRequests?: () => void;
+  invalidatePending?: () => void;
+};
 
 export type VoiceStatus = "idle" | "connecting" | "connected" | "closing" | "error";
 
@@ -83,15 +88,22 @@ function waitForIce(peer: RTCPeerConnection): Promise<void> {
 }
 
 export function useVoiceCompanion(
-  executor: ChessToolExecutor,
+  executor: VoiceToolExecutor,
   audioMuted: boolean,
-  volume: number,
-  view: AvailableDestination | "loading" | "chess-setup",
+  volumeOrGameId: number | string,
+  view: AvailableDestination | "loading" | "chess-setup" = "home",
+  gameVolume = 100,
 ) {
+  const volume = typeof volumeOrGameId === "number" ? volumeOrGameId : gameVolume;
+  const gameId = typeof volumeOrGameId === "string" ? volumeOrGameId : "chess";
   const [status, setStatus] = useState<VoiceStatus>("idle");
   const [error, setError] = useState<string | null>(null);
   const [caption, setCaption] = useState("");
   const [microphoneMuted, setMicrophoneMuted] = useState(false);
+  const [isSpeaking, setIsSpeaking] = useState(false);
+  const speechDeadlineRef = useRef(0);
+  const speechContextRef = useRef<AudioContext | null>(null);
+  const speechAnalyserRef = useRef<AnalyserNode | null>(null);
   const peerRef = useRef<RTCPeerConnection | null>(null);
   const channelRef = useRef<RTCDataChannel | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -112,6 +124,7 @@ export function useVoiceCompanion(
 
   const announce = useCallback(
     (content: string) => {
+      if (channelRef.current?.readyState !== "open") return;
       setCaption("");
       transcriptSource.current = null;
       send({
@@ -120,8 +133,12 @@ export function useVoiceCompanion(
         delegation_id: null,
         content,
       });
+      if (!audioMuted) {
+        speechDeadlineRef.current = Date.now() + Math.min(20_000, 1_200 + content.length * 45);
+        setIsSpeaking(true);
+      }
     },
-    [send],
+    [audioMuted, send],
   );
 
   const cleanup = useCallback(() => {
@@ -147,7 +164,13 @@ export function useVoiceCompanion(
     connectionTimeout.current = null;
     closeResolver.current?.();
     closeResolver.current = null;
-    executor.cancelRequests();
+    executor.cancelRequests?.();
+    executor.invalidatePending?.();
+    speechDeadlineRef.current = 0;
+    void speechContextRef.current?.close().catch(() => undefined);
+    speechContextRef.current = null;
+    speechAnalyserRef.current = null;
+    setIsSpeaking(false);
     setMicrophoneMuted(false);
     setStatus("idle");
   }, [executor]);
@@ -190,7 +213,7 @@ export function useVoiceCompanion(
           return;
         case "error":
           setError(
-            "The voice service reported an error. End voice and try again. Your chess game is safe.",
+            "The voice service reported an error. End voice and try again. Your game is saved.",
           );
           return;
         case "transcript": {
@@ -216,6 +239,10 @@ export function useVoiceCompanion(
               message: "The request could not finish. Ask the player to try again.",
             });
           }
+          if (!audioMuted) {
+            speechDeadlineRef.current = Date.now() + 8_000;
+            setIsSpeaking(true);
+          }
           if (channelRef.current !== channel || channel.readyState !== "open") return;
           send({
             type: "response.item.create",
@@ -226,7 +253,7 @@ export function useVoiceCompanion(
         }
       }
     },
-    [cleanup, executor, send],
+    [audioMuted, cleanup, executor, send],
   );
 
   const start = useCallback(async () => {
@@ -264,6 +291,17 @@ export function useVoiceCompanion(
       audioRef.current = audio;
       peer.ontrack = (event) => {
         audio.srcObject = event.streams[0];
+        try {
+          const context = new AudioContext();
+          const analyser = context.createAnalyser();
+          analyser.fftSize = 256;
+          context.createMediaStreamSource(event.streams[0]).connect(analyser);
+          speechContextRef.current = context;
+          speechAnalyserRef.current = analyser;
+          void context.resume().catch(() => undefined);
+        } catch {
+          /* Use the bounded timer if playback analysis is unavailable. */
+        }
         void audio
           .play()
           .catch(() =>
@@ -282,7 +320,7 @@ export function useVoiceCompanion(
           cleanup();
           setStatus("error");
           setError(
-            "The voice connection ended. Your chess game is still saved. You can reconnect or use typed commands.",
+            "The voice connection ended. Your game is saved. You can reconnect or use typed commands.",
           );
         };
         if (peer.connectionState === "failed") fail();
@@ -305,7 +343,7 @@ export function useVoiceCompanion(
       const response = await fetch("/api/voice/session", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ sdp: peer.localDescription?.sdp, view }),
+        body: JSON.stringify({ sdp: peer.localDescription?.sdp, view, gameId }),
         signal: AbortSignal.any([request.signal, AbortSignal.timeout(25_000)]),
       });
       const text = await response.text();
@@ -334,7 +372,7 @@ export function useVoiceCompanion(
           : "Voice startup failed. Check microphone permission and try again.",
       );
     }
-  }, [audioMuted, cleanup, handleEvent, status, volume, view]);
+  }, [audioMuted, cleanup, gameId, handleEvent, status, volume, view]);
 
   const toggleMicrophone = useCallback(() => {
     const next = !microphoneMuted;
@@ -353,5 +391,33 @@ export function useVoiceCompanion(
 
   useEffect(() => cleanup, [cleanup]);
 
-  return { status, error, caption, microphoneMuted, start, stop, toggleMicrophone, announce };
+  useEffect(() => {
+    if (audioMuted || status !== "connected") {
+      setIsSpeaking(false);
+      return;
+    }
+    const samples = new Uint8Array(256);
+    const timer = window.setInterval(() => {
+      const analyser = speechAnalyserRef.current;
+      if (analyser) {
+        analyser.getByteTimeDomainData(samples);
+        if (samples.some((sample) => Math.abs(sample - 128) > 3))
+          speechDeadlineRef.current = Date.now() + 650;
+      }
+      setIsSpeaking(Date.now() < speechDeadlineRef.current);
+    }, 150);
+    return () => window.clearInterval(timer);
+  }, [audioMuted, status]);
+
+  return {
+    status,
+    error,
+    caption,
+    microphoneMuted,
+    isSpeaking,
+    start,
+    stop,
+    toggleMicrophone,
+    announce,
+  };
 }

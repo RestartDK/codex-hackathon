@@ -56,6 +56,9 @@ export interface ChessToolBridge {
   >;
   newGame: () => void;
   startDefaultGame?: () => void;
+  pendingPromotion?: { from: Square; to: Square } | null;
+  promote?: (piece: "q" | "r" | "b" | "n") => void;
+  cancelPromotion?: () => void;
   resumeGame?: () => void | { ok: boolean; message: string };
   pauseGame?: () => void | { ok: boolean; message: string };
   undoMove: () => void | { ok: boolean; message: string };
@@ -119,17 +122,13 @@ export function createChessToolExecutor(getBridge: () => ChessToolBridge) {
       if (!destination)
         return json({
           status: "error",
-          message: "Choose chess, Loups-Garous, home, audio settings, or help.",
+          message: `Choose ${PLAYABLE_GAMES_LABEL}, home, audio settings, or help.`,
         });
-      if (destination === "tic-tac-toe") {
-        return json({
-          status: "unavailable",
-          message: `${PLAYABLE_GAMES_LABEL} are ready to play. Tic-Tac-Toe is coming soon.`,
-        });
-      }
       cancelRequests();
       if (
-        (destination === "home" || destination === "loups-garous") &&
+        destination !== "chess" &&
+        destination !== "audio" &&
+        destination !== "help" &&
         bridge.view === "chess" &&
         bridge.history.length > 0 &&
         !bridge.awaitingStartChoice &&
@@ -364,6 +363,18 @@ export function createChessToolExecutor(getBridge: () => ChessToolBridge) {
       return json({ status: result.ok ? "completed" : "error", message: result.message });
     }
 
+    if (name === "promote_pawn") {
+      const piece = promotionSymbols[String(fields.get("piece"))];
+      if (!piece || !bridge.pendingPromotion || !bridge.promote || bridge.isPaused)
+        return json({
+          status: "error",
+          message:
+            "There is no pawn waiting for promotion. Choose queen, rook, bishop, or knight when prompted.",
+        });
+      bridge.promote(piece);
+      return json({ status: "completed", message: "The pawn was promoted." });
+    }
+
     if (name === "get_hint" || name === "play_best_move") {
       if (bridge.awaitingStartChoice)
         return json({ status: "error", message: "Choose Resume or New Game first." });
@@ -416,12 +427,25 @@ export function createChessToolExecutor(getBridge: () => ChessToolBridge) {
 
     if (name === "cancel_action") {
       cancelRequests();
+      bridge.cancelPromotion?.();
       return json({ status: "cancelled", message: "Cancelled the current request." });
     }
 
     if (name === "game_control") {
       const action = fields.get("action");
       cancelRequests();
+      if (action === "start_game") {
+        if (bridge.view !== "chess-setup" || !bridge.startDefaultGame)
+          return json({
+            status: "error",
+            message: "Open new game setup first, or say play chess to resume.",
+          });
+        bridge.startDefaultGame();
+        return json({
+          status: "completed",
+          message: "Chess has started. Say your move or ask about the board.",
+        });
+      }
       if (action === "new_game") {
         bridge.newGame();
         return json({

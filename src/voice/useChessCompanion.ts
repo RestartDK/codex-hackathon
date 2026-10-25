@@ -7,14 +7,19 @@ import { PLAYABLE_GAMES_LABEL, type AvailableDestination } from "./navigation";
 
 const PIECES = { p: "pawn", n: "knight", b: "bishop", r: "rook", q: "queen", k: "king" };
 
-function narrateMove(move: Move, game: ChessToolBridge["game"]): string {
+function narrateMove(
+  move: Move,
+  game: ChessToolBridge["game"],
+  playerColor: ChessToolBridge["playerColor"],
+): string {
   const color = move.color === "w" ? "White" : "Black";
   let action = move.flags.includes("k")
     ? `${color} castles kingside`
     : move.flags.includes("q")
       ? `${color} castles queenside`
       : `${color} ${PIECES[move.piece]} from ${move.from} to ${move.to}`;
-  if (move.captured) action += `, capturing the ${PIECES[move.captured]}`;
+  if (move.captured)
+    action += `, capturing ${move.color !== playerColor ? "your" : "the opponent's"} ${PIECES[move.captured]}`;
   if (move.promotion) action += `, promoting to ${PIECES[move.promotion]}`;
   if (game.isCheckmate()) return `${action}. Checkmate. ${color} wins.`;
   if (game.isDraw()) return `${action}. The game is a draw.`;
@@ -23,7 +28,7 @@ function narrateMove(move: Move, game: ChessToolBridge["game"]): string {
 
 function welcome(bridge: ChessToolBridge): string {
   if (bridge.view === "home")
-    return `Welcome to Playora. ${PLAYABLE_GAMES_LABEL} are ready to play. Tic-Tac-Toe is coming soon. Say play chess or play Loups-Garous, or ask for help.`;
+    return `Welcome to Playora. ${PLAYABLE_GAMES_LABEL} are ready to play. Say a game name, or ask for help.`;
   if (bridge.view === "audio")
     return "You are in Audio Settings. You can adjust narrator volume, game sounds, and chess preferences. Say play chess to return to the board, or home for the game picker.";
   if (bridge.view === "help")
@@ -78,7 +83,7 @@ export function useChessCompanion(
     ) {
       const move = bridge.game.history({ verbose: true }).at(-1);
       if (move) {
-        const narration = narrateMove(move, bridge.game);
+        const narration = narrateMove(move, bridge.game, bridge.playerColor);
         if (bridge.game.isGameOver()) previousResult.current = resultMessage;
         setMessage(narration);
         if (voice.status === "connected") voice.announce(narration);
@@ -106,7 +111,16 @@ export function useChessCompanion(
   async function runTool(name: string, args: object) {
     setBusy(true);
     try {
-      const reply = formatToolReply(await executor.execute(name, JSON.stringify(args)));
+      const raw = await executor.execute(name, JSON.stringify(args));
+      const result = JSON.parse(raw) as { status?: string };
+      // The history effect announces the complete move, including captures.
+      // A short SAN acknowledgement must not replace that authoritative update.
+      if (
+        result.status === "completed" &&
+        ["make_move", "play_best_move", "promote_pawn"].includes(name)
+      )
+        return;
+      const reply = formatToolReply(raw);
       setMessage(reply);
       if (voice.status === "connected") voice.announce(reply);
     } catch {
@@ -139,8 +153,7 @@ export function useChessCompanion(
         announce("Open Chess setup first, then say start with the defaults.");
         return;
       }
-      bridgeRef.current.startDefaultGame?.();
-      announce("Starting Chess with the default settings. You play White. White to move.");
+      await runTool("game_control", { action: "start_game" });
       return;
     }
     if (/^(tutorial|guide|quick guide|how to play)$/i.test(command.trim())) {
