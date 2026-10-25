@@ -2,9 +2,9 @@
 
 ## Where it lives
 
-The new website is served at **`/landing/`** (explicit entry: `/landing/index.html`). The existing application remains at `/`. All launch actions open its existing game picker, where Chess can be selected. Loups-Garous is marked coming soon.
+The marketing website is served at **`/`**. The application is at **`/dashboard/`**, where the game picker offers Chess and Loups-Garous. Launch actions open `/dashboard/`. Existing `/landing/` bookmarks redirect to `/`.
 
-This implementation adds files only in `public/landing/` and `docs/landing-page/`. It does not modify existing application files, package definitions, lockfiles, server routes, deployment settings, or product styles. Vite/Nitro copies `public/landing/` into its existing production public output automatically.
+The marketing document is `public/index.html`; its assets remain under `public/landing/`. Nitro serves the static marketing document at `/` and retains the application's renderer for `/dashboard/`. Package definitions, lockfiles, server APIs, deployment settings, and product styles are unchanged.
 
 ## Run and build
 
@@ -15,11 +15,12 @@ bun install --frozen-lockfile
 bun run dev
 ```
 
-Open the local URL printed by the server, followed by `/landing/`. For production, use the existing `bun run build` and deployment workflow. This change deliberately does not replace the root homepage or adjust hosting configuration.
+Open the local URL printed by the server for the marketing website. Open `/dashboard/` for the application. Production uses the existing `bun run build` and deployment workflow without a hosting configuration change.
 
 ## Files
 
-- `public/landing/index.html`: all eight sections, a growing game library, chat FAQ, and truthful prototype copy.
+- `public/index.html`: the marketing document, game library, and chat FAQ.
+- `public/landing/index.html`: the legacy URL redirect.
 - `public/landing/styles.css`: independent design tokens and responsive styles; no application stylesheet imports.
 - `public/landing/script.js`: mobile navigation and a local FAQ chat guide; no speech, capture, analytics, or external API calls.
 - `public/landing/assets/sky.svg`: original decorative cloud atmosphere.
@@ -32,9 +33,9 @@ Open the local URL printed by the server, followed by `/landing/`. For productio
 
 | Published capability | Source |
 | --- | --- |
-| Chess available; Loups-Garous and Tic-Tac-Toe planned | `GamePicker.tsx`, `navigation.ts`, README |
+| Chess and Loups-Garous available; Tic-Tac-Toe planned | `GamePicker.tsx`, `navigation.ts`, README |
 | Typed commands and explicit voice start/stop | `CompanionDock.tsx` |
-| Spoken board descriptions, hints, confirmation, history | `ChessView.tsx`, voice tools, README |
+| Spoken board descriptions, hints, and history | `ChessView.tsx`, voice tools, README |
 | Narrator volume and optional screen-reader mode | `AudioSettings.tsx` |
 | Initial action and microphone permission required | Voice implementation and README |
 | Audio is sent to OpenAI during live voice; no landing capture | Voice implementation; landing script has no capture code |
@@ -56,7 +57,7 @@ The illustrated transcript is labeled as an example. Full accessibility conforma
 
 ## Handoff documents
 
-[DESIGN.md](DESIGN.md) contains the original visual specification. [IMPLEMENTATION_BRIEF.md](IMPLEMENTATION_BRIEF.md) and [CODEX_PROMPT.md](CODEX_PROMPT.md) were prepared before the repository became available; their initial “no repository” statements record that earlier handoff context. This README describes the completed repository implementation. Where route guidance differs, `/landing/` is intentional to honor the instruction to leave existing files untouched.
+[DESIGN.md](DESIGN.md) contains the original visual specification. [IMPLEMENTATION_BRIEF.md](IMPLEMENTATION_BRIEF.md) and [CODEX_PROMPT.md](CODEX_PROMPT.md) were prepared before the repository became available; their initial “no repository” statements record that earlier handoff context. This README describes the completed repository implementation. Current route ownership is `/` for marketing and `/dashboard/` for the application. Older route guidance in those handoff documents is historical.
 
 ## Requested visual revision
 

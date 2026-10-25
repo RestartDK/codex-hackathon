@@ -9,15 +9,40 @@ async function get(path) {
   return response;
 }
 
-const home = await get("/");
-assert.match(home.headers.get("content-type") ?? "", /text\/html/u);
-const html = await home.text();
-const sources = [...html.matchAll(/<script\b[^>]*\bsrc="([^"]+)"/gu)];
-assert.ok(sources.length > 0, "The frontend must include a module entry");
+async function getHtml(path) {
+  const response = await get(path);
+  assert.match(response.headers.get("content-type") ?? "", /text\/html/u);
+  return response.text();
+}
 
-for (const [, source] of sources) {
-  const script = await get(source);
-  assert.match(script.headers.get("content-type") ?? "", /javascript|typescript/u);
+const landing = await getHtml("/");
+assert.match(landing, /<title>Play by Voice — Play beyond the screen\.<\/title>/u);
+assert.match(landing, /href="\/dashboard\/"/u, "the landing play action opens the game picker");
+assert.match(
+  landing,
+  /href="\/landing\/styles\.css"/u,
+  "landing assets resolve from the root address",
+);
+assert.doesNotMatch(landing, /\/src\/main\.tsx/u, "the root address does not boot the game app");
+const landingStyles = await get("/landing/styles.css");
+assert.match(landingStyles.headers.get("content-type") ?? "", /text\/css/u);
+const legacyLanding = await getHtml("/landing/");
+assert.match(
+  legacyLanding,
+  /<link rel="canonical" href="\/" \/>/u,
+  "the old landing URL still reaches the page",
+);
+
+for (const path of ["/dashboard", "/dashboard/"]) {
+  const html = await getHtml(path);
+  assert.match(html, /<div id="root"><\/div>/u, `${path} boots the game app`);
+  assert.doesNotMatch(html, /Play beyond the screen\./u, `${path} does not serve the landing page`);
+  const sources = [...html.matchAll(/<script\b[^>]*\bsrc="([^"]+)"/gu)];
+  assert.ok(sources.length > 0, `${path} must include a module entry`);
+  for (const [, source] of sources) {
+    const script = await get(source);
+    assert.match(script.headers.get("content-type") ?? "", /javascript|typescript/u);
+  }
 }
 
 const engineScript = await get("/stockfish/stockfish-19-lite-single.js");
