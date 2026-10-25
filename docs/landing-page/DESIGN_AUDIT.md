@@ -1,4 +1,4 @@
-# Play by Voice landing page — design audit
+# Playora landing page — design audit
 
 Reviewed 25 October 2026. Scope: `/landing/`, with the platform home and Figma home/audio-settings screens as design references.
 
@@ -49,7 +49,7 @@ The current visual authority is GLACIAL_DIRECTION.md. Reviewed the restyled page
 
 ## Reference motion and rendering quality
 
-A second live inspection of Glacia identified its duplicated hover labels, vertical text exchange, cyan internal loop flare, diagonal blurred light streak, and mobile frosted navigation expansion. These observed behaviors now replace the earlier generic hover lift. Navigation and CTA labels have one accessible name, and keyboard focus receives the same visual exchange. The mobile menu is a full-width top panel with centered links and a text-only Menu/Close control; its height reflects Play by Voice's three links. It supports Escape, selection close, and focus return.
+A second live inspection of Glacia identified its duplicated hover labels, vertical text exchange, cyan internal loop flare, diagonal blurred light streak, and mobile frosted navigation expansion. These observed behaviors now replace the earlier generic hover lift. Navigation and CTA labels have one accessible name, and keyboard focus receives the same visual exchange. The mobile menu is a full-width top panel with centered links and a text-only Menu/Close control; its height reflects Playora's three links. It supports Escape, selection close, and focus return.
 
 The hero's ice folds are now continuously warped by a local WebGL texture shader. The liquid orb uses a high-precision fragment shader rather than the old 192px CPU bitmap. Large orb buffers are at least 512px and scale with display density and element size; circle clipping happens at the browser's native edge. Small companion avatars retain scalable SVG/CSS. Resize observers refresh buffers, and context failure leaves the SVG/CSS fallback. The shared pause control freezes the background, orbs, and ambient button flare; reduced-motion preferences stop ambient motion and skip text reveals.
 
@@ -69,6 +69,6 @@ The hero shader clock increased from 0.12 to 0.4, with wider fold displacement a
 
 ## White footer lettering and message FAQ
 
-The large decorative PLAY BY VOICE lettering is pure white; its existing fade and blue footer background remain. The user clarified that white applies to the letters. FAQ now uses right-aligned question bubbles with circular plus controls and left-aligned white Play by Voice reply bubbles, replacing the text composer and chatbot transcript. The selected question becomes dark ice blue and its plus rotates to a close mark. Eight verified answers live in semantic HTML, with native details/summary behavior as the no-JavaScript fallback. The first answer starts open; enhancement allows one active reply, animates measured height/opacity, and supports keyboard and reduced motion. No FAQ API or microphone behavior was introduced.
+The large decorative PLAYORA lettering is pure white; its existing fade and blue footer background remain. The user clarified that white applies to the letters. FAQ now uses right-aligned question bubbles with circular plus controls and left-aligned white Playora reply bubbles, replacing the text composer and chatbot transcript. The selected question becomes dark ice blue and its plus rotates to a close mark. Eight verified answers live in semantic HTML, with native details/summary behavior as the no-JavaScript fallback. The first answer starts open; enhancement allows one active reply, animates measured height/opacity, and supports keyboard and reduced motion. No FAQ API or microphone behavior was introduced.
 
 Verified pointer expansion, keyboard opening/closing, switching replies, long privacy text, 320/390/768/1024/1440px layouts without overflow, pure-white footer text, and empty browser error logs. The production build and source checks passed.

@@ -1,4 +1,4 @@
-# Play by Voice — Design system
+# Playora — Design system
 
 Status: implementation specification for a hackathon landing page.
 Date: 24 October 2026.
@@ -8,7 +8,7 @@ Companion files: [implementation brief](IMPLEMENTATION_BRIEF.md), [Codex prompt]
 
 ## 1. Product and evidence
 
-Play by Voice is a voice-led gaming project. The prior product discussion names Chess and Loups-Garous and refers to existing screens for both. The landing page should invite people to discover games through speaking and listening, including people who cannot rely on a visual board.
+Playora is a voice-led gaming project. The prior product discussion names Chess and Loups-Garous and refers to existing screens for both. The landing page should invite people to discover games through speaking and listening, including people who cannot rely on a visual board.
 
 The actual repository, product screens, supported commands, game availability, speech providers, browser support, and accessibility test results were not available when this specification was prepared. Treat those as implementation discovery items. The prior discussion is evidence of intent, not proof of working features. Never turn an aspiration into an unqualified product claim.
 
@@ -119,7 +119,7 @@ Fallback: layered CSS gradients plus the orb, with a strong white text-safe zone
 
 ## 7. Navigation and controls
 
-Navbar: sticky/fixed floating pill, 24px from top wide / 12px small, 72px tall wide / 64px small. Horizontally centered within page gutters. Wordmark “Play by Voice” at left; links “Games,” “How it works,” “FAQ”; “Start playing” at right. Reserve hero clearance to prevent overlap. No pricing or invented account link.
+Navbar: sticky/fixed floating pill, 24px from top wide / 12px small, 72px tall wide / 64px small. Horizontally centered within page gutters. Wordmark “Playora” at left; links “Games,” “How it works,” “FAQ”; “Start playing” at right. Reserve hero clearance to prevent overlap. No pricing or invented account link.
 
 Below 768px show wordmark and a 44px menu button; place “Start playing” at the top of the expanded menu. Use an inline disclosure panel anchored below the pill, not a full-screen modal. `aria-expanded`, `aria-controls`, Escape to close, close on selection, return focus to trigger on Escape, remove hidden links from tab order. Do not trap focus for this nonmodal disclosure.
 
@@ -201,7 +201,7 @@ The landing page itself must satisfy the requirements in section 11 regardless o
 
 H2: **A few things you might be wondering.**
 
-Use message-shaped native disclosure controls, following the user's latest bubble FAQ reference. Questions align right with a circular plus. The active question is dark ice blue with white text, its plus rotates into a close mark, and a white Play by Voice reply bubble expands on the left below it. The first introductory answer starts open. Keep only one answer expanded when enhanced; native details remain usable without JavaScript.
+Use message-shaped native disclosure controls, following the user's latest bubble FAQ reference. Questions align right with a circular plus. The active question is dark ice blue with white text, its plus rotates into a close mark, and a white Playora reply bubble expands on the left below it. The first introductory answer starts open. Keep only one answer expanded when enhanced; native details remain usable without JavaScript.
 
 The old text composer and chatbot transcript have been removed. All eight verified answers live in semantic HTML: about the project, games, screen access, setup, typed commands, move guidance, microphone requirements, and privacy. No API, recording, or question storage is involved. Preserve the distinctions between available/planned games and local storage/provider retention.
 
@@ -211,7 +211,7 @@ Colors: inactive question `#E2F0F9`, active question `#315F78`, reply white, rep
 
 ### 8.8 Final invitation and footer
 
-Use a single spacious editorial footer matching the user's supplied reference: warm off-white canvas, very large centered **Reconnect with play.** headline, one dark softly beveled pill **Start playing** action, an open row of underlined links, then an oversized white **PLAY BY VOICE** wordmark that fades toward the bottom. Remove the previous orb-led CTA scene and compact footer bar.
+Use a single spacious editorial footer matching the user's supplied reference: warm off-white canvas, very large centered **Reconnect with play.** headline, one dark softly beveled pill **Start playing** action, an open row of underlined links, then an oversized white **PLAYORA** wordmark that fades toward the bottom. Remove the previous orb-led CTA scene and compact footer bar.
 
 Only use real links: Games, How it works, GitHub, and Back to top. Do not invent social accounts, email addresses, or an App Store listing. Keep the oversized wordmark decorative and hidden from assistive technology. Contain its crop in its own wrapper; it must not create document overflow. Wrap the link row naturally on small screens and retain 44px targets.
 
