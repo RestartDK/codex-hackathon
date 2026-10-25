@@ -33,6 +33,10 @@ const createSchema = z.object({
       >,
     )
     .optional(),
+  // NPCs are deterministic bots unless a host explicitly asks for an agent.
+  // This remains available for controlled demos without making normal games
+  // wait on one model request per NPC action.
+  controllers: z.record(z.string().regex(/^npc-\d+$/u), z.enum(["agent", "bot"])).optional(),
   start: z.boolean().default(true),
   testMode: z.boolean().default(false),
   skipIntro: z.boolean().default(false),
@@ -80,7 +84,7 @@ function parseGameCommand(text: string, game: Game, actorId: string): ActionInpu
   const command = normalize(text);
   const actor = player(game, actorId);
   if (!actor) throw new Error("Your player is missing from this village.");
-  if (!command) throw new Error("Say a game command, such as ‘choose Camille’.");
+  if (!command) throw new Error("Say a game command, such as ‘choose Emma’.");
 
   const targets = mentionedPlayers(game, command, actorId);
   const target = targets[0];
@@ -124,7 +128,7 @@ function parseGameCommand(text: string, game: Game, actorId: string): ActionInpu
         return { type: "lovers", first: choices[0]!.id, second: choices[1]!.id };
     }
     throw new Error(
-      "Name two players, for example ‘choose Camille and Jules’, or say ‘choose for me’.",
+      "Name two players, for example ‘choose Emma and Lucas’, or say ‘choose for me’.",
     );
   }
 
@@ -144,9 +148,7 @@ function parseGameCommand(text: string, game: Game, actorId: string): ActionInpu
         const automaticTarget = firstLivingOther((candidate) => candidate.role !== "werewolf");
         if (automaticTarget) return { type: "night", target: automaticTarget.id };
       }
-      throw new Error(
-        "Say ‘choose Camille’, ‘hunt Camille’, ‘choose for me’, or ‘let the pack decide’.",
-      );
+      throw new Error("Say ‘choose Emma’, ‘hunt Emma’, ‘choose for me’, or ‘let the pack decide’.");
     }
     if (actor.role === "seer") {
       if (movesOn) return { type: "night" };
@@ -162,7 +164,7 @@ function parseGameCommand(text: string, game: Game, actorId: string): ActionInpu
         if (automaticTarget) return { type: "night", target: automaticTarget.id };
       }
       throw new Error(
-        "Say ‘choose Camille’, ‘investigate Camille’, ‘choose for me’, or ‘wait for dawn’.",
+        "Say ‘choose Emma’, ‘investigate Emma’, ‘choose for me’, or ‘wait for dawn’.",
       );
     }
     if (actor.role === "witch") {
@@ -176,7 +178,7 @@ function parseGameCommand(text: string, game: Game, actorId: string): ActionInpu
         if (automaticTarget && game.witchPoisonAvailable)
           return { type: "night", poison: automaticTarget.id };
       }
-      throw new Error("Say ‘save’, ‘choose Camille’ to poison, ‘choose for me’, or ‘pass’.");
+      throw new Error("Say ‘save’, ‘choose Emma’ to poison, ‘choose for me’, or ‘pass’.");
     }
     if (movesOn) return { type: "night" };
     throw new Error("It is night. Say ‘continue’, ‘wait for dawn’, or ‘do nothing’.");
@@ -210,7 +212,7 @@ function parseGameCommand(text: string, game: Game, actorId: string): ActionInpu
       const automaticTarget = firstLivingOther();
       if (automaticTarget) return { type: "vote", target: automaticTarget.id };
     }
-    throw new Error("Name someone to vote for, for example ‘choose Camille’ or ‘choose for me’.");
+    throw new Error("Name someone to vote for, for example ‘choose Emma’ or ‘choose for me’.");
   }
 
   if (game.phase === "hunter") {
@@ -220,7 +222,7 @@ function parseGameCommand(text: string, game: Game, actorId: string): ActionInpu
       const automaticTarget = firstLivingOther();
       if (automaticTarget) return { type: "hunter-shot", target: automaticTarget.id };
     }
-    throw new Error("Name a player to shoot, for example ‘choose Camille’ or ‘choose for me’.");
+    throw new Error("Name a player to shoot, for example ‘choose Emma’ or ‘choose for me’.");
   }
 
   throw new Error("There is no available game action for that command.");
@@ -357,6 +359,7 @@ export const loupsGarous: GameModule<Game, CreateInput, ActionInput, GameView> =
       : createGame(input.name, input.count, {
           roleCounts: input.roleCounts ?? defaultRoleCounts(input.count),
           tieRule: input.tieRule,
+          controllers: input.controllers,
         });
     if (input.start) {
       if (input.testMode || input.skipIntro) {
@@ -465,7 +468,7 @@ export const loupsGarous: GameModule<Game, CreateInput, ActionInput, GameView> =
         await fillAiVotes(game);
         break;
       case "vote":
-        // Voice users can say “vote for Camille” from discussion. Open the vote
+        // Voice users can say “vote for Emma” from discussion. Open the vote
         // first so that sentence performs the same complete action as the UI flow.
         if (game.phase === "day") {
           beginVote(game);

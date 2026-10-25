@@ -243,7 +243,6 @@ export type StoryAudioOptions = {
   feed: FeedEntry[] | undefined;
   gameId: string | undefined;
   phase: string | undefined;
-  liveVoiceActive: boolean;
   /** Reveals the new phase exactly when its spoken transition begins. */
   onPhaseBoundaryStart?: () => void;
   /** A private guide line that needs to play before the first public story line. */
@@ -259,7 +258,6 @@ export function useStoryAudio({
   feed,
   gameId,
   phase,
-  liveVoiceActive,
   onPhaseBoundaryStart,
   openingLine,
   backend,
@@ -277,6 +275,11 @@ export function useStoryAudio({
   const phaseRef = useRef<string | undefined>(undefined);
   const onPhaseBoundaryStartRef = useRef(onPhaseBoundaryStart);
   const speakingRef = useRef(false);
+  // Browser speech can call an old completion handler just after cancel(). Keep
+  // one generation and one active playback ID so a stale handler cannot advance
+  // a newly-started narration queue.
+  const playbackGenerationRef = useRef(0);
+  const activePlaybackRef = useRef<string | undefined>(undefined);
   const autoReadRef = useRef(autoRead);
   const mutedRef = useRef(muted);
   const pausedRef = useRef(paused);
@@ -288,6 +291,8 @@ export function useStoryAudio({
 
   useEffect(() => {
     if (!backend || backendRef.current === backend) return;
+    playbackGenerationRef.current += 1;
+    activePlaybackRef.current = undefined;
     backendRef.current.cancel();
     backendRef.current = backend;
     speakingRef.current = false;
@@ -300,6 +305,8 @@ export function useStoryAudio({
   function stop() {
     queueRef.current = [];
     speakingRef.current = false;
+    playbackGenerationRef.current += 1;
+    activePlaybackRef.current = undefined;
     backendRef.current.cancel();
     pausedRef.current = false;
     setPaused(false);
@@ -325,7 +332,10 @@ export function useStoryAudio({
     }
     const profile = browserVoiceProfiles.assistant;
     const voice = { ...profile, rate: profile.rate * speechRateRef.current };
+    const generation = playbackGenerationRef.current;
+    const playbackId = crypto.randomUUID();
     speakingRef.current = true;
+    activePlaybackRef.current = playbackId;
     setActiveSpeaker(next.speaker);
     lastLineRef.current = next;
     if (next.phaseBoundary) onPhaseBoundaryStartRef.current?.();
@@ -334,6 +344,12 @@ export function useStoryAudio({
       voice,
       volume: volumeRef.current,
       onFinished: () => {
+        if (
+          generation !== playbackGenerationRef.current ||
+          activePlaybackRef.current !== playbackId
+        )
+          return;
+        activePlaybackRef.current = undefined;
         speakingRef.current = false;
         setActiveSpeaker(undefined);
         if (next.phaseBoundary) setPhaseTransitioning(false);
@@ -343,7 +359,7 @@ export function useStoryAudio({
   }, []);
 
   function enqueue(line: SpokenLine) {
-    if (!line.text.trim() || (liveVoiceActive && !line.duringLive)) return;
+    if (!line.text.trim()) return;
     queueRef.current.push(line);
     playNext();
   }
@@ -427,6 +443,8 @@ export function useStoryAudio({
       queueRef.current = [];
       publicLinesRef.current = [];
       speakingRef.current = false;
+      playbackGenerationRef.current += 1;
+      activePlaybackRef.current = undefined;
       setPhaseTransitioning(false);
       backendRef.current.cancel();
       window.queueMicrotask(() => setActiveSpeaker(undefined));
@@ -438,6 +456,8 @@ export function useStoryAudio({
       // old scene so the first thing heard always describes the phase now on screen.
       queueRef.current = [];
       speakingRef.current = false;
+      playbackGenerationRef.current += 1;
+      activePlaybackRef.current = undefined;
       backendRef.current.cancel();
       window.queueMicrotask(() => setActiveSpeaker(undefined));
     }
@@ -496,9 +516,12 @@ export function useStoryAudio({
     }
     playNext();
   }, [feed, gameId, openingLine, phase, playNext]);
-  useEffect(() => () => {
-    backendRef.current.cancel();
-  });
+  useEffect(
+    () => () => {
+      backendRef.current.cancel();
+    },
+    [],
+  );
 
   return {
     activeSpeaker,

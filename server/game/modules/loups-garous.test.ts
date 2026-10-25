@@ -19,9 +19,9 @@ describe("Loups-Garous voice-command actions", () => {
     startGame(game);
     game.phase = "day";
 
-    expect(await loupsGarous.parseCommand!("I accuse Camille", game, "human")).toEqual({
+    expect(await loupsGarous.parseCommand!("I accuse Emma", game, "human")).toEqual({
       type: "speak",
-      message: "I accuse Camille",
+      message: "I accuse Emma",
     });
     await loupsGarous.applyAction(game, "human", { type: "pause" });
     expect(game.paused).toBe(true);

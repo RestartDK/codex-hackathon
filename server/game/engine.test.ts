@@ -68,6 +68,31 @@ describe("Loups-Garous rules engine", () => {
     startGame(game);
     expect(game.phase).toBe("night");
   });
+  it("uses deterministic bots and the reference six-player village by default", () => {
+    const game = createGame("You", 6);
+
+    expect(game.players.map((candidate) => candidate.name)).toEqual([
+      "You",
+      "Emma",
+      "Lucas",
+      "Sofia",
+      "Noah",
+      "Mia",
+    ]);
+    expect(game.players.slice(1).every((candidate) => candidate.controller === "bot")).toBe(true);
+    expect(game.players.slice(1).map((candidate) => candidate.profile.voiceKey)).toEqual([
+      "emma",
+      "lucas",
+      "sofia",
+      "noah",
+      "mia",
+    ]);
+    expect(game.players[1]?.profile.introduction).toContain("Emma");
+
+    const configured = createGame("You", 6, { controllers: { "npc-2": "agent" } });
+    expect(configured.players[1]?.controller).toBe("bot");
+    expect(configured.players[2]?.controller).toBe("agent");
+  });
   it("keeps public conversation and voting observations in NPC memory", () => {
     const game = gameAs("villager", 6);
     startGame(game);
@@ -157,6 +182,16 @@ describe("Loups-Garous rules engine", () => {
           entry.text.includes("taken by the Werewolves"),
       ),
     ).toBe(true);
+    const publicView = view(game, "human");
+    expect(publicView.players.find((candidate) => candidate.id === target.id)).toMatchObject({
+      alive: false,
+      revealedRole: target.role,
+    });
+    expect(
+      publicView.players
+        .filter((candidate) => candidate.alive)
+        .every((candidate) => candidate.revealedRole === undefined),
+    ).toBe(true);
     expect(
       game.feed.some(
         (entry) =>
@@ -194,6 +229,50 @@ describe("Loups-Garous rules engine", () => {
       others[i]!.voteId = i % 2 ? others[0]!.id : others[1]!.id;
     resolveVote(game, () => 0.1);
     expect(game.phase).toBe("night");
+    const publicView = view(game, "human");
+    expect(publicView.lastVotes).toHaveLength(game.players.length);
+    expect(publicView.lastVoteResult).toMatchObject({ day: 1 });
+    expect(publicView.lastVoteResult?.exiledPlayerId).toBeUndefined();
+    expect(publicView.lastVoteResult?.tiedTargetIds).toHaveLength(2);
+    expect(publicView.players.every((candidate) => candidate.revealedRole === undefined)).toBe(
+      true,
+    );
+  });
+  it("publishes an exile result without exposing any living role", () => {
+    const game = gameAs("villager", 6);
+    startGame(game);
+    game.phase = "day";
+    const target = game.players.find(
+      (candidate) => candidate.id !== "human" && candidate.role === "villager",
+    )!;
+    beginVote(game);
+    for (const voter of game.players) {
+      submitVote(game, voter.id, voter.id === target.id ? "human" : target.id);
+    }
+
+    resolveVote(game);
+
+    const publicView = view(game, "human");
+    expect(publicView.phase).toBe("night");
+    expect(publicView.players.find((candidate) => candidate.id === target.id)).toMatchObject({
+      alive: false,
+      revealedRole: "villager",
+    });
+    expect(
+      publicView.players
+        .filter((candidate) => candidate.alive)
+        .every((candidate) => candidate.revealedRole === undefined),
+    ).toBe(true);
+    expect(publicView.lastVoteResult).toMatchObject({
+      day: 1,
+      exiledPlayerId: target.id,
+      tiedTargetIds: [target.id],
+    });
+    expect(publicView.lastVoteResult?.ballots).toHaveLength(game.players.length);
+    expect(publicView.lastVoteResult?.tally).toContainEqual({
+      target: target.id,
+      votes: game.players.length - 1,
+    });
   });
   it("rejects self votes and invalid speech", () => {
     const game = gameAs();

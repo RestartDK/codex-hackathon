@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { FormEvent } from "react";
-import type { FeedEntry, GameView, PublicPlayerView, Role } from "../server/game/types.js";
+import type { FormEvent, ReactNode } from "react";
+import type { FeedEntry, GameView, Role } from "../server/game/types.js";
+import { defaultRoleCounts } from "../server/game/rules.js";
 import {
   createOpenAINarrationBackend,
   primeBrowserNarration,
@@ -21,6 +22,14 @@ const roleNames: Record<Role, string> = {
   witch: "Witch",
   hunter: "Hunter",
   cupid: "Cupid",
+};
+const roleSymbols: Record<Role, string> = {
+  werewolf: "🐺",
+  villager: "●",
+  seer: "◆",
+  witch: "✦",
+  hunter: "✹",
+  cupid: "♥",
 };
 const phaseNames = {
   setup: "Setup",
@@ -55,9 +64,9 @@ function openingBriefing(game: GameView) {
         ? "It is night now, so follow the private action in your turn panel."
         : "Use the current phase panel for your next action.";
   const nightVoiceExample: Record<Role, string> = {
-    seer: "say ‘investigate Camille’",
-    werewolf: "say ‘hunt Camille’ or ‘let the pack decide’",
-    witch: "say ‘save’, ‘poison Camille’, or ‘pass’",
+    seer: "say ‘investigate Emma’",
+    werewolf: "say ‘hunt Emma’ or ‘let the pack decide’",
+    witch: "say ‘save’, ‘poison Emma’, or ‘pass’",
     hunter: "say ‘wait for dawn’ until you need your final shot",
     cupid: "say ‘wait for dawn’ once the lovers are bound",
     villager: "say ‘wait for dawn’",
@@ -66,7 +75,7 @@ function openingBriefing(game: GameView) {
   return [
     `Welcome to Valombre. ${roleBriefing[me.role]}`,
     "The village wins by removing every Werewolf. The Werewolves win when they equal or outnumber everyone else. Nights are private; mornings are for public discussion and a village vote.",
-    `Your voice companion is already listening after microphone permission. At night, ${nightVoiceExample[me.role]}, or simply say ‘choose Camille’. During the morning, say ‘Camille, why do you suspect Noémie?’ or ‘tell the village I trust Jules’ to post a public message; the villagers will answer. Say ‘hear the villagers’, ‘begin vote’, ‘vote for Camille’, or ‘what can I do?’ at any time.`,
+    `Your voice companion is already listening after microphone permission. At night, ${nightVoiceExample[me.role]}, or simply say ‘choose Emma’. During the morning, say ‘Emma, why do you suspect Sofia?’ or ‘tell the village I trust Lucas’ to post a public message; the villagers will answer. Say ‘hear the villagers’, ‘begin vote’, ‘vote for Emma’, or ‘what can I do?’ at any time.`,
     "For the full hands-free control list, say ‘voice help’. You can also say ‘repeat that’, ‘pause narration’, ‘speak slower’, ‘pause game’, ‘resume game’, or ‘stop voice control’.",
     nextStep,
   ].join(" ");
@@ -94,7 +103,7 @@ function currentActionHelp(game: GameView) {
   if (game.phase === "prologue")
     return "The village is being introduced. Say ‘begin the first night’ when you are ready.";
   if (game.phase === "cupid")
-    return "You are Cupid. Say ‘pair’ followed by two living player names, for example ‘pair Camille and Jules’.";
+    return "You are Cupid. Say ‘pair’ followed by two living player names, for example ‘pair Emma and Lucas’.";
   if (game.phase === "night") {
     if (me.role === "werewolf")
       return "It is night. Say ‘hunt’ and a living player’s name, or say ‘let the pack decide’.";
@@ -186,9 +195,9 @@ function rosterSummary(game: GameView) {
 function voiceHelp(game: GameView) {
   return [
     currentActionHelp(game),
-    "To hear the interface in order, say ‘describe the interface’. Say ‘read my role’, ‘read the players’, ‘who is alive’, ‘read updates’, ‘read all messages’, or ‘what did Camille say?’ to hear game information.",
+    "To hear the interface in order, say ‘describe the interface’. Say ‘read my role’, ‘read the players’, ‘who is alive’, ‘read updates’, ‘read all messages’, or ‘what did Emma say?’ to hear game information.",
     "For audio, say ‘repeat that’, ‘stop speaking’, ‘pause narration’, ‘resume narration’, ‘speak slower’, ‘speak faster’, ‘volume up’, ‘volume down’, ‘turn auto read on’, or ‘turn auto read off’.",
-    "For choices, you can say ‘choose Camille’, ‘pick Jules’, ‘select Noémie’, ‘vote for Théo’, ‘choose for me’, ‘continue’, or ‘do nothing’. Say ‘pause game’, ‘resume game’, ‘pause voice control’, or ‘resume listening’ whenever you need them.",
+    "For choices, you can say ‘choose Emma’, ‘pick Lucas’, ‘select Sofia’, ‘vote for Noah’, ‘choose for me’, ‘continue’, or ‘do nothing’. Say ‘pause game’, ‘resume game’, ‘pause voice control’, or ‘resume listening’ whenever you need them.",
   ].join(" ");
 }
 
@@ -253,15 +262,20 @@ function updatesForReading(game: GameView, command: string) {
 export default function App() {
   const [session, setSession] = useState<Session>();
   const [presentedGame, setPresentedGame] = useState<GameView>();
-  const [name, setName] = useState("You");
-  const [count, setCount] = useState(8);
-  const [tieRule, setTieRule] = useState("no-exile");
+  const [name] = useState("You");
+  const [count, setCount] = useState(6);
+  const [tieRule] = useState("no-exile");
+  const [setupStep, setSetupStep] = useState<"mode" | "village">("mode");
+  const [onboardingStep, setOnboardingStep] = useState<"village" | "role" | "details" | "moon">(
+    "village",
+  );
+  const [cinematic, setCinematic] = useState<
+    "sleep" | "wake" | "finding" | "vote" | "reveal" | undefined
+  >();
   const [selected, setSelected] = useState<string[]>([]);
-  const [message, setMessage] = useState("");
   const [heal, setHeal] = useState(false);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
-  const [commandText, setCommandText] = useState("");
   const [voiceStatus, setVoiceStatus] = useState(
     "Tap anywhere once to allow the microphone, then say “start the game”",
   );
@@ -272,7 +286,6 @@ export default function App() {
   const [guideBusy, setGuideBusy] = useState(false);
   const [liveConnected, setLiveConnected] = useState(false);
   const [liveConnecting, setLiveConnecting] = useState(false);
-  const [voiceTranscript, setVoiceTranscript] = useState("");
   const [openingAudio, setOpeningAudio] = useState<{ gameId: string; text: string }>();
   const recognitionRef = useRef<SpeechRecognitionSession | null>(null);
   const latestGameRef = useRef<GameView | undefined>(undefined);
@@ -284,6 +297,10 @@ export default function App() {
   const startVoiceRef = useRef<() => void>(() => undefined);
   const liveConnectionRef = useRef<LiveVoiceSession | null>(null);
   const useLiveFallbackRef = useRef(false);
+  const cinematicTimerRef = useRef<number | undefined>(undefined);
+  const onboardingTimerRef = useRef<number | undefined>(undefined);
+  const commandQueueRef = useRef(Promise.resolve());
+  const lastVoiceCommandRef = useRef({ text: "", at: 0 });
   const narrationBackend = useMemo(
     () => createOpenAINarrationBackend(session?.game.id, session?.token),
     [session?.game.id, session?.token],
@@ -298,7 +315,6 @@ export default function App() {
     feed: session?.game.feed,
     gameId: session?.game.id,
     phase: session?.game.phase,
-    liveVoiceActive: liveConnected,
     onPhaseBoundaryStart: revealNarratedPhase,
     openingLine: openingAudio && {
       id: `${openingAudio.gameId}:opening-guide`,
@@ -311,6 +327,7 @@ export default function App() {
   });
 
   function commitGame(game: GameView, token: string) {
+    const previous = latestGameRef.current;
     const nextSession = { game, token };
     latestGameRef.current = game;
     sessionRef.current = nextSession;
@@ -320,41 +337,61 @@ export default function App() {
     // old day or night screen.
     presentedGameRef.current = game;
     setPresentedGame(game);
+    if (!previous || previous.phase === game.phase) return;
+    if (game.me.investigations.length > previous.me.investigations.length) {
+      showCinematic("finding", 1800);
+      return;
+    }
+    if (previous.phase === "vote") {
+      showVoteOutcome(game);
+      return;
+    }
+    if (game.phase === "day") showCinematic("wake");
+    if (game.phase === "night") showCinematic("sleep");
   }
 
-  useEffect(() => {
-    // Browsers only allow a first microphone permission prompt from a user gesture.
-    // After one tap, recognition runs on the landing screen and throughout a game.
-    autoVoiceRequestedRef.current = true;
-    // When the player has already granted microphone access, begin immediately.
-    // For a first visit, wait for the one permission gesture below so the browser
-    // can actually show its microphone prompt instead of silently rejecting it.
-    if (navigator.permissions) {
-      void navigator.permissions
-        .query({ name: "microphone" as PermissionName })
-        .then((permission) => {
-          if (permission.state === "granted") startVoiceRef.current();
-        })
-        .catch(() => undefined);
-    }
-    const enableVoice = () => {
-      if (recognitionRef.current || liveConnectionRef.current) return;
-      primeBrowserNarration();
-      startVoiceRef.current();
-    };
-    // Keep this listener until the page closes: if permission was declined or a
-    // microphone was connected later, the next ordinary tap can retry it.
-    window.addEventListener("pointerdown", enableVoice, { passive: true });
-    return () => {
-      window.removeEventListener("pointerdown", enableVoice);
-      autoVoiceRequestedRef.current = false;
-      recognitionRef.current?.stop();
-      stopLiveVoice();
-    };
-  }, []);
+  function showCinematic(next: "sleep" | "wake" | "finding" | "vote" | "reveal", duration = 1450) {
+    if (cinematicTimerRef.current) window.clearTimeout(cinematicTimerRef.current);
+    setCinematic(next);
+    cinematicTimerRef.current = window.setTimeout(() => {
+      setCinematic(undefined);
+      cinematicTimerRef.current = undefined;
+    }, duration);
+  }
+
+  function showVoteOutcome(game: GameView) {
+    if (cinematicTimerRef.current) window.clearTimeout(cinematicTimerRef.current);
+    setCinematic("vote");
+    cinematicTimerRef.current = window.setTimeout(() => {
+      if (game.lastVoteResult?.exiledPlayerId) {
+        setCinematic("reveal");
+        cinematicTimerRef.current = window.setTimeout(() => {
+          setCinematic(undefined);
+          cinematicTimerRef.current = undefined;
+        }, 1_800);
+      } else {
+        setCinematic(undefined);
+        cinematicTimerRef.current = undefined;
+      }
+    }, 2_100);
+  }
+
+  /** Keep the reference moon and nightfall slides distinct for clicks and voice commands. */
+  function beginFirstNight() {
+    if (onboardingTimerRef.current) return;
+    storyAudio.stop();
+    setOnboardingStep("moon");
+    onboardingTimerRef.current = window.setTimeout(() => {
+      onboardingTimerRef.current = undefined;
+      setOnboardingStep("village");
+      void act("begin-story");
+    }, 2_200);
+  }
 
   async function create(event?: FormEvent, testMode = false) {
     event?.preventDefault();
+    if (onboardingTimerRef.current) window.clearTimeout(onboardingTimerRef.current);
+    onboardingTimerRef.current = undefined;
     primeBrowserNarration();
     // This runs directly from the player's Start or Quick Test gesture, which is
     // the one moment browsers allow microphone permission to be requested.
@@ -372,7 +409,10 @@ export default function App() {
           tieRule,
           start: true,
           testMode,
-          skipIntro: !testMode && window.localStorage.getItem("loups-story-seen") === "1",
+          // The narrated introduction is part of the hands-free game flow. Keep it
+          // for every new village so a returning player never lands in the middle
+          // of a night without the role and controls being introduced first.
+          skipIntro: false,
         }),
       });
       const data = await response.json();
@@ -380,6 +420,8 @@ export default function App() {
       const game = data as GameView;
       const briefing = openingBriefing(game);
       commitGame(game, data.session);
+      setOnboardingStep("village");
+      setCinematic(undefined);
       // When browser speech recognition is unavailable, try the provider-backed
       // companion once the game session is ready.
       if (!recognitionRef.current && !liveConnectionRef.current) void connectLiveVoice();
@@ -400,7 +442,8 @@ export default function App() {
   }
 
   async function perform(input: Record<string, unknown>, announceFailure = false) {
-    if (!session) return undefined;
+    const activeSession = sessionRef.current;
+    if (!activeSession) return undefined;
     if (storyAudio.phaseTransitioning) {
       // The player has spoken or acted. Stop the now-stale announcement and move
       // directly to the updated phase so the narration and screen cannot diverge.
@@ -411,13 +454,14 @@ export default function App() {
       return undefined;
     }
     setBusy(true);
+    setVoiceStatus("The guide is resolving your move…");
     setError("");
     try {
-      const response = await fetch(`/api/games/${session.game.id}/action`, {
+      const response = await fetch(`/api/games/${activeSession.game.id}/action`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "X-Game-Session": session.token,
+          "X-Game-Session": activeSession.token,
           "X-Request-Id": crypto.randomUUID(),
         },
         body: JSON.stringify(input),
@@ -425,7 +469,7 @@ export default function App() {
       const data = await response.json();
       if (!response.ok) throw new Error(data.error ?? "That action could not be completed.");
       const game = data as GameView;
-      commitGame(game, session.token);
+      commitGame(game, activeSession.token);
       if (announceFailure) {
         const command = typeof input.command === "string" ? input.command : "";
         queueAssistant(voiceActionFeedback(game, command), "local", {
@@ -433,25 +477,58 @@ export default function App() {
         });
       }
       setSelected([]);
-      setMessage("");
-      setCommandText("");
       setHeal(false);
       return game;
     } catch (cause) {
       const message =
         cause instanceof Error ? cause.message : "That action could not be completed.";
-      setError(message);
-      if (announceFailure) queueAssistant(message);
+      if (message === "Game not found.") {
+        recoverExpiredSession();
+        queueAssistant("That village is no longer open. Say ‘start the game’ to begin a new one.");
+        return undefined;
+      }
+      // A spoken mis-hearing should be read back, not left as a persistent red
+      // error that obscures the next reference slide. Click actions still keep
+      // the visible message for sighted players.
+      if (announceFailure) {
+        setError("");
+        queueAssistant(message);
+      } else setError(message);
       return undefined;
     } finally {
       setBusy(false);
+      if (!voiceCommandsPaused)
+        setVoiceStatus(
+          sessionRef.current ? "Voice companion is listening" : "Listening — say “start the game”",
+        );
     }
   }
 
   async function act(type: string, values: Record<string, unknown> = {}) {
     const result = await perform({ type, ...values });
-    if (type === "begin-story") window.localStorage.setItem("loups-story-seen", "1");
     return result;
+  }
+
+  /** Recover cleanly if a local/dev server has restarted and lost its in-memory match. */
+  function recoverExpiredSession() {
+    storyAudio.stop();
+    latestGameRef.current = undefined;
+    presentedGameRef.current = undefined;
+    sessionRef.current = undefined;
+    setSession(undefined);
+    setPresentedGame(undefined);
+    setOnboardingStep("village");
+    setCinematic(undefined);
+    setSelected([]);
+    setOpeningAudio(undefined);
+    setGuideMessages([]);
+    setError("");
+  }
+
+  function returnToSetup() {
+    recoverExpiredSession();
+    setSetupStep("mode");
+    setVoiceStatus("Listening — say “start the game”");
   }
 
   function queueAssistant(
@@ -530,11 +607,6 @@ export default function App() {
   async function handleVoiceCommand(transcript: string) {
     const command = transcript.trim();
     if (!command) return;
-    setVoiceTranscript(command);
-    // The Live model receives every microphone turn. Keep its remote audio
-    // quiet while the app carries out a game command and speaks the verified
-    // result. It is re-enabled below only for open-ended guide questions.
-    liveConnectionRef.current?.setGuideAudioEnabled(false);
     if (/\bpause\b.*\b(listening|voice control|microphone)\b/iu.test(command)) {
       setVoiceCommandsPaused(true);
       setVoiceStatus("Voice commands are paused. Say ‘resume listening’ to continue.");
@@ -578,6 +650,41 @@ export default function App() {
       }
       queueAssistant("I can start a new game when you say ‘start a new game’.");
       return;
+    }
+
+    // The introduction is deliberately local presentation state, while the game
+    // only advances once the player reaches the moon transition. This keeps the
+    // visual sequence and voice-only sequence in lockstep.
+    if (session.game.phase === "prologue") {
+      // The moon is a short intentional transition. Ignore echoed speech until
+      // its timer has opened the first night rather than bypassing the slide.
+      if (onboardingStep === "moon") return;
+      const wantsToAdvance =
+        /\b(continue|ready|begin|start|next|go on|let(?:'s| us) go)\b/iu.test(command) ||
+        /\b(show|read|tell me about|explain)\b.*\b(role|card|details?|instructions?)\b/iu.test(
+          command,
+        );
+      if (wantsToAdvance) {
+        if (onboardingStep === "village") {
+          setOnboardingStep("role");
+          narrateAccessibility([
+            `Your role is ${roleNames[session.game.me.role]}. Say continue to hear how it works.`,
+          ]);
+          return;
+        }
+        if (onboardingStep === "role") {
+          setOnboardingStep("details");
+          narrateAccessibility([
+            roleStateSummary(session.game),
+            "Say I am ready when you want the first night to begin.",
+          ]);
+          return;
+        }
+        if (onboardingStep === "details") {
+          beginFirstNight();
+          return;
+        }
+      }
     }
 
     if (
@@ -722,11 +829,8 @@ export default function App() {
       return;
     }
     if (isGuideQuestion(command)) {
-      // GPT-Live is already answering this question aloud in its own audio track.
-      if (liveConnectionRef.current) {
-        liveConnectionRef.current.setGuideAudioEnabled(true);
-        return;
-      }
+      // Use the server guide for every answer. It receives the current game
+      // state, while a long-running Live session only has its opening context.
       await askGuide(command);
       return;
     }
@@ -814,8 +918,6 @@ export default function App() {
     }
   }
 
-  startVoiceRef.current = startAlwaysOnVoice;
-
   function resetVoiceGuide(status: string) {
     setListening(false);
     setVoiceCommandsPaused(false);
@@ -823,7 +925,8 @@ export default function App() {
   }
 
   async function askGuide(text = guideText) {
-    if (!session || guideBusy || !text.trim()) return;
+    const activeSession = sessionRef.current;
+    if (!activeSession || guideBusy || !text.trim()) return;
     const message = text.trim();
     const history = guideMessages.slice(-8).map(({ role, text: historyText }) => ({
       role,
@@ -834,11 +937,11 @@ export default function App() {
     setGuideBusy(true);
     setError("");
     try {
-      const response = await fetch(`/api/games/${session.game.id}/assistant`, {
+      const response = await fetch(`/api/games/${activeSession.game.id}/assistant`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "X-Game-Session": session.token,
+          "X-Game-Session": activeSession.token,
           "X-Request-Id": crypto.randomUUID(),
         },
         body: JSON.stringify({ message, history }),
@@ -856,20 +959,14 @@ export default function App() {
         voiceKey: "assistant",
       });
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "The guide is unavailable.");
+      const message = cause instanceof Error ? cause.message : "The guide is unavailable.";
+      if (message === "Game not found.") {
+        recoverExpiredSession();
+        queueAssistant("That village is no longer open. Say ‘start the game’ to begin a new one.");
+      } else setError(message);
     } finally {
       setGuideBusy(false);
     }
-  }
-
-  function stopLiveVoice(status = "Voice guide is off") {
-    const live = liveConnectionRef.current;
-    liveConnectionRef.current = null;
-    live?.stop();
-    setLiveConnected(false);
-    setLiveConnecting(false);
-    setVoiceTranscript("");
-    setVoiceStatus(status);
   }
 
   async function connectLiveVoice() {
@@ -881,27 +978,18 @@ export default function App() {
     setLiveConnecting(true);
     storyAudio.stop();
     setError("");
-    setVoiceTranscript("");
     try {
       const live = await startLiveVoice({
         gameId: activeSession.game.id,
         sessionToken: activeSession.token,
         onStatus: setVoiceStatus,
-        onInputTranscript: (text) => setVoiceTranscript(text.slice(-900)),
+        onInputTranscript: () => undefined,
         onInputTranscriptComplete: (text) => {
-          setVoiceTranscript(text);
-          void handleVoiceCommand(text);
+          voiceCommandHandlerRef.current(text);
         },
-        onGuideReply: (reply) => {
-          // A Live reply is allowed only for an open guide question. Mute the
-          // remote track immediately afterwards so a later game command cannot
-          // overlap with an automatic model acknowledgement.
-          liveConnectionRef.current?.setGuideAudioEnabled(false);
-          setGuideMessages((current) => [
-            ...current,
-            { role: "assistant", text: reply, mode: "model" },
-          ]);
-        },
+        // Live is used for microphone transcription when browser recognition
+        // is unavailable. Spoken answers always come from the one local queue.
+        onGuideReply: () => undefined,
         onClosed: () => {
           liveConnectionRef.current = null;
           setLiveConnected(false);
@@ -920,128 +1008,231 @@ export default function App() {
     }
   }
 
-  // The persistent recognizer reads this ref, avoiding stale game state after a new game starts.
-  voiceCommandHandlerRef.current = (transcript) => {
-    setVoiceTranscript(transcript);
-    void handleVoiceCommand(transcript);
-  };
+  useEffect(() => {
+    voiceCommandHandlerRef.current = (transcript) => {
+      const text = transcript.trim();
+      if (!text) return;
+      const normalized = normalizeVoiceText(text);
+      const now = Date.now();
+      if (
+        lastVoiceCommandRef.current.text === normalized &&
+        now - lastVoiceCommandRef.current.at < 1_500
+      )
+        return;
+      lastVoiceCommandRef.current = { text: normalized, at: now };
+      commandQueueRef.current = commandQueueRef.current
+        .catch(() => undefined)
+        .then(() => handleVoiceCommand(text));
+    };
+  });
+
+  useEffect(() => {
+    startVoiceRef.current = startAlwaysOnVoice;
+  });
+
+  useEffect(() => {
+    autoVoiceRequestedRef.current = true;
+    if (navigator.permissions) {
+      void navigator.permissions
+        .query({ name: "microphone" as PermissionName })
+        .then((permission) => {
+          if (permission.state === "granted") startVoiceRef.current();
+        })
+        .catch(() => undefined);
+    }
+    const enableVoice = () => {
+      if (recognitionRef.current || liveConnectionRef.current) return;
+      primeBrowserNarration();
+      startVoiceRef.current();
+    };
+    window.addEventListener("pointerdown", enableVoice, { passive: true });
+    return () => {
+      window.removeEventListener("pointerdown", enableVoice);
+      autoVoiceRequestedRef.current = false;
+      if (cinematicTimerRef.current) window.clearTimeout(cinematicTimerRef.current);
+      if (onboardingTimerRef.current) window.clearTimeout(onboardingTimerRef.current);
+      recognitionRef.current?.stop();
+      const live = liveConnectionRef.current;
+      liveConnectionRef.current = null;
+      live?.stop();
+    };
+  }, []);
 
   const voiceDock = (
     <aside
-      className={`voice-orb-dock ${listening || liveConnected || liveConnecting ? "is-active" : ""}`}
+      className={`voice-dock ${listening || liveConnected || liveConnecting ? "is-active" : ""}`}
       aria-live="polite"
       aria-label="Voice companion status"
     >
-      <span className="voice-orb" aria-hidden="true">
+      <span className="voice-dock-orb" aria-hidden="true">
         <i />
         <i />
         <i />
       </span>
-      <span className="voice-dock-copy">
+      <span>
         <strong>Voice companion</strong>
         <small>
-          {session
-            ? liveConnected
-              ? "Listening and answering"
+          {busy
+            ? "The guide is resolving your move"
+            : liveConnected
+              ? "Listening for your question"
               : listening
                 ? voiceCommandsPaused
-                  ? "Commands paused — say resume listening"
-                  : "Always listening"
-                : voiceStatus
-            : listening
-              ? "Listening — say “start the game”"
-              : voiceStatus}
+                  ? "Listening paused"
+                  : session
+                    ? "Always listening"
+                    : "Say “start the game”"
+                : voiceStatus}
         </small>
       </span>
     </aside>
   );
 
+  const header = (
+    <header className="reference-header">
+      <a
+        className="reference-wordmark"
+        href="#top"
+        id="top"
+        onClick={() => setCinematic(undefined)}
+      >
+        <strong>Play by Voice</strong>
+        <span>•</span>
+        <b>Chess</b>
+      </a>
+      <nav aria-label="Game options">
+        <button type="button" onClick={storyAudio.toggleMuted}>
+          {storyAudio.muted ? "Audio on" : "Audio settings"}
+        </button>
+        <button
+          type="button"
+          onClick={() =>
+            narrateAccessibility([
+              "Your voice companion is always listening after microphone permission.",
+              "Say voice help to hear every command, or say start the game to begin.",
+            ])
+          }
+        >
+          Help
+        </button>
+      </nav>
+    </header>
+  );
+
+  const renderMoon = (large = false) => (
+    <span className={`reference-moon ${large ? "is-large" : ""}`} aria-hidden="true" />
+  );
+
+  const homeButton = (
+    <button
+      className="reference-home"
+      type="button"
+      aria-label="Return to game setup"
+      onClick={returnToSetup}
+    >
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="m4.5 10.5 7.5-6 7.5 6v8.25a.75.75 0 0 1-.75.75H5.25a.75.75 0 0 1-.75-.75V10.5Z" />
+        <path d="M9.25 19.5v-5.25h5.5v5.25" />
+      </svg>
+    </button>
+  );
+
   if (!session) {
+    const roleCounts = defaultRoleCounts(count);
+    const rolesForSetup = (["werewolf", "seer", "witch", "hunter", "cupid", "villager"] as Role[])
+      .filter((role) => roleCounts[role] > 0)
+      .map((role) => `${roleCounts[role]} × ${roleNames[role]}`);
     return (
-      <main className="app-shell landing-screen">
-        <header className="topbar">
-          <a className="wordmark" href="#top" id="top">
-            <span>Play by Voice</span>
-            <span className="wordmark-divider">·</span>
-            <span className="wordmark-game">Loups-Garous</span>
-          </a>
-          <a className="help-link" href="#how-to-play">
-            How to play
-          </a>
-        </header>
-        <section className="landing-content">
-          <p className="overline">A VILLAGE OF SECRETS</p>
-          <form onSubmit={create}>
-            <article className="game-tile">
-              <span className="tile-symbol" aria-hidden="true">
-                <i />
-              </span>
-              <div className="tile-copy">
-                <p className="tile-kicker">SOCIAL DEDUCTION</p>
-                <h1>Loups-Garous</h1>
-                <p>Listen, question, and uncover the Werewolves hiding among the villagers.</p>
+      <main className="reference-app reference-day" id="top">
+        {header}
+        {homeButton}
+        <section className="reference-stage setup-stage scene-enter">
+          {setupStep === "mode" ? (
+            <div className="setup-flow">
+              <div className="stage-copy compact-copy">
+                <h1>Set up your game</h1>
+                <p>Choose your preferences, or say “start” with the defaults.</p>
               </div>
-              <button className="start-button" disabled={busy}>
-                {busy ? "Preparing the village…" : "Start the game"}
-              </button>
-            </article>
-            <button
-              className="test-button"
-              type="button"
-              disabled={busy}
-              onClick={() => void create(undefined, true)}
-            >
-              <strong>Try a quick test</strong>
-              <span>4 players · Seer role · bot opponents</span>
-            </button>
-            <p className="voice-entry-status" aria-live="polite">
-              Tap anywhere once to allow the browser microphone, then say “start the game” or “start
-              a quick test”. Your voice companion stays on for the whole match.
-            </p>
-            <details className="game-options">
-              <summary>Game options</summary>
-              <div className="option-fields">
-                <label>
-                  Your name
-                  <input
-                    value={name}
-                    maxLength={32}
-                    onChange={(event) => setName(event.target.value)}
-                  />
-                </label>
-                <label>
-                  Village size
-                  <select value={count} onChange={(event) => setCount(Number(event.target.value))}>
-                    {Array.from({ length: 9 }, (_, index) => index + 4).map((size) => (
-                      <option key={size} value={size}>
-                        {size} players
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label>
-                  Tied vote
-                  <select value={tieRule} onChange={(event) => setTieRule(event.target.value)}>
-                    <option value="no-exile">No one is exiled</option>
-                    <option value="random-among-tied">Choose randomly</option>
-                  </select>
-                </label>
+              <section className="setup-card mode-card" aria-label="Choose who to play with">
+                <h2>Who do you want to play?</h2>
+                <button
+                  className="mode-choice is-selected"
+                  type="button"
+                  onClick={() => setSetupStep("village")}
+                >
+                  <span aria-hidden="true">♙</span>
+                  Solo
+                </button>
+                <button className="mode-choice" type="button" disabled>
+                  With Friends
+                  <small>Coming soon…</small>
+                </button>
+              </section>
+            </div>
+          ) : (
+            <div className="setup-flow village-setup">
+              <div className="stage-copy compact-copy">
+                <h1>Set up your game</h1>
+                <p>Choose your preferences, or say “start” with the defaults.</p>
               </div>
-            </details>
-          </form>
+              <div className="setup-grid">
+                <section className="setup-card player-count-card">
+                  <h2>Set up your village</h2>
+                  <div className="count-control">
+                    <button
+                      type="button"
+                      aria-label="Remove a player"
+                      onClick={() => setCount((value) => Math.max(4, value - 1))}
+                    >
+                      −
+                    </button>
+                    <strong>{count}</strong>
+                    <button
+                      type="button"
+                      aria-label="Add a player"
+                      onClick={() => setCount((value) => Math.min(12, value + 1))}
+                    >
+                      +
+                    </button>
+                  </div>
+                  <small>Players</small>
+                </section>
+                <section className="setup-card role-list-card">
+                  <h2>Roles</h2>
+                  {rolesForSetup.map((role) => (
+                    <p key={role}>{role}</p>
+                  ))}
+                </section>
+              </div>
+              <label className="explain-toggle">
+                <input type="checkbox" defaultChecked />
+                <span>Explain the game as we play</span>
+              </label>
+              <div className="setup-actions">
+                <button
+                  className="secondary-pill"
+                  type="button"
+                  onClick={() => setSetupStep("mode")}
+                >
+                  Back
+                </button>
+                <button
+                  className="primary-pill"
+                  type="button"
+                  disabled={busy}
+                  onClick={() => void create()}
+                >
+                  {busy ? "Starting…" : "Start game"}
+                </button>
+              </div>
+            </div>
+          )}
           {error && (
-            <p className="error" role="alert">
+            <p className="stage-error" role="alert">
               {error}
             </p>
           )}
-          <div className="moon-note" id="how-to-play">
-            <span className="moon-orb" aria-hidden="true" />
-            <p>
-              <strong>By day, find the truth.</strong>
-              <br />
-              By night, stay alive. Your village is waiting.
-            </p>
-          </div>
+          {renderMoon()}
         </section>
         {voiceDock}
       </main>
@@ -1050,639 +1241,538 @@ export default function App() {
 
   const game = presentedGame ?? session.game;
   const me = game.me;
-  const interactionLocked = busy;
   const alive = game.players.filter((player) => player.alive);
   const others = alive.filter((player) => player.id !== me.id);
-  const toggleTarget = (id: string) =>
+  // A spoken or clicked action intentionally interrupts old narration in
+  // perform(), so it must remain available while a phase line is playing.
+  const interactionLocked = busy;
+  const roleCopy: Record<Role, { symbol: string; goal: string; short: string; detail: string }> = {
+    seer: {
+      symbol: "◆",
+      short: "You can discover the true identity of one player every night.",
+      goal: "Help the village find and eliminate every Werewolf before they take over.",
+      detail:
+        "During the night, choose one player. I will tell you whether they are a Werewolf. Keep your role secret during the discussion.",
+    },
+    werewolf: {
+      symbol: "◒",
+      short: "Choose a target with the pack every night and keep your identity hidden.",
+      goal: "Let the Werewolves outnumber the rest of the village.",
+      detail:
+        "During the night, choose a non-wolf target or say let the pack decide. During the day, blend in and direct suspicion away from the pack.",
+    },
+    witch: {
+      symbol: "✦",
+      short: "You have one healing potion and one poison potion for the whole game.",
+      goal: "Use your potions wisely to protect the village.",
+      detail:
+        "At night, say save, poison a player, pass, or choose for me. Your potions are private and each can be used only once.",
+    },
+    hunter: {
+      symbol: "✹",
+      short: "If you are eliminated, you take one final shot before the game continues.",
+      goal: "Help the village remove every Werewolf.",
+      detail:
+        "Stay alert through the discussion. If you fall, choose another living player for your final shot.",
+    },
+    cupid: {
+      symbol: "♥",
+      short: "At the start of the game, bind two villagers as lovers.",
+      goal: "Choose carefully: if one lover dies, the other dies too.",
+      detail:
+        "Name two players during the opening night. Their bond stays hidden, but their fate is linked.",
+    },
+    villager: {
+      symbol: "●",
+      short: "You have no night power, so your voice and judgement matter by day.",
+      goal: "Help the village find and eliminate every Werewolf.",
+      detail:
+        "Listen closely, question players in the discussion, and vote when the village is ready.",
+    },
+  };
+  const role = roleCopy[me.role];
+  const latestFinding = me.investigations.at(-1);
+  const accentClass = (index: number) => `accent-${(index % 6) + 1}`;
+  const displayedPlayers = [
+    ...game.players.filter((player) => player.id !== me.id),
+    game.players.find((player) => player.id === me.id),
+  ].filter((player): player is GameView["players"][number] => Boolean(player));
+  const selectTarget = (playerId: string, multiple = false) => {
     setSelected((current) =>
-      current.includes(id) ? current.filter((item) => item !== id) : [...current, id],
+      multiple
+        ? current.includes(playerId)
+          ? current.filter((value) => value !== playerId)
+          : [...current, playerId]
+        : [playerId],
     );
-  const targetButton = (player: PublicPlayerView, multiple = false) => (
-    <button
-      key={player.id}
-      className={`person-choice ${selected.includes(player.id) ? "is-selected" : ""}`}
-      onClick={() => (multiple ? toggleTarget(player.id) : setSelected([player.id]))}
-      aria-pressed={selected.includes(player.id)}
-      disabled={interactionLocked}
-    >
-      <span className="person-initial">{player.name.slice(0, 1).toUpperCase()}</span>
-      {player.name}
-    </button>
-  );
-  const roleHint =
-    me.role === "werewolf"
-      ? `Your pack: ${me.werewolfTeam?.join(", ") || "you are the lone wolf"}.`
-      : me.role === "seer"
-        ? "Choose a villager to investigate each night."
-        : me.role === "witch"
-          ? `Healing potion ${me.witchHealAvailable ? "ready" : "used"}; poison ${me.witchPoisonAvailable ? "ready" : "used"}.${me.wolfVictim ? ` The pack targeted ${me.wolfVictim}.` : ""}`
-          : me.role === "cupid"
-            ? "Choose two players to bind as lovers."
-            : me.role === "hunter"
-              ? "If eliminated, you get one final shot."
-              : "Help the village find the Werewolves.";
-  const hasDiscussion = game.feed.some((entry) => entry.kind === "speech");
-  const phaseTitle =
-    game.phase === "over"
-      ? game.winner === "village"
-        ? "The village wins"
-        : game.winner === "lovers"
-          ? "Love survives"
-          : "The werewolves win"
-      : game.phase === "night"
-        ? "Your turn"
-        : game.phase === "prologue"
-          ? "Meet the village"
-          : game.phase === "day"
-            ? hasDiscussion
-              ? "Discussion"
-              : "The village wakes up"
-            : game.phase === "vote"
-              ? "Time to vote"
-              : game.phase === "cupid"
-                ? "Your role"
-                : game.phase === "hunter"
-                  ? "One last shot"
-                  : "The story continues";
-  const phaseSubtitle =
-    game.phase === "over"
-      ? `You survived as ${roleNames[me.role]}.`
-      : game.phase === "prologue"
-        ? "These are the people you’ll be playing with tonight. Their roles are hidden."
-        : game.phase === "night" && me.role === "seer"
-          ? "Who do you want to investigate?"
-          : game.phase === "night" && me.role === "werewolf"
-            ? "Who do you want to choose tonight?"
-            : game.phase === "night"
-              ? "The village is asleep. Follow your private role instructions."
-              : game.phase === "day"
-                ? hasDiscussion
-                  ? "Ask, accuse, or listen."
-                  : "Listen for what changed overnight."
-                : game.phase === "vote"
-                  ? "Who should leave the village?"
-                  : game.phase === "cupid"
-                    ? "Learn how your role works before the first night."
-                    : "Choose carefully. The village is listening.";
-  const latestEvent = [...game.feed].reverse().find((entry) => entry.kind === "event");
-  const recentSpeakers = [...game.feed]
-    .reverse()
-    .filter((entry) => entry.kind === "speech")
-    .slice(0, 2)
-    .map((entry) => entry.speaker);
-  const latestUpdate = latestEvent ?? game.feed.at(-1);
-  const situationSummary = game.paused
-    ? "The game is paused. Say ‘resume game’ when you want the village to continue."
-    : game.phase === "prologue"
-      ? "Meet the village before the first night begins. Secret roles stay hidden."
-      : game.phase === "night"
-        ? "Night actions are private. Follow the ability shown for your role, then wait for dawn."
-        : game.phase === "day"
-          ? `The discussion is open.${recentSpeakers.length ? ` ${recentSpeakers.join(" and ")} spoke most recently.` : " Invite the villagers to speak."}`
-          : game.phase === "vote"
-            ? "Voting is open. Your choice is final once cast."
-            : (latestEvent?.text ?? "The village is waiting for the next chapter.");
+  };
+  const playerStrip = (
+    options: { selectable?: boolean; multiple?: boolean; excludeSelf?: boolean } = {},
+  ) => {
+    return (
+      <div className="player-strip" aria-label="Village players">
+        {displayedPlayers
+          .filter((player) => !options.excludeSelf || player.id !== me.id)
+          .map((player, index) => {
+            const isSelected = selected.includes(player.id);
+            const selectable = Boolean(options.selectable && player.alive && !interactionLocked);
+            return (
+              <button
+                className={`player-tile ${accentClass(index)} ${isSelected ? "is-selected" : ""} ${!player.alive ? "is-out" : ""}`}
+                disabled={!selectable}
+                aria-pressed={isSelected}
+                onClick={() => selectTarget(player.id, options.multiple)}
+                key={player.id}
+                type="button"
+              >
+                <span>{player.id === me.id ? "You" : player.name}</span>
+                <i aria-hidden="true" />
+                {!player.alive && <small>Out</small>}
+              </button>
+            );
+          })}
+      </div>
+    );
+  };
 
-  return (
-    <main className={`app-shell play-screen phase-${game.phase}`}>
-      <header className="topbar">
-        <a className="wordmark" href="#top" id="top">
-          <span>Play by Voice</span>
-          <span className="wordmark-divider">·</span>
-          <span className="wordmark-game">Loups-Garous</span>
-        </a>
-        <div className="game-nav">
-          <a className="help-link" href="#assistant">
-            Help
-          </a>
-          <span>
-            Day {game.day} · {phaseNames[game.phase]}
-          </span>
-          <button className="text-button" onClick={() => setSession(undefined)}>
-            New game
+  const playerName = (id: string | undefined) =>
+    game.players.find((player) => player.id === id)?.name;
+  const latestVoteTarget = playerName(game.lastVoteResult?.exiledPlayerId);
+  const latestVoteRole = game.players.find(
+    (player) => player.id === game.lastVoteResult?.exiledPlayerId,
+  )?.revealedRole;
+
+  const renderNormalStage = () => {
+    if (game.paused) {
+      return (
+        <div className="phase-stack pause-card scene-enter">
+          <div className="stage-copy">
+            <h1>The village is waiting.</h1>
+            <p>The game is paused.</p>
+          </div>
+          <button className="primary-pill" type="button" onClick={() => void act("resume")}>
+            Resume game
           </button>
         </div>
-      </header>
-      <section className="play-content">
-        <div className="round-heading">
-          {game.testMode && <p className="test-banner">Quick test · You are the Seer</p>}
-          <p className="overline">
-            DAY {game.day} · {phaseNames[game.phase].toUpperCase()}
-          </p>
-          <h1>{phaseTitle}</h1>
-          <p className="round-subtitle">{phaseSubtitle}</p>
-          {latestUpdate && (
-            <p className="latest-update" aria-live="polite" role="status">
-              <span>{latestUpdate.kind === "private" ? "PRIVATE UPDATE" : "VILLAGE UPDATE"}</span>
-              {latestUpdate.text}
+      );
+    }
+    if (game.phase === "prologue") {
+      return (
+        <div className="phase-stack meet-stage scene-enter">
+          <div className="stage-copy">
+            <h1>Meet the Village</h1>
+            <p>
+              These are the people
+              <br />
+              you’ll be playing with tonight.
             </p>
-          )}
+          </div>
+          {playerStrip()}
+          <div className="speech-stack">
+            <p>
+              Some of them are villagers.
+              <br />
+              Some may be Werewolves.
+            </p>
+            <strong>Their roles are hidden.</strong>
+          </div>
+          <button className="gold-pill" type="button" onClick={() => setOnboardingStep("role")}>
+            Continue
+          </button>
         </div>
-        <div className="game-dashboard">
-          <section className="village-board">
-            <div className="board-heading">
-              <h2>The village</h2>
-              <span>
-                {alive.length} of {game.players.length} remain
-              </span>
-            </div>
-            <div className="village-grid">
-              {game.players.map((player) => (
-                <article
-                  className={`${player.alive ? "village-seat" : "village-seat is-dead"}${storyAudio.activeSpeaker === player.name ? " is-speaking" : ""}`}
+      );
+    }
+    if (game.phase === "cupid") {
+      return (
+        <div className="phase-stack night-turn scene-enter">
+          <div className="stage-copy">
+            <h1>Your Turn</h1>
+            <p>Who do you want to bind as lovers?</p>
+          </div>
+          {playerStrip({ selectable: true, multiple: true, excludeSelf: true })}
+          <p className="voice-prompt">Say “choose” followed by two names, or select two players.</p>
+          <button
+            className="primary-pill"
+            disabled={interactionLocked || selected.length !== 2}
+            type="button"
+            onClick={() => void act("lovers", { first: selected[0], second: selected[1] })}
+          >
+            Bind hearts
+          </button>
+        </div>
+      );
+    }
+    if (game.phase === "night") {
+      const canTarget = me.role === "seer" || me.role === "werewolf" || me.role === "witch";
+      const prompt =
+        me.role === "seer"
+          ? "Who do you want to investigate?"
+          : me.role === "werewolf"
+            ? "Who do you want to choose tonight?"
+            : me.role === "witch"
+              ? "What will you do tonight?"
+              : "The village is asleep.";
+      const candidates =
+        me.role === "werewolf"
+          ? game.players.filter(
+              (player) =>
+                player.alive && player.id !== me.id && !me.werewolfTeam?.includes(player.name),
+            )
+          : others;
+      return (
+        <div className="phase-stack night-turn scene-enter">
+          <div className="stage-copy">
+            <h1>Your Turn</h1>
+            <p>{prompt}</p>
+          </div>
+          {canTarget && (
+            <div className="player-strip">
+              {candidates.map((player, index) => (
+                <button
+                  className={`player-tile ${accentClass(index)} ${selected.includes(player.id) ? "is-selected" : ""}`}
+                  disabled={interactionLocked}
+                  aria-pressed={selected.includes(player.id)}
+                  onClick={() => selectTarget(player.id)}
                   key={player.id}
+                  type="button"
                 >
-                  <span
-                    className="seat-avatar"
-                    data-portrait={player.profile.voiceKey}
-                    aria-label={`${player.name}'s portrait`}
-                  >
-                    {player.name.slice(0, 1).toUpperCase()}
-                  </span>
-                  <strong>
-                    {player.name}
-                    {player.id === me.id ? " · You" : ""}
-                  </strong>
-                  <small>
-                    {player.revealedRole
-                      ? roleNames[player.revealedRole]
-                      : player.alive
-                        ? "In the village"
-                        : "Eliminated"}
-                  </small>
-                </article>
+                  <span>{player.name}</span>
+                  <i aria-hidden="true" />
+                </button>
               ))}
             </div>
-          </section>
-          <aside className="assistant-column">
-            <section className="panel history-panel" id="history">
-              <div className="panel-heading">
-                <h2>Village history</h2>
-                <span>{game.feed.length} updates</span>
-              </div>
-              <div className="history-list">
-                {game.feed.slice(-8).map((entry) => (
-                  <p
-                    className={`${entry.kind === "event" ? "history-event" : ""}${storyAudio.activeSpeaker === entry.speaker ? " is-speaking" : ""}`}
-                    key={entry.id}
-                  >
-                    <span>{entry.speaker}</span>
-                    {entry.text}
-                  </p>
-                ))}
-              </div>
-              {game.phase === "over" && game.lastVotes && (
-                <details className="vote-history">
-                  <summary>Final votes</summary>
-                  {game.lastVotes.map((vote, index) => (
-                    <p key={index}>
-                      {game.players.find((player) => player.id === vote.voter)?.name} voted for{" "}
-                      {game.players.find((player) => player.id === vote.target)?.name}
-                    </p>
-                  ))}
-                </details>
-              )}
-            </section>
-            <section className="panel assistant-panel" id="assistant">
-              <div className="panel-heading">
-                <h2>Assistant</h2>
-                <span>{game.modelMode === "llm" ? "AI agents" : "Village guide"}</span>
-              </div>
-              <div className="assistant-snapshot">
-                <div className="assistant-tip">
-                  <span className="tip-icon">✦</span>
-                  <div>
-                    <small>Your role</small>
-                    <strong>{roleNames[me.role]}</strong>
-                    <p>
-                      {roleHint}
-                      {me.lover ? ` Bound to ${me.lover}.` : ""}
-                    </p>
-                  </div>
-                </div>
-                {me.investigations.map((result, index) => (
-                  <div className="assistant-tip private-tip" key={index}>
-                    <span className="tip-icon">◉</span>
-                    <div>
-                      <small>Seer’s finding · Day {result.day}</small>
-                      <strong>{result.name}</strong>
-                      <p>
-                        {result.result === "wolf"
-                          ? "This player is a Werewolf."
-                          : "This player is clear."}
-                      </p>
-                    </div>
-                  </div>
-                ))}
-                <section className="assistant-tip situation-tip" aria-label="What is happening now">
-                  <span className="tip-icon">◌</span>
-                  <div>
-                    <small>WHAT IS HAPPENING</small>
-                    <strong>{phaseNames[game.phase]}</strong>
-                    <p>{situationSummary}</p>
-                  </div>
-                </section>
-              </div>
-              <section className="guide-chat" aria-label="Game guide">
-                <div className="guide-chat-heading">
-                  <div>
-                    <small>PRIVATE GAME GUIDE</small>
-                    <p>Rules, phase help, and strategy for your seat.</p>
-                  </div>
-                  <div className="guide-chat-actions">
-                    <button className="guide-replay" type="button" onClick={replayOpeningBriefing}>
-                      Replay briefing
-                    </button>
-                    <span className="guide-privacy">Private</span>
-                  </div>
-                </div>
-                <div className="guide-messages" aria-live="polite">
-                  {guideMessages.slice(-4).map((entry, index) => (
-                    <p
-                      className={`guide-message is-${entry.role}`}
-                      key={`${entry.role}-${index}-${entry.text.slice(0, 18)}`}
-                    >
-                      <span>{entry.role === "assistant" ? "Guide" : "You"}</span>
-                      {entry.text}
-                      {entry.role === "assistant" && entry.mode && (
-                        <small>{entry.mode === "model" ? "AI" : "Local guide"}</small>
-                      )}
-                    </p>
-                  ))}
-                </div>
-                <form
-                  className="guide-form"
-                  onSubmit={(event) => {
-                    event.preventDefault();
-                    void askGuide();
-                  }}
-                >
-                  <input
-                    value={guideText}
-                    onChange={(event) => setGuideText(event.target.value)}
-                    maxLength={1000}
-                    placeholder="Ask about your role or the phase…"
-                    aria-label="Ask the private game guide"
-                  />
-                  <button
-                    className="plain-button"
-                    type="submit"
-                    disabled={storyAudio.phaseTransitioning || guideBusy || !guideText.trim()}
-                  >
-                    {guideBusy ? "Thinking…" : "Ask"}
-                  </button>
-                </form>
-              </section>
-              <section className="audio-controls" aria-label="Story audio controls">
-                <div>
-                  <small>STORY AUDIO</small>
-                  <p>
-                    {storyAudio.activeSpeaker
-                      ? `AI voice is reading ${storyAudio.activeSpeaker}`
-                      : storyAudio.autoRead
-                        ? "AI voice ready for narration and dialogue"
-                        : "Automatic reading is off"}
-                  </p>
-                </div>
-                <div className="audio-buttons">
-                  <button
-                    className="plain-button"
-                    type="button"
-                    onClick={storyAudio.toggleAutoRead}
-                  >
-                    {storyAudio.autoRead ? "Auto-read on" : "Auto-read off"}
-                  </button>
-                  <button className="plain-button" type="button" onClick={storyAudio.toggleMuted}>
-                    {storyAudio.muted ? "Unmute" : "Mute"}
-                  </button>
-                  <button
-                    className="plain-button"
-                    type="button"
-                    onClick={storyAudio.paused ? storyAudio.resume : storyAudio.pause}
-                    disabled={!storyAudio.autoRead || storyAudio.muted || !storyAudio.activeSpeaker}
-                  >
-                    {storyAudio.paused ? "Resume" : "Pause"}
-                  </button>
-                  <button className="plain-button" type="button" onClick={storyAudio.repeatLast}>
-                    Repeat
-                  </button>
-                  <button className="plain-button" type="button" onClick={storyAudio.stop}>
-                    Stop
-                  </button>
-                </div>
-                <label className="volume-control">
-                  Volume
-                  <input
-                    type="range"
-                    min="0"
-                    max="1"
-                    step="0.05"
-                    value={storyAudio.volume}
-                    onChange={(event) => storyAudio.updateVolume(Number(event.target.value))}
-                  />
-                </label>
-                <label className="volume-control">
-                  Speech speed
-                  <input
-                    type="range"
-                    min="0.7"
-                    max="1.35"
-                    step="0.05"
-                    value={storyAudio.speechRate}
-                    onChange={(event) => storyAudio.updateSpeechRate(Number(event.target.value))}
-                  />
-                </label>
-              </section>
-              <section className="voice-controls" aria-label="Voice controls">
-                <div className="voice-control-heading">
-                  <div>
-                    <small>VOICE GUIDE</small>
-                    <p>{voiceStatus}</p>
-                  </div>
-                  <span className="voice-auto-chip">
-                    {liveConnecting ? "Reconnecting" : "Always listening"}
-                  </span>
-                </div>
-                <p
-                  className={`voice-listening ${listening ? "is-listening" : ""}`}
-                  aria-live="polite"
-                >
-                  <span aria-hidden="true" />
-                  {liveConnected
-                    ? "Live Voice Guide is answering private questions"
-                    : listening
-                      ? "Listening for game commands, guide questions, and audio controls"
-                      : "Microphone permission is needed to resume hands-free play"}
-                </p>
-                {voiceTranscript && <p className="voice-transcript">You said: {voiceTranscript}</p>}
-                <p className="voice-examples">
-                  Say “choose Camille”, “continue”, “describe the interface”, “read all messages”,
-                  “ask the villagers what they think”, or “vote for Camille”.
-                </p>
-                <details className="voice-command-reference">
-                  <summary>Voice command reference</summary>
-                  <p>
-                    Information: “describe the interface”, “read my role”, “read the players”, “who
-                    is alive”, “read updates”, “read all messages”, or “what did Camille say?”.
-                  </p>
-                  <p>
-                    Controls: “choose Camille”, “continue”, “voice help”, “repeat that”, “stop
-                    speaking”, “pause narration”, “speak slower”, “volume up”, “turn auto read on”,
-                    “pause game”, or “pause voice control”.
-                  </p>
-                </details>
-                <form
-                  className="command-form"
-                  onSubmit={(event) => {
-                    event.preventDefault();
-                    const typedCommand = commandText;
-                    setCommandText("");
-                    void handleVoiceCommand(typedCommand);
-                  }}
-                >
-                  <label htmlFor="typed-command">Typed command fallback</label>
-                  <div>
-                    <input
-                      id="typed-command"
-                      value={commandText}
-                      onChange={(event) => setCommandText(event.target.value)}
-                      placeholder={
-                        game.phase === "night" && me.role === "seer"
-                          ? "Try: investigate Camille"
-                          : "Try: hear the villagers"
-                      }
-                      maxLength={1000}
-                    />
-                    <button
-                      className="plain-button"
-                      type="submit"
-                      disabled={interactionLocked || !commandText.trim()}
-                    >
-                      Run command
-                    </button>
-                  </div>
-                </form>
-              </section>
-              <div className="turn-actions">
-                <p className="overline">{game.phase === "over" ? "GAME COMPLETE" : "YOUR TURN"}</p>
-                {storyAudio.phaseTransitioning && (
-                  <p className="phase-narration-status" aria-live="polite">
-                    The guide is setting the scene…
-                  </p>
-                )}
-                {game.paused ? (
-                  <div className="paused-game">
-                    <strong>The game is paused.</strong>
-                    <p>
-                      The village will not progress until you say “resume game” or use this button.
-                    </p>
-                    <button
-                      className="action-button"
-                      disabled={interactionLocked}
-                      onClick={() => void act("resume")}
-                    >
-                      Resume game
-                    </button>
-                  </div>
-                ) : (
-                  <>
-                    {game.phase === "prologue" && (
-                      <>
-                        <div className="story-callouts">
-                          <span>Some of them are villagers.</span>
-                          <strong>Some may be Werewolves.</strong>
-                        </div>
-                        <p>
-                          Their roles are hidden. Say “introduce the village” whenever you want to
-                          hear their character introductions again.
-                        </p>
-                        <button
-                          className="action-button"
-                          disabled={interactionLocked}
-                          onClick={() => void act("begin-story")}
-                        >
-                          Continue
-                        </button>
-                      </>
-                    )}
-                    {game.phase === "cupid" && me.role === "cupid" && (
-                      <>
-                        <p>Select two players.</p>
-                        <div className="choice-list">
-                          {others.map((player) => targetButton(player, true))}
-                        </div>
-                        <button
-                          className="action-button"
-                          disabled={interactionLocked || selected.length !== 2}
-                          onClick={() =>
-                            void act("lovers", { first: selected[0], second: selected[1] })
-                          }
-                        >
-                          Bind their hearts
-                        </button>
-                      </>
-                    )}
-                    {game.phase === "night" && me.alive && (
-                      <>
-                        <p>
-                          {me.role === "werewolf"
-                            ? "Choose your pack’s target."
-                            : me.role === "seer"
-                              ? "Choose someone to investigate."
-                              : me.role === "witch"
-                                ? "Use a potion or let the night pass."
-                                : "Rest until morning."}
-                        </p>
-                        {["werewolf", "seer"].includes(me.role) && (
-                          <div className="choice-list">
-                            {others
-                              .filter(
-                                (player) =>
-                                  me.role !== "werewolf" || !me.werewolfTeam?.includes(player.name),
-                              )
-                              .map((player) => targetButton(player))}
-                          </div>
-                        )}
-                        {me.role === "witch" && (
-                          <>
-                            {me.witchPoisonAvailable && (
-                              <div className="choice-list">
-                                {others
-                                  .filter((player) => player.name !== me.wolfVictim)
-                                  .map((player) => targetButton(player))}
-                              </div>
-                            )}
-                            {me.witchHealAvailable && me.wolfVictim && (
-                              <label className="save-choice">
-                                <input
-                                  type="checkbox"
-                                  checked={heal}
-                                  onChange={(event) => setHeal(event.target.checked)}
-                                />{" "}
-                                Save {me.wolfVictim}
-                              </label>
-                            )}
-                          </>
-                        )}
-                        {me.role === "werewolf" && (
-                          <button
-                            className="plain-button"
-                            disabled={interactionLocked}
-                            onClick={() => void act("night")}
-                          >
-                            Let the pack decide
-                          </button>
-                        )}
-                        <button
-                          className="action-button"
-                          disabled={
-                            interactionLocked ||
-                            (["werewolf", "seer"].includes(me.role) && selected.length !== 1)
-                          }
-                          onClick={() =>
-                            void act("night", {
-                              ...(selected[0] ? { target: selected[0], poison: selected[0] } : {}),
-                              heal,
-                            })
-                          }
-                        >
-                          {["villager", "hunter", "cupid"].includes(me.role)
-                            ? "Wait for dawn"
-                            : "Submit action"}
-                        </button>
-                      </>
-                    )}
-                    {game.phase === "day" && me.alive && (
-                      <>
-                        <textarea
-                          value={message}
-                          maxLength={400}
-                          placeholder="Share a thought publicly — villagers will respond…"
-                          onChange={(event) => setMessage(event.target.value)}
-                          disabled={storyAudio.phaseTransitioning}
-                        />
-                        <button
-                          className="plain-button"
-                          disabled={interactionLocked || !message.trim()}
-                          onClick={() => void act("speak", { message })}
-                        >
-                          Speak
-                        </button>
-                        <button
-                          className="plain-button"
-                          disabled={interactionLocked}
-                          onClick={() => void act("discuss")}
-                        >
-                          Hear the villagers
-                        </button>
-                        <button
-                          className="action-button"
-                          disabled={interactionLocked}
-                          onClick={() => void act("begin-vote")}
-                        >
-                          Begin vote
-                        </button>
-                      </>
-                    )}
-                    {game.phase === "vote" && me.alive && (
-                      <>
-                        <p>Your vote is final.</p>
-                        <div className="choice-list">
-                          {others.map((player) => targetButton(player))}
-                        </div>
-                        <button
-                          className="action-button"
-                          disabled={interactionLocked || selected.length !== 1}
-                          onClick={() => void act("vote", { target: selected[0] })}
-                        >
-                          Cast vote
-                        </button>
-                      </>
-                    )}
-                    {game.phase === "hunter" && me.hunterActionPending && (
-                      <>
-                        <p>Choose someone to take with you.</p>
-                        <div className="choice-list">
-                          {others.map((player) => targetButton(player))}
-                        </div>
-                        <button
-                          className="action-button"
-                          disabled={interactionLocked || selected.length !== 1}
-                          onClick={() => void act("hunter-shot", { target: selected[0] })}
-                        >
-                          Take the shot
-                        </button>
-                      </>
-                    )}
-                    {!me.alive && !me.hunterActionPending && game.phase !== "over" && (
-                      <>
-                        <p>You are out. The village will finish the game.</p>
-                        <button
-                          className="action-button"
-                          disabled={interactionLocked}
-                          onClick={() => void act("continue")}
-                        >
-                          Continue watching
-                        </button>
-                      </>
-                    )}
-                    {game.phase === "over" && (
-                      <button className="action-button" onClick={() => setSession(undefined)}>
-                        Play again
-                      </button>
-                    )}
-                  </>
-                )}
-                {error && (
-                  <p className="error" role="alert">
-                    {error}
-                  </p>
-                )}
-              </div>
-            </section>
-          </aside>
+          )}
+          {me.role === "witch" && me.witchHealAvailable && me.wolfVictim && (
+            <label className="potion-choice">
+              <input
+                type="checkbox"
+                checked={heal}
+                onChange={(event) => setHeal(event.target.checked)}
+              />{" "}
+              Save {me.wolfVictim}
+            </label>
+          )}
+          <p className="voice-prompt">
+            {me.role === "seer"
+              ? "Say “investigate” and a name."
+              : me.role === "werewolf"
+                ? "Say “hunt” and a name, or “let the pack decide.”"
+                : me.role === "witch"
+                  ? "Say “save”, “poison” and a name, or “pass.”"
+                  : "Say “wait for dawn” to continue."}
+          </p>
+          <div className="stage-actions">
+            {me.role === "werewolf" && (
+              <button
+                className="secondary-pill"
+                type="button"
+                disabled={interactionLocked}
+                onClick={() => void act("night")}
+              >
+                Let the pack decide
+              </button>
+            )}
+            <button
+              className="primary-pill"
+              type="button"
+              disabled={
+                interactionLocked ||
+                ((me.role === "seer" || me.role === "werewolf") && !selected[0])
+              }
+              onClick={() =>
+                void act("night", {
+                  ...(selected[0] ? { target: selected[0], poison: selected[0] } : {}),
+                  heal,
+                })
+              }
+            >
+              {canTarget ? "Continue" : "Wait for dawn"}
+            </button>
+          </div>
         </div>
-        <div className="ambient-orb" aria-hidden="true" />
+      );
+    }
+    if (game.phase === "day") {
+      return (
+        <div className="phase-stack discussion-stage scene-enter">
+          <div className="stage-copy">
+            <h1>Discussion</h1>
+          </div>
+          {playerStrip()}
+          <p className="voice-prompt">Ask, accuse, or listen.</p>
+          <p className="examples">
+            Examples:
+            <br />“{game.players.find((player) => player.id !== me.id)?.name}, who do you suspect?”
+            <br />
+            “Tell the village I am suspicious.”
+          </p>
+          <div className="stage-actions">
+            <button
+              className="secondary-pill"
+              type="button"
+              disabled={interactionLocked}
+              onClick={() => void act("discuss")}
+            >
+              Hear villagers
+            </button>
+            <button
+              className="primary-pill"
+              type="button"
+              disabled={interactionLocked}
+              onClick={() => void act("begin-vote")}
+            >
+              Begin vote
+            </button>
+          </div>
+        </div>
+      );
+    }
+    if (game.phase === "vote") {
+      return (
+        <div className="phase-stack vote-stage scene-enter">
+          <div className="stage-copy">
+            <h1>Time to vote</h1>
+            <p>Who should leave the village?</p>
+          </div>
+          {playerStrip({ selectable: true, excludeSelf: true })}
+          <p className="voice-prompt">Say “vote for” and a player’s name.</p>
+          <button
+            className="primary-pill"
+            type="button"
+            disabled={interactionLocked || !selected[0]}
+            onClick={() => void act("vote", { target: selected[0] })}
+          >
+            Cast vote
+          </button>
+        </div>
+      );
+    }
+    if (game.phase === "hunter") {
+      return (
+        <div className="phase-stack night-turn scene-enter">
+          <div className="stage-copy">
+            <h1>One last shot</h1>
+            <p>Who will you take with you?</p>
+          </div>
+          {playerStrip({ selectable: true, excludeSelf: true })}
+          <button
+            className="primary-pill"
+            type="button"
+            disabled={interactionLocked || !selected[0]}
+            onClick={() => void act("hunter-shot", { target: selected[0] })}
+          >
+            Take the shot
+          </button>
+        </div>
+      );
+    }
+    if (game.phase === "over") {
+      const villageWon = game.winner === "village";
+      return (
+        <div className={`phase-stack end-stage scene-enter ${villageWon ? "has-fireworks" : ""}`}>
+          {villageWon && (
+            <div className="fireworks" aria-hidden="true">
+              <i />
+              <i />
+              <i />
+            </div>
+          )}
+          <div className="stage-copy">
+            <h1>
+              {villageWon
+                ? "The village wins"
+                : game.winner === "lovers"
+                  ? "Love survives"
+                  : "The Werewolves win"}
+            </h1>
+            <p>
+              {villageWon
+                ? "Both Werewolves have been eliminated."
+                : "The village has reached its final night."}
+            </p>
+          </div>
+          <p className="survival-copy">You survived as</p>
+          <h2>{roleNames[me.role]}</h2>
+          <div className="stage-actions">
+            <button
+              className="secondary-pill"
+              type="button"
+              onClick={() => {
+                setSession(undefined);
+                setSetupStep("mode");
+              }}
+            >
+              Home
+            </button>
+            <button
+              className="gold-pill"
+              type="button"
+              onClick={() => {
+                setSession(undefined);
+                setSetupStep("village");
+              }}
+            >
+              Play again
+            </button>
+          </div>
+        </div>
+      );
+    }
+    return (
+      <div className="phase-stack">
+        <div className="stage-copy">
+          <h1>The village waits.</h1>
+        </div>
+      </div>
+    );
+  };
+
+  let stage: ReactNode;
+  if (onboardingStep === "role") {
+    stage = (
+      <div className="phase-stack role-stage scene-enter">
+        <div className="stage-copy">
+          <h1>Your Role</h1>
+        </div>
+        <article className="role-card">
+          <span className="role-symbol">{role.symbol}</span>
+          <h2>The {roleNames[me.role]}</h2>
+          <div className="role-card-glow">
+            <p>{role.short}</p>
+            <button
+              className="primary-pill small-pill"
+              type="button"
+              onClick={() => setOnboardingStep("details")}
+            >
+              Read about role
+            </button>
+          </div>
+        </article>
+      </div>
+    );
+  } else if (onboardingStep === "details") {
+    stage = (
+      <div className="phase-stack role-stage scene-enter">
+        <div className="stage-copy">
+          <h1>Your Role</h1>
+        </div>
+        <article className="role-card detail-card">
+          <h2>How your role works</h2>
+          <p className="role-detail">• {role.detail}</p>
+          <div className="role-card-glow">
+            <h3>Your Goal</h3>
+            <p>{role.goal}</p>
+            <button
+              className="primary-pill small-pill"
+              type="button"
+              onClick={() => setOnboardingStep("role")}
+            >
+              Turn back
+            </button>
+          </div>
+        </article>
+        <button
+          className="gold-pill"
+          type="button"
+          disabled={interactionLocked}
+          onClick={beginFirstNight}
+        >
+          I’m ready
+        </button>
+      </div>
+    );
+  } else if (onboardingStep === "moon") {
+    stage = <div className="moon-only scene-enter">{renderMoon(true)}</div>;
+  } else if (cinematic === "sleep") {
+    stage = (
+      <div className="cinematic-copy scene-enter">
+        <h1>The village falls asleep.</h1>
+      </div>
+    );
+  } else if (cinematic === "wake") {
+    stage = (
+      <div className="cinematic-copy scene-enter">
+        <h1>The village wakes up.</h1>
+      </div>
+    );
+  } else if (cinematic === "finding" && latestFinding) {
+    stage = (
+      <div className="finding-stage scene-enter">
+        <article className="finding-card">
+          <h2>{latestFinding.name}</h2>
+          <i className="accent-3" aria-hidden="true" />
+          <strong>{latestFinding.result === "wolf" ? "A Werewolf" : "Not a Werewolf"}</strong>
+          <p>Remember this information. The other players do not know what you discovered.</p>
+        </article>
+      </div>
+    );
+  } else if (cinematic === "vote" && game.lastVoteResult) {
+    stage = (
+      <div className="phase-stack vote-result-stage scene-enter">
+        <div className="stage-copy">
+          <h1>Time to vote</h1>
+          <p>Who should leave the village?</p>
+        </div>
+        <div className="player-strip vote-result-strip" aria-label="Vote results">
+          {displayedPlayers.map((player, index) => {
+            const votes = game.lastVoteResult?.tally.find(
+              (item) => item.target === player.id,
+            )?.votes;
+            return (
+              <div
+                className={`player-tile ${accentClass(index)} ${player.id === game.lastVoteResult?.exiledPlayerId ? "is-eliminated" : ""}`}
+                key={player.id}
+              >
+                <span>{player.id === me.id ? "You" : player.name}</span>
+                <i aria-hidden="true" />
+                {votes ? <b className="vote-count">{votes}</b> : null}
+              </div>
+            );
+          })}
+        </div>
+        <p className={`vote-outcome ${game.lastVoteResult.exiledPlayerId ? "" : "is-tie"}`}>
+          {game.lastVoteResult.exiledPlayerId
+            ? `${latestVoteTarget} has been eliminated.`
+            : "The vote is tied. No one leaves the village."}
+        </p>
+      </div>
+    );
+  } else if (cinematic === "reveal" && game.lastVoteResult && latestVoteTarget) {
+    stage = (
+      <div className="finding-stage role-reveal-stage scene-enter">
+        <article className="finding-card reveal-card">
+          <h2>{latestVoteTarget} was…</h2>
+          <span className="revealed-role-symbol" aria-hidden="true">
+            {latestVoteRole ? roleSymbols[latestVoteRole] : "?"}
+          </span>
+          <strong>{latestVoteRole ? `A ${roleNames[latestVoteRole]}` : "eliminated"}</strong>
+        </article>
+      </div>
+    );
+  } else {
+    stage = renderNormalStage();
+  }
+
+  return (
+    <main
+      className={`reference-app ${game.phase === "night" || game.phase === "cupid" || game.phase === "hunter" ? "reference-night" : "reference-day"}`}
+      id="top"
+    >
+      {header}
+      {homeButton}
+      <section className="reference-stage game-stage">
+        {stage}
+        {busy && (
+          <p className="stage-progress" role="status">
+            <i aria-hidden="true" /> The guide is resolving your move…
+          </p>
+        )}
+        {error && (
+          <p className="stage-error" role="alert">
+            {error}
+          </p>
+        )}
+        {onboardingStep !== "moon" && renderMoon()}
       </section>
       {voiceDock}
     </main>
