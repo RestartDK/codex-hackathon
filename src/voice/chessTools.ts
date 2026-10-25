@@ -119,17 +119,13 @@ export function createChessToolExecutor(getBridge: () => ChessToolBridge) {
       if (!destination)
         return json({
           status: "error",
-          message: "Choose chess, Loups-Garous, home, audio settings, or help.",
+          message: `Choose ${PLAYABLE_GAMES_LABEL}, home, audio settings, or help.`,
         });
-      if (destination === "tic-tac-toe") {
-        return json({
-          status: "unavailable",
-          message: `${PLAYABLE_GAMES_LABEL} are ready to play. Tic-Tac-Toe is coming soon.`,
-        });
-      }
       cancelRequests();
       if (
-        (destination === "home" || destination === "loups-garous") &&
+        destination !== "chess" &&
+        destination !== "audio" &&
+        destination !== "help" &&
         bridge.view === "chess" &&
         bridge.history.length > 0 &&
         !bridge.awaitingStartChoice &&
@@ -316,7 +312,7 @@ export function createChessToolExecutor(getBridge: () => ChessToolBridge) {
       if (bridge.isTerminated)
         return json({ status: "error", message: "The game is already over." });
       if (bridge.game.turn() !== bridge.playerColor)
-        return json({ status: "error", message: "It is the computer’s turn." });
+        return json({ status: "error", message: "It is the computerâ€™s turn." });
       const parsed = moveArgumentsSchema.safeParse({
         from: fields.get("from") ?? null,
         to: fields.get("to"),
@@ -473,3 +469,5 @@ export function createChessToolExecutor(getBridge: () => ChessToolBridge) {
 
   return { execute, cancelRequests };
 }
+
+
