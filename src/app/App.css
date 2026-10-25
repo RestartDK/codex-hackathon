@@ -158,6 +158,14 @@
 .pbv-root .game-card-loups-garous {
   background-image: url("/artwork/werewolf-card.webp");
 }
+.pbv-root .game-card-ludo {
+  background-image: url("/artwork/red-card.webp");
+}
+.pbv-root .game-card-intercept {
+  background-image:
+    radial-gradient(circle at 30% 25%, #6c8890 0, transparent 32%),
+    linear-gradient(145deg, #0b2730 0%, #162028 55%, #05090d 100%);
+}
 .pbv-root .game-card-tic-tac-toe {
   background-image: url("/artwork/tic-tac-toe-card.webp");
 }
@@ -1845,3 +1853,5 @@
     font-size: 30px;
   }
 }
+
+
