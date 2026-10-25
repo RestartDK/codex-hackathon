@@ -43,6 +43,7 @@ export async function startLiveVoice({
   let outputTranscript = "";
   let inputTranscript = "";
   let inputPauseTimer: number | undefined;
+  let outputPauseTimer: number | undefined;
   let resumeAudioOnGesture: (() => void) | undefined;
 
   const flushInputTranscript = () => {
@@ -51,12 +52,19 @@ export async function startLiveVoice({
     if (transcript) onInputTranscriptComplete(transcript);
   };
 
+  const flushOutputTranscript = () => {
+    const transcript = outputTranscript.trim();
+    outputTranscript = "";
+    if (transcript) onGuideReply(transcript);
+    onStatus("Listening…");
+  };
+
   const stop = (status = "Voice is off") => {
     if (closed) return;
     closed = true;
     if (inputPauseTimer) window.clearTimeout(inputPauseTimer);
-    if (resumeAudioOnGesture)
-      window.removeEventListener("pointerdown", resumeAudioOnGesture);
+    if (outputPauseTimer) window.clearTimeout(outputPauseTimer);
+    if (resumeAudioOnGesture) window.removeEventListener("pointerdown", resumeAudioOnGesture);
     dataChannel?.close();
     stream?.getTracks().forEach((track) => track.stop());
     peerConnection?.close();
@@ -77,30 +85,26 @@ export async function startLiveVoice({
       try {
         const payload = JSON.parse(String(event.data)) as LiveTransportEvent;
         const text = payload.delta ?? payload.transcript;
-        if (payload.type === "conversation.item.input_audio_transcription.delta" && text) {
-          onInputTranscript(text);
-        }
-        if (payload.type === "conversation.item.input_audio_transcription.completed" && text) {
-          onInputTranscriptComplete(text);
-        }
-        // Backward-compatible handling for the preview event names used by an
-        // earlier Realtime transport. Current sessions use the two events above.
+        // GPT-Live streams transcript fragments without a final-turn event.
+        // A short quiet period marks one completed player command.
         if (payload.type === "session.input_transcript.delta" && text) {
           inputTranscript += text;
           onInputTranscript(text);
           if (inputPauseTimer) window.clearTimeout(inputPauseTimer);
-          // GPT-Live streams transcript fragments without a turn-complete event.
-          // A brief silence lets the same command router handle a spoken sentence once.
           inputPauseTimer = window.setTimeout(flushInputTranscript, 900);
         }
-        if (
-          (payload.type === "response.output_audio_transcript.delta" ||
-            payload.type === "session.output_transcript.delta") &&
-          text
-        ) {
+        if (payload.type === "session.output_transcript.delta" && text) {
           outputTranscript += text;
           onStatus("Guide is speaking…");
+          if (outputPauseTimer) window.clearTimeout(outputPauseTimer);
+          outputPauseTimer = window.setTimeout(flushOutputTranscript, 900);
         }
+        // Realtime compatibility remains useful for a future Realtime transport,
+        // but GPT-Live sessions use the two session transcript events above.
+        if (payload.type === "conversation.item.input_audio_transcription.delta" && text)
+          onInputTranscript(text);
+        if (payload.type === "conversation.item.input_audio_transcription.completed" && text)
+          onInputTranscriptComplete(text);
         if (
           (payload.type === "response.output_audio_transcript.done" ||
             payload.type === "session.output_transcript.done") &&
