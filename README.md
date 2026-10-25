@@ -1,6 +1,8 @@
-# Play by Voice
+# Playora
 
-Choose Chess, Loups-Garous, Ludo, The Intercept, or Tic-Tac-Toe from the shared game picker. Audio Settings and Help remain available from the Play by Voice shell.
+[Play online](https://playora.danielkumlin.com/dashboard/).
+
+Choose Chess, Loups-Garous, Ludo, The Intercept, or Tic-Tac-Toe from the shared game picker. Audio Settings and Help remain available from the Playora shell.
 
 Chess runs in the browser with Stockfish and saves your position locally. Loups-Garous is a single-player social deduction game with NPC villagers. Ludo is a two-player race against the computer, The Intercept is an authored interactive mystery, and Tic-Tac-Toe is a three-by-three match against the computer. The three added games keep separate local saves and support live voice plus typed-command fallbacks. Direct player moves execute immediately; only companion-selected suggestions and destructive resets require confirmation. Use **Games** or **Game library** to return to the picker.
 

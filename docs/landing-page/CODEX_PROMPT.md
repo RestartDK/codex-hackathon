@@ -1,10 +1,10 @@
 # Codex prompt — inspect, then implement
 
-Copy the prompt below into Codex inside the Play by Voice repository. Make DESIGN.md, IMPLEMENTATION_BRIEF.md, and the references directory available in that workspace. The prompt authorizes inspection followed by implementation in one run.
+Copy the prompt below into Codex inside the Playora repository. Make DESIGN.md, IMPLEMENTATION_BRIEF.md, and the references directory available in that workspace. The prompt authorizes inspection followed by implementation in one run.
 
 ---
 
-Build the Play by Voice hackathon landing page from the supplied DESIGN.md and IMPLEMENTATION_BRIEF.md. Use the four supplied screenshots as composition references. Read the files and inspect the repository before changing application files, then implement the page in this same run. Do not stop after planning or ask for routine implementation approval.
+Build the Playora hackathon landing page from the supplied DESIGN.md and IMPLEMENTATION_BRIEF.md. Use the four supplied screenshots as composition references. Read the files and inspect the repository before changing application files, then implement the page in this same run. Do not stop after planning or ask for routine implementation approval.
 
 First, perform a read-only inspection:
 
@@ -26,7 +26,7 @@ Implement the following:
 - Implement a growing library shelf with the current and planned game entries and an invitation to future games. Only enable real launch destinations; label unavailable games “Coming soon.” Primary “Start playing” actions must share a real destination, or point to #games when no selector exists.
 - Keep the three-step explanation open and minimal. Describe required on-screen setup honestly.
 - Build the voice section as a labeled, always-readable example transcript. Add Play/Pause only if a real recording exists. Do not trigger audio or microphone permission on page load. Reuse a live demo only if an existing working implementation can be integrated safely with explicit start/stop, permission/error states, and a text alternative.
-- Build FAQ as question-message disclosures with plus icons. Clicking a question expands a white Play by Voice answer bubble on the left; the plus becomes a close mark. Use verified static answers, native details/summary fallback, keyboard activation, visible focus, measured height animation, and reduced-motion support. The first answer starts open and enhancement keeps one reply expanded. Do not restore the old text composer or chatbot history.
+- Build FAQ as question-message disclosures with plus icons. Clicking a question expands a white Playora answer bubble on the left; the plus becomes a close mark. Use verified static answers, native details/summary fallback, keyboard activation, visible focus, measured height animation, and reduced-motion support. The first answer starts open and enhancement keeps one reply expanded. Do not restore the old text composer or chatbot history.
 - Use semantic landmarks, one H1, a skip link, visible focus, logical keyboard order, minimum 44px controls, readable contrast, accessible navigation disclosure, and reduced-motion support. Keep content visible without animation/JavaScript enhancement. Scope landing styles so game screens retain their own design.
 - Use original/reusable assets or CSS atmosphere. Do not ship the reference website screenshots as production artwork, imitate their branding, add fake metrics/testimonials/logos, scatter generic AI sparkles, or build grids of repeated SaaS feature cards.
 - Keep dependencies minimal. Use existing framework/router/styling conventions; no framework migration, new speech service, FAQ backend, or app-wide redesign.

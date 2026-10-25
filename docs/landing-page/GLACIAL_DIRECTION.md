@@ -2,9 +2,9 @@
 
 The user requested the style of [Glacia](https://glacia.framer.ai/) on 25 October 2026. This is the current visual authority for the landing page and supersedes earlier neutral editorial styling notes where they differ. The existing game platform remains unchanged.
 
-## Reference translated into Play by Voice
+## Reference translated into Playora
 
-The live reference was inspected in a browser. The adopted visual cues are a continuous pale ice-blue canvas, abstract folded highlights in the hero, translucent pill navigation, light sans-serif headings paired with selective italic serif lines, pale cyan controls, and softly lit frosted panels. Product content, game identities, and assets remain Play by Voice's own. No Glacia copy, testimonials, performance claims, or artwork were imported.
+The live reference was inspected in a browser. The adopted visual cues are a continuous pale ice-blue canvas, abstract folded highlights in the hero, translucent pill navigation, light sans-serif headings paired with selective italic serif lines, pale cyan controls, and softly lit frosted panels. Product content, game identities, and assets remain Playora's own. No Glacia copy, testimonials, performance claims, or artwork were imported.
 
 - Canvas: `#E8F4F9`; text: `#163D50`; supporting text: `#4E6B79`; accent serif: `#317796`; borders: `#D0E2EC`; focus: `#166992`.
 - Primary controls: cyan gradient `#D9FBFF` to `#9DDDED`, dark text, white rim, soft blue shadow. Secondary controls: translucent white.
@@ -23,7 +23,7 @@ Checked widths 1440, 1024, 768, 390, and 320px without horizontal page overflow.
 
 ## Reference motion and rendering quality
 
-A second live inspection of Glacia identified its duplicated hover labels, vertical text exchange, cyan internal loop flare, diagonal blurred light streak, and mobile frosted navigation expansion. These observed behaviors now replace the earlier generic hover lift. Navigation and CTA labels have one accessible name, and keyboard focus receives the same visual exchange. The mobile menu is a full-width top panel with centered links and a text-only Menu/Close control; its height reflects Play by Voice's three links. It supports Escape, selection close, and focus return.
+A second live inspection of Glacia identified its duplicated hover labels, vertical text exchange, cyan internal loop flare, diagonal blurred light streak, and mobile frosted navigation expansion. These observed behaviors now replace the earlier generic hover lift. Navigation and CTA labels have one accessible name, and keyboard focus receives the same visual exchange. The mobile menu is a full-width top panel with centered links and a text-only Menu/Close control; its height reflects Playora's three links. It supports Escape, selection close, and focus return.
 
 The hero's ice folds are now continuously warped by a local WebGL texture shader. The liquid orb uses a high-precision fragment shader rather than the old 192px CPU bitmap. Large orb buffers are at least 512px and scale with display density and element size; circle clipping happens at the browser's native edge. Small companion avatars retain scalable SVG/CSS. Resize observers refresh buffers, and context failure leaves the SVG/CSS fallback. The shared pause control freezes the background, orbs, and ambient button flare; reduced-motion preferences stop ambient motion and skip text reveals.
 
@@ -43,7 +43,7 @@ The hero shader clock increased from 0.12 to 0.4, with wider fold displacement a
 
 ## White footer lettering and message FAQ
 
-The large decorative PLAY BY VOICE lettering is pure white; its existing fade and blue footer background remain. The user clarified that white applies to the letters. FAQ now uses right-aligned question bubbles with circular plus controls and left-aligned white Play by Voice reply bubbles, replacing the text composer and chatbot transcript. The selected question becomes dark ice blue and its plus rotates to a close mark. Eight verified answers live in semantic HTML, with native details/summary behavior as the no-JavaScript fallback. The first answer starts open; enhancement allows one active reply, animates measured height/opacity, and supports keyboard and reduced motion. No FAQ API or microphone behavior was introduced.
+The large decorative PLAYORA lettering is pure white; its existing fade and blue footer background remain. The user clarified that white applies to the letters. FAQ now uses right-aligned question bubbles with circular plus controls and left-aligned white Playora reply bubbles, replacing the text composer and chatbot transcript. The selected question becomes dark ice blue and its plus rotates to a close mark. Eight verified answers live in semantic HTML, with native details/summary behavior as the no-JavaScript fallback. The first answer starts open; enhancement allows one active reply, animates measured height/opacity, and supports keyboard and reduced motion. No FAQ API or microphone behavior was introduced.
 
 Verified pointer expansion, keyboard opening/closing, switching replies, long privacy text, 320/390/768/1024/1440px layouts without overflow, pure-white footer text, and empty browser error logs. The production build and source checks passed.
 

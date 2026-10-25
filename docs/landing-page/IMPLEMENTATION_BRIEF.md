@@ -1,4 +1,4 @@
-# Play by Voice — Implementation brief
+# Playora — Implementation brief
 
 ## Outcome
 
@@ -10,7 +10,7 @@ The handoff was prepared in an empty projectless workspace. No application repos
 
 | Item | Available evidence | Implementation treatment |
 | --- | --- | --- |
-| Product name | Play by Voice in the conversation | Use consistently |
+| Product name | Playora in the conversation | Use consistently |
 | Core direction | Speaking/listening-led gaming and accessibility intent | Explain directly, with prototype limitations where needed |
 | Chess and Loups-Garous | Named in the conversation | Inspect availability before enabling game actions |
 | Existing game designs | Mentioned, not supplied | Locate and preserve; never invent screenshots |

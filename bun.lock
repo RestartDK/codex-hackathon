@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "codex-hackathon",
+      "name": "playora",
       "dependencies": {
         "chess.js": "^1.4.0",
         "lucide-react": "^0.548.0",
