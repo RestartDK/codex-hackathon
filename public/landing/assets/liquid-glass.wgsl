@@ -1271,4 +1271,3 @@ fn fs_main(in: VOut) -> @location(0) vec4<f32> {
   let fit = 1.0 - smoothstep(fitStart, fitEnd, max(abs(q.x), abs(q.y)));
   return vec4<f32>(c.rgb * fit, c.a * fit);
 }
-

@@ -7,9 +7,15 @@ import { useDialogFocus } from "../hooks/useDialogFocus";
 import VillageSky from "./VillageSky";
 import { usePresence } from "../hooks/usePresence";
 import { DEFAULT_ROLE_COUNTS } from "../../server/game/rules.js";
-import type { FeedEntry, GameView, PublicPlayerView, Role } from "../../server/game/types.js";
+import type {
+  FeedEntry,
+  GameView,
+  PublicPlayerView,
+  Role,
+  VoteResult,
+} from "../../server/game/types.js";
 import {
-  createOpenAINarrationBackend,
+  createBrowserNarrationBackend,
   primeBrowserNarration,
   useStoryAudio,
 } from "../voice/browser-narration.js";
@@ -21,6 +27,7 @@ import {
 
 type Session = { game: GameView; token: string };
 type GuideMessage = { role: "user" | "assistant"; text: string; mode?: "model" | "local" };
+type VoiceInputMode = "idle" | "browser" | "connecting-live" | "live";
 const roleNames: Record<Role, string> = {
   werewolf: "Werewolf",
   villager: "Villager",
@@ -159,15 +166,7 @@ async function prepareVillage(signal: AbortSignal) {
   await Promise.all(PREPARE_ASSETS.map((src) => preloadImage(src, signal)));
 }
 
-function readStorySeen() {
-  try {
-    return window.localStorage.getItem("loups-story-seen") === "1";
-  } catch {
-    return false;
-  }
-}
-
-function openingBriefing(game: GameView) {
+function openingBriefing(game: GameView, explainAsWePlay: boolean) {
   const { me } = game;
   const roleBriefing: Record<Role, string> = {
     seer: "You are the Seer. Each night, privately investigate one living player to learn whether they are a Werewolf.",
@@ -189,18 +188,30 @@ function openingBriefing(game: GameView) {
         ? "It is night now, so follow the private action in your turn panel."
         : "Use the current phase panel for your next action.";
   const nightVoiceExample: Record<Role, string> = {
-    seer: "say ‘investigate Camille’",
-    werewolf: "say ‘hunt Camille’ or ‘let the pack decide’",
-    witch: "say ‘save’, ‘poison Camille’, or ‘pass’",
+    seer: "say ‘investigate Emma’",
+    werewolf: "say ‘hunt Emma’ or ‘let the pack decide’",
+    witch: "say ‘save’, ‘poison Emma’, or ‘pass’",
     hunter: "say ‘wait for dawn’ until you need your final shot",
     cupid: "say ‘wait for dawn’ once the lovers are bound",
     villager: "say ‘wait for dawn’",
   };
 
+  const essentials = [
+    `Welcome to Valombre. ${roleBriefing[me.role]}`,
+    `Your voice companion is already listening after microphone permission. At night, ${nightVoiceExample[me.role]}, or simply say ‘choose Emma’.`,
+    nextStep,
+  ];
+
+  if (!explainAsWePlay)
+    return [
+      ...essentials,
+      "Guided explanations are off for this game. Say ‘voice help’ or ask a question whenever you want help.",
+    ].join(" ");
+
   return [
     `Welcome to Valombre. ${roleBriefing[me.role]}`,
     "The village wins by removing every Werewolf. The Werewolves win when they equal or outnumber everyone else. Nights are private; mornings are for public discussion and a village vote.",
-    `Your voice companion is already listening after microphone permission. At night, ${nightVoiceExample[me.role]}, or simply say ‘choose Camille’. During the morning, say ‘Camille, why do you suspect Noémie?’ or ‘tell the village I trust Jules’ to post a public message; the villagers will answer. Say ‘hear the villagers’, ‘begin vote’, ‘vote for Camille’, or ‘what can I do?’ at any time.`,
+    `Your voice companion is already listening after microphone permission. At night, ${nightVoiceExample[me.role]}, or simply say ‘choose Emma’. During the morning, say ‘Emma, why do you suspect Sofia?’ or ‘tell the village I trust Lucas’ to post a public message; the villagers will answer. Say ‘hear the villagers’, ‘begin vote’, ‘vote for Emma’, or ‘what can I do?’ at any time.`,
     "For the full hands-free control list, say ‘voice help’. You can also say ‘repeat that’, ‘pause narration’, ‘speak slower’, ‘pause game’, ‘resume game’, or ‘stop voice control’.",
     nextStep,
   ].join(" ");
@@ -211,6 +222,72 @@ function normalizeVoiceText(value: string) {
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/gu, "")
     .toLocaleLowerCase();
+}
+
+function normalizeVoiceCommand(value: string) {
+  return normalizeVoiceText(value)
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .trim()
+    .replace(/\s+/gu, " ");
+}
+
+/** Accept a player's intent, not one exact incantation, before routing it. */
+function startsNewGameNaturally(text: string) {
+  const command = normalizeVoiceCommand(text);
+  if (/^how\b/u.test(command)) return false;
+  return (
+    /\b(?:start|begin|create|make|launch)\b.*\b(?:game|match|village|round|session|demo|test)\b/u.test(
+      command,
+    ) ||
+    /\b(?:let s|i want to|can we|shall we|ready to|time to) (?:start|begin|play)\b/u.test(
+      command,
+    ) ||
+    /\b(?:another round|one more game|run it back|get started|play a game)\b/u.test(command)
+  );
+}
+
+/**
+ * Questions can still be actions. Keep target-and-phase language on the
+ * validated command route instead of accidentally sending it to the guide.
+ */
+function looksLikeGameAction(text: string, game?: GameView) {
+  if (!game) return startsNewGameNaturally(text);
+  const command = normalizeVoiceCommand(text);
+  const hasPlayerName = game.players.some((candidate) => {
+    if (!candidate.alive || candidate.id === game.me.id) return false;
+    const archetypeNoun = normalizeVoiceCommand(candidate.profile.archetype).split(" ").at(-1);
+    return (
+      command.includes(normalizeVoiceCommand(candidate.name)) ||
+      Boolean(archetypeNoun && archetypeNoun.length > 3 && command.includes(archetypeNoun))
+    );
+  });
+  const movesOn =
+    /\b(?:pass|wait|skip|rest|dawn|morning|daybreak|continue|next|go on|move on|(?:i m|we re|all) done|that s it|end (?:my )?turn|wrap (?:this|it) up|finish (?:the )?night|go ahead|wake (?:everyone|everybody|the village)?|go to (?:the )?(?:morning|day|dawn)|ready (?:for|to) (?:morning|daylight|dawn))\b/u.test(
+      command,
+    );
+  const choosesForMe =
+    /\b(?:you decide|you pick|your choice|surprise me|whatever you think|anyone is fine|whoever you want)\b/u.test(
+      command,
+    );
+  const selection =
+    /\b(?:choose|pick|select|target|go with|hunt|attack|kill|go after|get rid of|take out|investigate|check|inspect|look at|look into|check on|save|heal|rescue|protect|poison|vote|eliminate|exile|remove|kick out|send home|banish|nominate|shoot|fire|take .* with me)\b/u.test(
+      command,
+    );
+  const voteIntent =
+    /\b(?:should (?:leave|go)|needs? to go|must go|goes home|time to vote|begin (?:the )?vote|start (?:the )?vote|make (?:a )?decision)\b/u.test(
+      command,
+    );
+
+  if (/\b(?:pause|hold|freeze|resume|unpause)\b.*\b(?:game|match|village|play)\b/u.test(command))
+    return true;
+  if (game.phase === "prologue")
+    return movesOn || /\b(?:ready|begin|start|night|let s go|get started)\b/u.test(command);
+  if (game.phase === "cupid") return choosesForMe || (hasPlayerName && selection);
+  if (game.phase === "night") return movesOn || choosesForMe || (hasPlayerName && selection);
+  if (game.phase === "day") return (hasPlayerName && (selection || voteIntent)) || voteIntent;
+  if (game.phase === "vote") return choosesForMe || (hasPlayerName && (selection || voteIntent));
+  if (game.phase === "hunter") return choosesForMe || (hasPlayerName && selection);
+  return false;
 }
 
 function readableFeedEntry(entry: FeedEntry) {
@@ -228,7 +305,7 @@ function currentActionHelp(game: GameView) {
   if (game.phase === "prologue")
     return "The village is being introduced. Say ‘begin the first night’ when you are ready.";
   if (game.phase === "cupid")
-    return "You are Cupid. Say ‘pair’ followed by two living player names, for example ‘pair Camille and Jules’.";
+    return "You are Cupid. Say ‘pair’ followed by two living player names, for example ‘pair Emma and Lucas’.";
   if (game.phase === "night") {
     if (me.role === "werewolf")
       return "It is night. Say ‘hunt’ and a living player’s name, or say ‘let the pack decide’.";
@@ -320,9 +397,9 @@ function rosterSummary(game: GameView) {
 function voiceHelp(game: GameView) {
   return [
     currentActionHelp(game),
-    "To hear the interface in order, say ‘describe the interface’. Say ‘read my role’, ‘read the players’, ‘who is alive’, ‘read updates’, ‘read all messages’, or ‘what did Camille say?’ to hear game information.",
+    "To hear the interface in order, say ‘describe the interface’. Say ‘read my role’, ‘read the players’, ‘who is alive’, ‘read updates’, ‘read all messages’, or ‘what did Emma say?’ to hear game information.",
     "For audio, say ‘repeat that’, ‘stop speaking’, ‘pause narration’, ‘resume narration’, ‘speak slower’, ‘speak faster’, ‘volume up’, ‘volume down’, ‘turn auto read on’, or ‘turn auto read off’.",
-    "For choices, you can say ‘choose Camille’, ‘pick Jules’, ‘select Noémie’, ‘vote for Théo’, ‘choose for me’, ‘continue’, or ‘do nothing’. Say ‘pause game’, ‘resume game’, ‘pause voice control’, or ‘resume listening’ whenever you need them.",
+    "For choices, you can say ‘choose Emma’, ‘pick Lucas’, ‘select Sofia’, ‘vote for Noah’, ‘choose for me’, ‘continue’, or ‘do nothing’. Say ‘pause game’, ‘resume game’, ‘pause voice control’, or ‘resume listening’ whenever you need them.",
   ].join(" ");
 }
 
@@ -451,16 +528,16 @@ export default function WerewolfApp({
   const [voiceCommandsPaused, setVoiceCommandsPaused] = useState(false);
   const [guideMessages, setGuideMessages] = useState<GuideMessage[]>([]);
   const [guideText, setGuideText] = useState("");
-  const [guideBusy, setGuideBusy] = useState(false);
   const [liveConnected, setLiveConnected] = useState(false);
   const [liveConnecting, setLiveConnecting] = useState(false);
   const [voiceTranscript, setVoiceTranscript] = useState("");
   const [openingAudio, setOpeningAudio] = useState<{ gameId: string; text: string }>();
   const [stage, setStage] = useState<SetupStage>("preparing");
   const [prepareAttempt, setPrepareAttempt] = useState(0);
-  const [explainGame, setExplainGame] = useState(() => !readStorySeen());
+  const [explainGame, setExplainGame] = useState(true);
   const [introStep, setIntroStep] = useState<IntroStep | null>(null);
   const [seenInvestigations, setSeenInvestigations] = useState(0);
+  const [voteOutcome, setVoteOutcome] = useState<{ result: VoteResult; revealing: boolean }>();
   const [dialog, setDialog] = useState<"audio" | "help" | null>(null);
   const [typing, setTyping] = useState(false);
   const createControllerRef = useRef<AbortController | null>(null);
@@ -482,12 +559,15 @@ export default function WerewolfApp({
   const voiceCommandHandlerRef = useRef<(transcript: string) => void>(() => undefined);
   const startVoiceRef = useRef<() => void>(() => undefined);
   const liveConnectionRef = useRef<LiveVoiceSession | null>(null);
-  const liveStartRef = useRef<AbortController | null>(null);
-  const useLiveFallbackRef = useRef(false);
-  const narrationBackend = useMemo(
-    () => createOpenAINarrationBackend(session?.game.id, session?.token),
-    [session?.game.id, session?.token],
-  );
+  const inputModeRef = useRef<VoiceInputMode>("idle");
+  const commandQueueRef = useRef(Promise.resolve());
+  const lastVoiceCommandRef = useRef({ text: "", at: 0 });
+  const actionInFlightRef = useRef(false);
+  const guideRequestIdRef = useRef(0);
+  const guideAbortRef = useRef<AbortController | undefined>(undefined);
+  // One browser narrator is deliberately used for every line. It starts without
+  // a network round trip and never changes identity if a remote TTS request fails.
+  const narrationBackend = useMemo(() => createBrowserNarrationBackend(), []);
   const revealNarratedPhase = useCallback(() => {
     const latestGame = latestGameRef.current;
     if (!latestGame) return;
@@ -500,7 +580,6 @@ export default function WerewolfApp({
     feed: session?.game.feed,
     gameId: session?.game.id,
     phase: session?.game.phase,
-    liveVoiceActive: liveConnected,
     onPhaseBoundaryStart: revealNarratedPhase,
     openingLine: openingAudio && {
       id: `${openingAudio.gameId}:opening-guide`,
@@ -512,7 +591,19 @@ export default function WerewolfApp({
     backend: narrationBackend,
   });
 
+  useEffect(() => {
+    storyAudio.updateVolume(narrationVolume);
+  }, [narrationVolume]);
+
   function commitGame(game: GameView, token: string) {
+    const previous = latestGameRef.current;
+    // A newly resolved village vote gets its result and, after an exile, the revealed role.
+    if (
+      previous &&
+      game.lastVoteResult &&
+      JSON.stringify(previous.lastVoteResult) !== JSON.stringify(game.lastVoteResult)
+    )
+      setVoteOutcome({ result: game.lastVoteResult, revealing: false });
     const nextSession = { game, token };
     latestGameRef.current = game;
     sessionRef.current = nextSession;
@@ -523,42 +614,6 @@ export default function WerewolfApp({
     presentedGameRef.current = game;
     setPresentedGame(game);
   }
-
-  useEffect(() => {
-    // Browsers only allow a first microphone permission prompt from a user gesture.
-    // After one tap, recognition runs on the landing screen and throughout a game.
-    autoVoiceRequestedRef.current = true;
-    // When the player has already granted microphone access, begin immediately.
-    // For a first visit, wait for the one permission gesture below so the browser
-    // can actually show its microphone prompt instead of silently rejecting it.
-    if (navigator.permissions) {
-      void navigator.permissions
-        .query({ name: "microphone" as PermissionName })
-        .then((permission) => {
-          if (permission.state === "granted") startVoiceRef.current();
-        })
-        .catch(() => undefined);
-    }
-    const enableVoice = () => {
-      if (recognitionRef.current || liveConnectionRef.current) return;
-      primeBrowserNarration();
-      startVoiceRef.current();
-    };
-    // Keep this listener until the page closes: if permission was declined or a
-    // microphone was connected later, the next ordinary tap can retry it.
-    window.addEventListener("pointerdown", enableVoice, { passive: true });
-    return () => {
-      window.removeEventListener("pointerdown", enableVoice);
-      autoVoiceRequestedRef.current = false;
-      recognitionRef.current?.stop();
-      // Leaving while a village is being created must not navigate back into it.
-      createControllerRef.current?.abort();
-      createControllerRef.current = null;
-      liveStartRef.current?.abort();
-      liveStartRef.current = null;
-      stopLiveVoice();
-    };
-  }, []);
 
   useEffect(() => {
     if (stage !== "preparing") return;
@@ -616,6 +671,7 @@ export default function WerewolfApp({
     const controller = new AbortController();
     createControllerRef.current = controller;
     lastCreateTestModeRef.current = testMode;
+    cancelPendingGuide();
     setStage("creating");
     primeBrowserNarration();
     // This runs directly from the player's Start or Quick Test gesture, which is
@@ -635,17 +691,22 @@ export default function WerewolfApp({
           tieRule,
           start: true,
           testMode,
-          skipIntro: !testMode && !explainGame,
+          explainAsWePlay: explainGame,
+          // The narrated introduction is part of the hands-free game flow. Keep it
+          // for every new village so a returning player never lands in the middle
+          // of a night without the role and controls being introduced first.
+          skipIntro: false,
         }),
       });
       const data = await response.json();
       if (controller.signal.aborted) return;
       if (!response.ok) throw new Error(data.error ?? "Could not create a game.");
       const game = data as GameView;
-      const briefing = openingBriefing(game);
+      const briefing = openingBriefing(game, explainGame);
       void Promise.all(SESSION_ASSETS.map((src) => preloadImage(src, controller.signal)));
       commitGame(game, data.session);
       setSeenInvestigations(game.me.investigations.length);
+      setVoteOutcome(undefined);
       setIntroStep(game.phase === "prologue" ? "village" : "role");
       // When browser speech recognition is unavailable, try the provider-backed
       // companion once the game session is ready.
@@ -658,7 +719,7 @@ export default function WerewolfApp({
           text: briefing,
         },
       ]);
-      if (explainGame || testMode) setOpeningAudio({ gameId: game.id, text: briefing });
+      setOpeningAudio({ gameId: game.id, text: briefing });
     } catch (cause) {
       if (controller.signal.aborted) return;
       setError(cause instanceof Error ? cause.message : "Could not create a game.");
@@ -672,24 +733,26 @@ export default function WerewolfApp({
   }
 
   async function perform(input: Record<string, unknown>, announceFailure = false) {
-    if (!session) return undefined;
-    if (storyAudio.phaseTransitioning) {
-      // The player has spoken or acted. Stop the now-stale announcement and move
-      // directly to the updated phase so the narration and screen cannot diverge.
-      storyAudio.stop();
-    }
-    if (busy) {
+    const activeSession = sessionRef.current;
+    if (!activeSession) return undefined;
+    if (actionInFlightRef.current || busy) {
       if (announceFailure) queueAssistant("One moment. I am still resolving the previous command.");
       return undefined;
     }
+    cancelPendingGuide();
+    // A player action wins over any older scene. This keeps commands such as
+    // “wait for dawn” from being trapped behind a long narration queue.
+    storyAudio.stop();
+    actionInFlightRef.current = true;
     setBusy(true);
+    setVoiceStatus("The guide is resolving your move…");
     setError("");
     try {
-      const response = await fetch(`/api/games/${session.game.id}/action`, {
+      const response = await fetch(`/api/games/${activeSession.game.id}/action`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "X-Game-Session": session.token,
+          "X-Game-Session": activeSession.token,
           "X-Request-Id": crypto.randomUUID(),
         },
         body: JSON.stringify(input),
@@ -697,7 +760,7 @@ export default function WerewolfApp({
       const data = await response.json();
       if (!response.ok) throw new Error(data.error ?? "That action could not be completed.");
       const game = data as GameView;
-      commitGame(game, session.token);
+      commitGame(game, activeSession.token);
       if (announceFailure) {
         const command = typeof input.command === "string" ? input.command : "";
         queueAssistant(voiceActionFeedback(game, command), "local", {
@@ -705,24 +768,36 @@ export default function WerewolfApp({
         });
       }
       setSelected([]);
-      setMessage("");
-      setCommandText("");
       setHeal(false);
       return game;
     } catch (cause) {
       const message =
         cause instanceof Error ? cause.message : "That action could not be completed.";
-      setError(message);
-      if (announceFailure) queueAssistant(message);
+      if (message === "Game not found.") {
+        recoverExpiredSession();
+        queueAssistant("That village is no longer open. Say ‘start the game’ to begin a new one.");
+        return undefined;
+      }
+      // A spoken mis-hearing should be read back, not left as a persistent red
+      // error that obscures the next reference slide. Click actions still keep
+      // the visible message for sighted players.
+      if (announceFailure) {
+        setError("");
+        queueAssistant(message);
+      } else setError(message);
       return undefined;
     } finally {
+      actionInFlightRef.current = false;
       setBusy(false);
+      if (!voiceCommandsPaused)
+        setVoiceStatus(
+          sessionRef.current ? "Voice companion is listening" : "Listening — say “start the game”",
+        );
     }
   }
 
   async function act(type: string, values: Record<string, unknown> = {}) {
     const result = await perform({ type, ...values });
-    if (type === "begin-story") window.localStorage.setItem("loups-story-seen", "1");
     return result;
   }
 
@@ -803,10 +878,6 @@ export default function WerewolfApp({
     const command = transcript.trim();
     if (!command) return;
     setVoiceTranscript(command);
-    // The Live model receives every microphone turn. Keep its remote audio
-    // quiet while the app carries out a game command and speaks the verified
-    // result. It is re-enabled below only for open-ended guide questions.
-    liveConnectionRef.current?.setGuideAudioEnabled(false);
     if (/\bpause\b.*\b(listening|voice control|microphone)\b/iu.test(command)) {
       setVoiceCommandsPaused(true);
       setVoiceStatus("Voice commands are paused. Say ‘resume listening’ to continue.");
@@ -834,23 +905,51 @@ export default function WerewolfApp({
     }
     if (voiceCommandsPaused) return;
     if (!session) {
-      const startsGame =
-        /\b(start|new|begin|play)\b.*\b(game|match|village|loups)\b/iu.test(command) ||
-        /\bstart\b.*\bdefaults?\b/iu.test(command) ||
-        /\b(start|begin|play)\b.*\b(quick|test|demo)\b/iu.test(command);
-      if (startsGame) {
+      if (startsNewGameNaturally(command) || /\bstart\b.*\bdefaults?\b/iu.test(command)) {
         queueAssistant("Starting a new village. I will introduce the characters first.");
         await create(undefined, /\b(quick|test)\b/iu.test(command));
         return;
       }
       if (isGuideQuestion(command)) {
         queueAssistant(
-          "Say ‘start a new game’ to begin. Once the village is open, I can explain your role, the rules, and every phase.",
+          "Tell me you are ready to play, and I will open the village. Once it is open, I can explain your role, the rules, and every phase.",
         );
         return;
       }
-      queueAssistant("I can start a new game when you say ‘start a new game’.");
+      queueAssistant("Tell me when you want to play, and I will start a new village.");
       return;
+    }
+
+    // Voice follows the same introduction as the screen: village, role card,
+    // role details, then the first night.
+    if (session.game.phase === "prologue") {
+      const wantsToAdvance =
+        /\b(continue|ready|begin|start|next|go on|move on|i(?:'m| am) done|let(?:'s| us) go|get started)\b/iu.test(
+          command,
+        ) ||
+        /\b(show|read|hear|tell me about|explain)\b.*\b(role|card|details?|instructions?)\b/iu.test(
+          command,
+        );
+      if (wantsToAdvance) {
+        const step = introStep ?? "village";
+        if (step === "village") {
+          setIntroStep("role");
+          narrateAccessibility([
+            `Your role is ${roleNames[session.game.me.role]}. Say continue to hear how it works.`,
+          ]);
+          return;
+        }
+        if (step === "role") {
+          flipRoleCard("role-details");
+          narrateAccessibility([
+            roleStateSummary(session.game),
+            "Say I am ready when you want the first night to begin.",
+          ]);
+          return;
+        }
+        await act("begin-story");
+        return;
+      }
     }
 
     if (
@@ -972,10 +1071,9 @@ export default function WerewolfApp({
       storyAudio.resume();
       return;
     }
-    if (/\b(start|new)\b.*\b(game|match|village)\b/iu.test(command)) {
+    if (startsNewGameNaturally(command) || /\b(?:restart|start over|new round)\b/iu.test(command)) {
       queueAssistant("Starting a new village. I will introduce the characters first.");
-      setSession(undefined);
-      setIntroStep(null);
+      recoverExpiredSession();
       await create(undefined, /\b(quick|test)\b/iu.test(command));
       return;
     }
@@ -995,12 +1093,9 @@ export default function WerewolfApp({
       await perform({ command }, true);
       return;
     }
-    if (isGuideQuestion(command)) {
-      // GPT-Live is already answering this question aloud in its own audio track.
-      if (liveConnectionRef.current) {
-        liveConnectionRef.current.setGuideAudioEnabled(true);
-        return;
-      }
+    if (isGuideQuestion(command) && !looksLikeGameAction(command, session.game)) {
+      // Use the server guide for every answer. It receives the current game
+      // state, while a long-running Live session only has its opening context.
       await askGuide(command);
       return;
     }
@@ -1012,7 +1107,8 @@ export default function WerewolfApp({
    * Browser recognition restarts itself after ordinary phrase boundaries.
    */
   function startAlwaysOnVoice() {
-    if (recognitionRef.current || liveConnectionRef.current || liveConnecting) return;
+    if (inputModeRef.current !== "idle" || recognitionRef.current || liveConnectionRef.current)
+      return;
     voiceFailureRef.current = undefined;
     try {
       const recognition = startPersistentSpeechRecognition({
@@ -1032,8 +1128,10 @@ export default function WerewolfApp({
           }
           if (reason === "network") {
             if (sessionRef.current) {
-              useLiveFallbackRef.current = true;
               setVoiceStatus("Switching to the live voice companion…");
+              // Change modes before the browser callback ends. This keeps its
+              // delayed onStopped handler from reviving a second listener.
+              void connectLiveVoice();
             } else {
               setVoiceStatus("Voice companion will reconnect when the game opens.");
             }
@@ -1047,17 +1145,18 @@ export default function WerewolfApp({
         },
         onStopped: () => {
           recognitionRef.current = null;
+          // `connectLiveVoice` already owns the handoff. A stale browser
+          // callback must never restart itself while Live is opening or active.
+          if (inputModeRef.current === "connecting-live" || inputModeRef.current === "live") return;
+          inputModeRef.current = "idle";
           const failure = voiceFailureRef.current;
-          if (useLiveFallbackRef.current && sessionRef.current) {
-            useLiveFallbackRef.current = false;
-            void connectLiveVoice();
-            return;
-          }
           if (
             autoVoiceRequestedRef.current &&
             !["not-allowed", "service-not-allowed", "audio-capture"].includes(failure ?? "")
           ) {
-            window.setTimeout(startAlwaysOnVoice, 700);
+            window.setTimeout(() => {
+              if (inputModeRef.current === "idle") startAlwaysOnVoice();
+            }, 700);
             return;
           }
           resetVoiceGuide(
@@ -1070,12 +1169,15 @@ export default function WerewolfApp({
         },
       });
       if (!recognition) {
+        inputModeRef.current = "idle";
         setVoiceStatus(
           "Hands-free voice is unavailable in this browser. Use a browser with voice recognition.",
         );
+        if (sessionRef.current) void connectLiveVoice();
         return;
       }
       recognitionRef.current = recognition;
+      inputModeRef.current = "browser";
       setListening(true);
       setVoiceCommandsPaused(false);
       setVoiceStatus(
@@ -1083,12 +1185,11 @@ export default function WerewolfApp({
       );
     } catch {
       recognitionRef.current = null;
+      inputModeRef.current = "idle";
       setListening(false);
       setVoiceStatus("Tap anywhere once to allow the microphone, then say “start the game”.");
     }
   }
-
-  startVoiceRef.current = startAlwaysOnVoice;
 
   function resetVoiceGuide(status: string) {
     setListening(false);
@@ -1097,28 +1198,44 @@ export default function WerewolfApp({
   }
 
   async function askGuide(text = guideText) {
-    if (!session || guideBusy || !text.trim()) return;
+    const activeSession = sessionRef.current;
+    if (!activeSession || !text.trim()) return;
+    if (actionInFlightRef.current) {
+      queueAssistant("I am finishing your move. Ask me again in a moment.", "local", {
+        instant: true,
+      });
+      return;
+    }
     const message = text.trim();
+    const requestId = guideRequestIdRef.current + 1;
+    guideRequestIdRef.current = requestId;
+    guideAbortRef.current?.abort();
+    const controller = new AbortController();
+    guideAbortRef.current = controller;
     const history = guideMessages.slice(-8).map(({ role, text: historyText }) => ({
       role,
       text: historyText,
     }));
+    // A guide question is a deliberate interruption. Drop an older scene so the
+    // answer can begin as soon as it arrives instead of waiting behind it.
+    storyAudio.stop();
     setGuideMessages((current) => [...current, { role: "user", text: message }]);
     setGuideText("");
-    setGuideBusy(true);
     setError("");
     try {
-      const response = await fetch(`/api/games/${session.game.id}/assistant`, {
+      const response = await fetch(`/api/games/${activeSession.game.id}/assistant`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "X-Game-Session": session.token,
+          "X-Game-Session": activeSession.token,
           "X-Request-Id": crypto.randomUUID(),
         },
         body: JSON.stringify({ message, history }),
+        signal: controller.signal,
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error ?? "The guide is unavailable.");
+      if (requestId !== guideRequestIdRef.current) return;
       setGuideMessages((current) => [
         ...current,
         { role: "assistant", text: data.reply, mode: data.mode },
@@ -1130,86 +1247,187 @@ export default function WerewolfApp({
         voiceKey: "assistant",
       });
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "The guide is unavailable.");
+      if (requestId !== guideRequestIdRef.current || controller.signal.aborted) return;
+      const message = cause instanceof Error ? cause.message : "The guide is unavailable.";
+      if (message === "Game not found.") {
+        recoverExpiredSession();
+        queueAssistant("That village is no longer open. Say ‘start the game’ to begin a new one.");
+      } else setError(message);
     } finally {
-      setGuideBusy(false);
+      if (requestId === guideRequestIdRef.current) {
+        guideAbortRef.current = undefined;
+      }
     }
   }
 
-  function stopLiveVoice(status = "Voice guide is off") {
-    liveStartRef.current?.abort();
-    liveStartRef.current = null;
+  function teardownLiveVoice() {
+    inputModeRef.current = "idle";
     const live = liveConnectionRef.current;
     liveConnectionRef.current = null;
-    live?.stop();
     setLiveConnected(false);
     setLiveConnecting(false);
-    setVoiceTranscript("");
-    setVoiceStatus(status);
+    live?.stop();
+  }
+
+  /** Recover cleanly if a local/dev server has restarted and lost its in-memory match. */
+  function recoverExpiredSession() {
+    storyAudio.stop();
+    teardownLiveVoice();
+    cancelCreation();
+    latestGameRef.current = undefined;
+    presentedGameRef.current = undefined;
+    sessionRef.current = undefined;
+    setSession(undefined);
+    setPresentedGame(undefined);
+    setIntroStep(null);
+    setVoteOutcome(undefined);
+    setSelected([]);
+    setHeal(false);
+    setOpeningAudio(undefined);
+    setGuideMessages([]);
+    setGuideText("");
+    setError("");
+    setStage("mode");
+  }
+
+  /** A new move makes an older guide answer stale, so never let it speak late. */
+  function cancelPendingGuide() {
+    guideRequestIdRef.current += 1;
+    guideAbortRef.current?.abort();
+    guideAbortRef.current = undefined;
   }
 
   async function connectLiveVoice() {
     const activeSession = sessionRef.current;
-    if (!activeSession || liveConnecting || liveConnectionRef.current) return;
-    recognitionRef.current?.stop();
+    if (
+      !activeSession ||
+      liveConnectionRef.current ||
+      inputModeRef.current === "connecting-live" ||
+      inputModeRef.current === "live"
+    )
+      return;
+    inputModeRef.current = "connecting-live";
+    const browserRecognition = recognitionRef.current;
     recognitionRef.current = null;
+    browserRecognition?.stop();
     resetVoiceGuide("Starting live voice companion…");
     setLiveConnecting(true);
-    storyAudio.stop();
     setError("");
-    setVoiceTranscript("");
-    const controller = new AbortController();
-    liveStartRef.current = controller;
+    let established = false;
     try {
       const live = await startLiveVoice({
         gameId: activeSession.game.id,
         sessionToken: activeSession.token,
-        signal: controller.signal,
         onStatus: setVoiceStatus,
-        onInputTranscript: (text) => setVoiceTranscript(text.slice(-900)),
+        onInputTranscript: () => undefined,
         onInputTranscriptComplete: (text) => {
-          setVoiceTranscript(text);
-          void handleVoiceCommand(text);
-        },
-        onGuideReply: (reply) => {
-          // A Live reply is allowed only for an open guide question. Mute the
-          // remote track immediately afterwards so a later game command cannot
-          // overlap with an automatic model acknowledgement.
-          liveConnectionRef.current?.setGuideAudioEnabled(false);
-          setGuideMessages((current) => [
-            ...current,
-            { role: "assistant", text: reply, mode: "model" },
-          ]);
+          voiceCommandHandlerRef.current(text);
         },
         onClosed: () => {
           liveConnectionRef.current = null;
           setLiveConnected(false);
           setLiveConnecting(false);
+          if (inputModeRef.current === "connecting-live" || inputModeRef.current === "live") {
+            inputModeRef.current = "idle";
+          }
+          // Only retry an established connection. A rejected setup should not
+          // loop against the provider when its credentials or transport are bad.
+          if (established && autoVoiceRequestedRef.current) {
+            window.setTimeout(() => {
+              if (inputModeRef.current === "idle") startVoiceRef.current();
+            }, 700);
+          }
         },
       });
-      if (controller.signal.aborted) {
+      // A reset can happen while the provider is negotiating. Do not attach a
+      // late connection to the next village (or to the setup screen).
+      if (
+        sessionRef.current?.game.id !== activeSession.game.id ||
+        inputModeRef.current !== "connecting-live"
+      ) {
         live.stop();
         return;
       }
       liveConnectionRef.current = live;
+      established = true;
+      inputModeRef.current = "live";
       setLiveConnected(true);
       setVoiceStatus("Voice companion is listening");
     } catch (cause) {
-      if (controller.signal.aborted) return;
+      if (
+        sessionRef.current?.game.id !== activeSession.game.id ||
+        inputModeRef.current !== "connecting-live"
+      )
+        return;
+      inputModeRef.current = "idle";
       resetVoiceGuide(
         cause instanceof Error ? cause.message : "Could not start the Live Voice Guide.",
       );
     } finally {
-      if (liveStartRef.current === controller) liveStartRef.current = null;
       setLiveConnecting(false);
     }
   }
 
-  // The persistent recognizer reads this ref, avoiding stale game state after a new game starts.
-  voiceCommandHandlerRef.current = (transcript) => {
-    setVoiceTranscript(transcript);
-    void handleVoiceCommand(transcript);
-  };
+  useEffect(() => {
+    voiceCommandHandlerRef.current = (transcript) => {
+      const text = transcript.trim();
+      if (!text) return;
+      setVoiceTranscript(text);
+      const normalized = normalizeVoiceCommand(text);
+      const now = Date.now();
+      if (
+        lastVoiceCommandRef.current.text === normalized &&
+        now - lastVoiceCommandRef.current.at < 2_200
+      )
+        return;
+      lastVoiceCommandRef.current = { text: normalized, at: now };
+      // A slow open-ended guide answer must not make an immediate game command
+      // wait in line. Actions still share their ordered command lane.
+      if (isGuideQuestion(text) && !looksLikeGameAction(text, latestGameRef.current)) {
+        void handleVoiceCommand(text);
+        return;
+      }
+      commandQueueRef.current = commandQueueRef.current
+        .catch(() => undefined)
+        .then(() => handleVoiceCommand(text));
+    };
+  });
+
+  useEffect(() => {
+    startVoiceRef.current = startAlwaysOnVoice;
+  });
+
+  useEffect(() => {
+    autoVoiceRequestedRef.current = true;
+    if (navigator.permissions) {
+      void navigator.permissions
+        .query({ name: "microphone" as PermissionName })
+        .then((permission) => {
+          if (permission.state === "granted") startVoiceRef.current();
+        })
+        .catch(() => undefined);
+    }
+    const enableVoice = () => {
+      if (inputModeRef.current !== "idle") return;
+      primeBrowserNarration();
+      startVoiceRef.current();
+    };
+    window.addEventListener("pointerdown", enableVoice, { passive: true });
+    return () => {
+      window.removeEventListener("pointerdown", enableVoice);
+      autoVoiceRequestedRef.current = false;
+      // Leaving while a village is being created must not navigate back into it.
+      createControllerRef.current?.abort();
+      createControllerRef.current = null;
+      guideAbortRef.current?.abort();
+      guideAbortRef.current = undefined;
+      recognitionRef.current?.stop();
+      const live = liveConnectionRef.current;
+      liveConnectionRef.current = null;
+      inputModeRef.current = "idle";
+      live?.stop();
+    };
+  }, []);
 
   const voiceActive = listening && !voiceCommandsPaused;
   const voiceDockStatus = liveConnecting
@@ -1315,7 +1533,7 @@ export default function WerewolfApp({
                 !session
                   ? "Try start the game, or help"
                   : session.game.phase === "night" && session.game.me.role === "seer"
-                    ? "Try investigate Camille, or help"
+                    ? "Try investigate Emma, or help"
                     : "Try hear the villagers, or help"
               }
               autoComplete="off"
@@ -1357,6 +1575,7 @@ export default function WerewolfApp({
     : [
         viewGame.id,
         introView === "role-details" ? "role" : (introView ?? ""),
+        voteOutcome ? `vote-${voteOutcome.result.day}-${voteOutcome.revealing}` : "",
         pendingFinding ? `finding-${seenInvestigations}` : "",
         viewGame.phase,
         viewGame.day,
@@ -1428,17 +1647,19 @@ export default function WerewolfApp({
       : "plain"
     : introView
       ? "plain"
-      : pendingFinding
-        ? "night"
-        : viewGame.phase === "over"
-          ? viewGame.winner === "village"
-            ? "victory"
-            : "night"
-          : viewGame.phase === "night" || viewGame.phase === "cupid"
-            ? "night"
-            : viewGame.phase === "prologue"
-              ? "plain"
-              : "day";
+      : voteOutcome
+        ? "day"
+        : pendingFinding
+          ? "night"
+          : viewGame.phase === "over"
+            ? viewGame.winner === "village"
+              ? "victory"
+              : "night"
+            : viewGame.phase === "night" || viewGame.phase === "cupid"
+              ? "night"
+              : viewGame.phase === "prologue"
+                ? "plain"
+                : "day";
   const onArtwork = scene !== "plain";
 
   const header = (
@@ -1583,7 +1804,7 @@ export default function WerewolfApp({
       </p>
       <p>
         {session
-          ? "Say or type “choose Camille”, “continue”, “describe the interface”, “read my role”, “read all messages”, “ask the villagers what they think”, “vote for Camille”, or “voice help”."
+          ? "Say or type “choose Emma”, “continue”, “describe the interface”, “read my role”, “read all messages”, “ask the villagers what they think”, “vote for Emma”, or “voice help”."
           : "Say or type “start the game”, “start with the defaults”, or “start a quick test”."}
       </p>
       <p>
@@ -1920,7 +2141,8 @@ export default function WerewolfApp({
             <span className="ww-player-name">{isMe ? "You" : player.name}</span>
             <span className="ww-dot" style={{ background: colorFor(player) }} aria-hidden="true" />
             {/* Roles are public only after the game ends. */}
-            {game.phase === "over" && player.revealedRole && (
+            {/* The server reveals a role only once a player is eliminated or the game ends. */}
+            {player.revealedRole && (
               <span className="ww-player-detail">{roleNames[player.revealedRole]}</span>
             )}
             {!player.alive && <span className="ww-player-detail">Eliminated</span>}
@@ -2080,6 +2302,57 @@ export default function WerewolfApp({
           I’m ready
         </button>
       </>
+    );
+  } else if (voteOutcome && !voteOutcome.revealing) {
+    const { result } = voteOutcome;
+    const exiled = game.players.find((player) => player.id === result.exiledPlayerId);
+    const received = (player: PublicPlayerView) =>
+      result.tally.find((entry) => entry.target === player.id)?.votes ?? 0;
+    stageContent = (
+      <>
+        <h1 id="ww-heading" className="ww-display" tabIndex={-1}>
+          The village has voted
+        </h1>
+        {playerCards(() => false, false, {
+          detail: (player) =>
+            player.alive || player.id === exiled?.id ? (
+              <span className="ww-player-votes">{voteLabel(received(player))}</span>
+            ) : null,
+        })}
+        <p className="ww-update is-loss" role="status">
+          {exiled
+            ? `${exiled.id === me.id ? "You have" : `${exiled.name} has`} been eliminated.`
+            : "The vote was tied. No one leaves the village."}
+        </p>
+        <button
+          className="ww-pill is-primary"
+          type="button"
+          onClick={() =>
+            exiled ? setVoteOutcome({ result, revealing: true }) : setVoteOutcome(undefined)
+          }
+        >
+          Continue
+        </button>
+      </>
+    );
+  } else if (voteOutcome?.revealing) {
+    const exiled = game.players.find((player) => player.id === voteOutcome.result.exiledPlayerId);
+    const role = exiled?.revealedRole;
+    stageContent = (
+      <article className="ww-result-card" aria-labelledby="ww-heading">
+        <h1 id="ww-heading" tabIndex={-1}>
+          {exiled?.id === me.id ? "You were....." : `${exiled?.name ?? "They"} was.....`}
+        </h1>
+        {role && roleSymbol(role, 48)}
+        <h2>
+          {role
+            ? `${/^[aeiou]/iu.test(roleNames[role]) ? "An" : "A"} ${roleNames[role].toLowerCase()}`
+            : "Unknown"}
+        </h2>
+        <button className="ww-pill is-dark" type="button" onClick={() => setVoteOutcome(undefined)}>
+          Continue
+        </button>
+      </article>
     );
   } else if (pendingFinding) {
     const findingPlayer = game.players.find((player) => player.name === pendingFinding.name);

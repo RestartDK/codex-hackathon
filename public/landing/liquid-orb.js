@@ -135,7 +135,7 @@ export async function enhanceLiquidOrbs(onReady, root = document) {
     }
     device.destroy();
   }
-  device.lost.then(dispose);
+  void device.lost.then(dispose);
   device.addEventListener("uncapturederror", dispose);
   try {
     const hosts = root.matches?.(".orb") ? [root] : root.querySelectorAll(".orb");

@@ -42,13 +42,17 @@ export default defineHandler(async (event) => {
         throw new Error("Undo is not available in this game.");
       await module.undoAction(draft, actorId);
     } else {
-      const action = commandInput.success
+      const parsedAction = commandInput.success
         ? module.parseCommand
           ? await module.parseCommand(commandInput.data.command, draft, actorId)
           : (() => {
               throw new Error("This game does not accept voice or typed commands yet.");
             })()
         : module.parseAction(input);
+      // Command parsers are a convenience layer. Run their result through the
+      // same structural validation used by every explicit action before it can
+      // reach the authoritative game engine.
+      const action = module.parseAction(parsedAction);
       await module.applyAction(draft, actorId, action);
     }
     const result = module.view(draft, module.actorId(draft));

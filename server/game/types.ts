@@ -53,6 +53,15 @@ export interface FeedEntry {
   recipientId?: string;
 }
 
+/** A public record of the most recently resolved village vote. */
+export interface VoteResult {
+  day: number;
+  ballots: Array<{ voter: string; target: string }>;
+  tally: Array<{ target: string; votes: number }>;
+  tiedTargetIds: string[];
+  exiledPlayerId?: string;
+}
+
 export interface Game {
   id: string;
   testMode: boolean;
@@ -73,6 +82,7 @@ export interface Game {
   resumeAfterHunter: "day" | "night";
   discussionDay?: number;
   lastVotes?: Array<{ voter: string; target: string }>;
+  lastVoteResult?: VoteResult;
   winner?: Winner;
   processedFeedIds: string[];
   createdAt: number;
@@ -114,6 +124,7 @@ export interface GameView {
   me: PlayerPrivateView;
   feed: FeedEntry[];
   lastVotes?: Array<{ voter: string; target: string }>;
+  lastVoteResult?: VoteResult;
   /** Current voting round only: votes received by each living player. */
   voteTally?: Record<string, number>;
   winner?: Winner;
