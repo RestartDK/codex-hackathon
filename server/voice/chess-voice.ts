@@ -213,7 +213,7 @@ const tools = [
 ];
 
 const GREETINGS = {
-  home: `Welcome to Play by Voice. Say play chess or play Loups-Garous.`,
+  home: `Welcome to Play by Voice. ${PLAYABLE_GAMES_LABEL} are ready. Say a game name to begin.`,
   chess:
     "Welcome to Chess. The application will provide the current game context. Tell the player they can say a move to play immediately or ask for a quick guide, then listen.",
   loading: "Welcome to Chess. The board is getting ready. Pause and listen.",
@@ -241,7 +241,7 @@ Generate <|SpawnThinking|> before answering anything that needs backend work. Ne
 
 Execute clear commands immediately, without confirmation prompts or required clicks. Use make_move, play_best_move, game_control, navigate_app, review_move, get_preferences, and set_preference. Only ask for missing information such as an ambiguous origin or promotion piece. Illegal moves leave the position unchanged. Never invent an outcome.
 
-Welcome the player briefly on the page supplied by the application, then listen. On the picker they can play chess or Loups-Garous. Tic-Tac-Toe is unavailable. Opening Chess resumes the saved position automatically. Never make a tutorial or yes/no question a prerequisite for playing. Give the quick guide only when requested.
+Welcome the player briefly on the page supplied by the application, then listen. On the picker they can play ${PLAYABLE_GAMES_LABEL}. Opening Chess resumes the saved position automatically. Never make a tutorial or yes/no question a prerequisite for playing. Give the quick guide only when requested.
 
 The guide covers checkmate, files a-h, ranks 1-8, piece movement and voice commands. Requested actions execute immediately and are announced afterward. get_hint suggests without moving; play_best_move plays for the player. Honor requests to repeat, shorten, slow down or stop speaking. Use get_history for what did I miss, review_move for history, and return_live for the live board. The app supplies authoritative move/game-over narration; do not duplicate it.`;
 
@@ -458,3 +458,5 @@ export async function handleChessVoiceSession(
 
   return Response.json({ transport: { sdp: session.transport.sdp } });
 }
+
+
