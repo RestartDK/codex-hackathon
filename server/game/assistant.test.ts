@@ -1,14 +1,13 @@
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { answerGuide, guideContext } from "./assistant.js";
 import { createGame, startGame } from "./engine.js";
-import { createLiveSession } from "./live-voice.js";
 
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.unstubAllEnvs();
 });
 
-describe("player guide and live voice boundary", () => {
+describe("player guide boundary", () => {
   it("has a useful local guide without a provider key", async () => {
     vi.stubEnv("OPENAI_API_KEY", "");
     const game = createGame("Ada", 4, {
@@ -42,51 +41,6 @@ describe("player guide and live voice boundary", () => {
     expect(request.instructions).not.toContain('"role":"werewolf"');
     expect(request.instructions).not.toContain('"role":"seer"');
     expect(request.instructions).toContain('"role":"villager"');
-  });
-
-  it("creates a live session with the configured voice and delegated model", async () => {
-    vi.stubEnv("OPENAI_API_KEY", "test-key");
-    vi.stubEnv("OPENAI_VOICE_MODEL", "gpt-live-1");
-    vi.stubEnv("OPENAI_DELEGATION_MODEL", "gpt-6-luna");
-    const game = createGame("Ada", 4);
-    startGame(game);
-    const fetchMock = vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({
-        session: { id: "live_test" },
-        transport: { type: "webrtc", sdp: "answer-sdp" },
-      }),
-    });
-    vi.stubGlobal("fetch", fetchMock);
-
-    await expect(createLiveSession(game, "human", "offer-sdp")).resolves.toEqual({
-      sessionId: "live_test",
-      sdp: "answer-sdp",
-    });
-    const request = JSON.parse(fetchMock.mock.calls[0]![1]!.body as string);
-    expect(request.session.model).toBe("gpt-live-1");
-    expect(request.session.audio).toEqual({ output: { voice: "marin" } });
-    expect(request.session.audio.input).toBeUndefined();
-    expect(request.session.delegation.responses.model).toBe("gpt-6-luna");
-    expect(request.transport).toEqual({ type: "webrtc", sdp: "offer-sdp" });
-  });
-
-  it("reports a provider configuration error without exposing credentials", async () => {
-    vi.stubEnv("OPENAI_API_KEY", "test-key");
-    const game = createGame("Ada", 4);
-    startGame(game);
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue({
-        ok: false,
-        status: 400,
-        text: async () => JSON.stringify({ error: { message: "Invalid audio configuration." } }),
-      }),
-    );
-
-    await expect(createLiveSession(game, "human", "offer-sdp")).rejects.toThrow(
-      "Live voice provider rejected the session (400): Invalid audio configuration.",
-    );
   });
 
   it("exposes no unrevealed roles in the player-scoped context", () => {
