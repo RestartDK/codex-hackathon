@@ -1,16 +1,5 @@
 import { Chess } from "chess.js";
-import {
-  Headphones,
-  Lightbulb,
-  History,
-  RotateCw,
-  House,
-  Undo2,
-  Flag,
-  Pause,
-  Play,
-  FlipVertical2,
-} from "lucide-react";
+import { RotateCw, House, Undo2, Flag, Pause, Play, FlipVertical2 } from "lucide-react";
 import Board from "../Board/Board";
 import type { ChessSession } from "../../hooks/useChessGame";
 import type { AppSettings } from "../../types";
@@ -225,59 +214,6 @@ export default function ChessView({
                 <span>Try "e2 to e4" with your companion.</span>
               </p>
             )}
-          </section>
-          <section className="surface chess-assistant-panel" aria-labelledby="assistant-heading">
-            <h2 id="assistant-heading">Assistant</h2>
-            <button
-              className="assistant-card"
-              disabled={companion.busy}
-              onClick={() => {
-                void companion.runCommand("describe the board");
-              }}
-            >
-              <span className="assistant-icon">
-                <Headphones size={21} aria-hidden="true" />
-              </span>
-              <span>
-                <strong>Listen to the board</strong>
-                <span>Ask "describe the board" to hear the current state.</span>
-              </span>
-            </button>
-            <button
-              className="assistant-card"
-              disabled={
-                companion.busy || controlsDisabled || session.isPaused || session.isComputerThinking
-              }
-              onClick={() => {
-                void companion.runCommand("hint");
-              }}
-            >
-              <span className="assistant-icon">
-                <Lightbulb size={21} aria-hidden="true" />
-              </span>
-              <span>
-                <strong>Get a suggested move</strong>
-                <span>Say "what should I play next?" for a quick recommendation.</span>
-              </span>
-            </button>
-            <button
-              className="assistant-card"
-              disabled={companion.busy}
-              onClick={() => {
-                void companion.runCommand("history");
-              }}
-            >
-              <span className="assistant-icon">
-                <History size={21} aria-hidden="true" />
-              </span>
-              <span>
-                <strong>Keep the game moving</strong>
-                <span>Use voice to undo, repeat the last move, or start a new game.</span>
-              </span>
-            </button>
-            <div className="guide-link">
-              <button onClick={companion.guide}>New to chess? Hear the quick guide</button>
-            </div>
           </section>
         </div>
       </div>

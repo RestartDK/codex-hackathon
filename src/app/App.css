@@ -60,24 +60,52 @@
   padding-top: 83px;
   min-height: 620px;
 }
+.pbv-root .game-carousel-frame {
+  position: relative;
+}
+.pbv-root .game-carousel-frame::before,
+.pbv-root .game-carousel-frame::after {
+  content: "";
+  position: absolute;
+  inset-block: 0;
+  width: max(24px, calc((100% - 1088px) / 2));
+  z-index: 1;
+  pointer-events: none;
+  backdrop-filter: blur(3px);
+  background: linear-gradient(90deg, #ffffff99, transparent);
+  mask-image: linear-gradient(90deg, black 15%, transparent);
+}
+.pbv-root .game-carousel-frame::before {
+  left: 0;
+}
+.pbv-root .game-carousel-frame::after {
+  right: 0;
+  transform: scaleX(-1);
+}
 .pbv-root .game-carousel {
   overflow-x: auto;
   overflow-y: hidden;
   scrollbar-width: none;
   padding: 0 max(24px, calc((100% - 1088px) / 2));
+  overscroll-behavior-x: contain;
+  overflow-anchor: none;
+}
+.pbv-root .game-carousel:focus-visible {
+  outline-offset: -4px;
 }
 .pbv-root .game-carousel::-webkit-scrollbar {
   display: none;
 }
-.pbv-root .game-cards {
+.pbv-root .game-cards,
+.pbv-root .game-card-cycle {
   display: flex;
   width: max-content;
   gap: 28px;
-  position: relative;
-  isolation: isolate;
 }
-.pbv-root .game-card,
-.pbv-root .game-peek {
+.pbv-root .game-card-cycle {
+  flex-shrink: 0;
+}
+.pbv-root .game-card {
   width: 344px;
   height: 416px;
   border-radius: 48px;
@@ -101,8 +129,7 @@
 .pbv-root .game-card-loups-garous {
   background-image: url("/artwork/werewolf-card.webp");
 }
-.pbv-root .game-card-tic-tac-toe,
-.pbv-root .peek-left {
+.pbv-root .game-card-tic-tac-toe {
   background-image: url("/artwork/tic-tac-toe-card.webp");
 }
 .pbv-root .game-shape {
@@ -187,19 +214,6 @@
   background: #ffffffed;
   color: #333;
   z-index: 1;
-}
-.pbv-root .game-peek {
-  position: absolute;
-  pointer-events: none;
-}
-.pbv-root .peek-left {
-  right: calc(100% + 28px);
-  mask-image: linear-gradient(90deg, transparent 52%, black);
-}
-.pbv-root .peek-right {
-  left: calc(100% + 28px);
-  background-image: url("/artwork/red-card.webp");
-  mask-image: linear-gradient(90deg, black, transparent 45%);
 }
 .pbv-root .picker-hint {
   text-align: center;
@@ -509,71 +523,6 @@
 .pbv-root .empty-history span {
   color: #8b9283;
   font-size: 12px;
-}
-.pbv-root .chess-assistant-panel {
-  position: relative;
-}
-.pbv-root .assistant-card {
-  display: flex;
-  width: 100%;
-  align-items: center;
-  gap: 12px;
-  padding: 16px;
-  border-radius: 24px;
-  background: #f3f4f6;
-  border: 0;
-  text-align: left;
-  min-height: 76px;
-  margin-bottom: 12px;
-}
-.pbv-root .assistant-card:last-of-type {
-  margin-bottom: 0;
-}
-.pbv-root .assistant-card:hover:not(:disabled) {
-  background: #edf1e5;
-}
-.pbv-root .assistant-icon {
-  display: grid;
-  place-items: center;
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  background: #d4e89c;
-  flex-shrink: 0;
-}
-.pbv-root .assistant-card > span:last-child {
-  min-width: 0;
-}
-.pbv-root .assistant-card strong {
-  display: block;
-  font-size: 14px;
-  line-height: 20px;
-  font-weight: 400;
-  margin-bottom: 4px;
-}
-.pbv-root .assistant-card span span {
-  display: block;
-  color: #6b7280;
-  font-size: 14px;
-  line-height: 21px;
-}
-.pbv-root .guide-link {
-  position: absolute;
-  top: calc(100% + 10px);
-  left: 24px;
-  right: 24px;
-  text-align: center;
-}
-.pbv-root .guide-link button {
-  border: 0;
-  background: none;
-  color: #6b7280;
-  font-size: 12px;
-  line-height: 20px;
-  padding: 4px;
-}
-.pbv-root .guide-link button:hover {
-  color: #213017;
 }
 .pbv-root .game-notice,
 .pbv-root .move-confirmation,
@@ -1261,14 +1210,8 @@
     padding: 32px 32px 32px 38px;
     border-radius: 36px;
   }
-  .pbv-root .assistant-card {
-    padding: 14px;
-  }
   .pbv-root .surface {
     padding: 20px;
-  }
-  .pbv-root .assistant-card span span {
-    font-size: 13px;
   }
   .pbv-root .game-picker {
     padding-top: 64px;
@@ -1308,12 +1251,6 @@
   }
   .pbv-root .surface {
     padding: 24px;
-  }
-  .pbv-root .assistant-card {
-    padding: 16px;
-  }
-  .pbv-root .assistant-card span span {
-    font-size: 14px;
   }
   .pbv-root .piece {
     font-size: clamp(28px, 8vw, 50px);
@@ -1460,18 +1397,15 @@
   }
   .pbv-root .game-carousel {
     padding-inline: 24px;
-    scroll-snap-type: x mandatory;
-    scroll-padding-inline: 24px;
   }
-  .pbv-root .game-cards {
+  .pbv-root .game-cards,
+  .pbv-root .game-card-cycle {
     gap: 20px;
-    padding-right: 24px;
   }
   .pbv-root .game-card {
     width: min(344px, calc(100vw - 56px));
     height: 396px;
     border-radius: 40px;
-    scroll-snap-align: start;
   }
   .pbv-root .game-card-copy {
     left: 24px;
@@ -1482,9 +1416,6 @@
   }
   .pbv-root .game-card p {
     font-size: 15px;
-  }
-  .pbv-root .game-peek {
-    display: none;
   }
   .pbv-root .picker-hint {
     max-width: 320px;
@@ -1526,19 +1457,6 @@
   }
   .pbv-root .surface h2 {
     font-size: 22px;
-  }
-  .pbv-root .assistant-card {
-    padding: 14px;
-    gap: 10px;
-  }
-  .pbv-root .assistant-icon {
-    width: 34px;
-    height: 34px;
-  }
-  .pbv-root .assistant-card strong,
-  .pbv-root .assistant-card span span {
-    font-size: 12px;
-    line-height: 19px;
   }
   .pbv-root .settings-page,
   .pbv-root .help-page {
