@@ -1515,3 +1515,20 @@ p {
     visibility: visible;
   }
 }
+
+/* Reserve the orb's space while the GPU warms up, without flashing the old art. */
+.liquid-orbs-loading .orb:not(.liquid-glass-ready) {
+  visibility: hidden;
+}
+.orb-glass {
+  opacity: 0;
+  transition: opacity 320ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+.liquid-glass-ready > .orb-glass {
+  opacity: 1;
+}
+@media (prefers-reduced-motion: reduce) {
+  .orb-glass {
+    transition: none;
+  }
+}
