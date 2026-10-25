@@ -1,6 +1,6 @@
 import { defineHandler } from "nitro";
 import { z } from "zod";
-import { createLiveSession } from "../../../game/live-voice.js";
+import { createLiveSession, LiveVoiceProviderError } from "../../../game/live-voice.js";
 import { getGameModule } from "../../../game/registry.js";
 import { authorize, getGameRecord } from "../../../game/store.js";
 import type { Game } from "../../../game/types.js";
@@ -21,6 +21,9 @@ export default defineHandler(async (event) => {
     return Response.json(await createLiveSession(record.state as Game, "human", sdp));
   } catch (cause) {
     const message = cause instanceof Error ? cause.message : "Could not start live voice.";
-    return problem(message, /OPENAI_API_KEY/u.test(message) ? 503 : 400);
+    return problem(
+      message,
+      /OPENAI_API_KEY/u.test(message) ? 503 : cause instanceof LiveVoiceProviderError ? 502 : 400,
+    );
   }
 });

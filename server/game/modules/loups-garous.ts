@@ -88,14 +88,19 @@ function parseGameCommand(text: string, game: Game, actorId: string): ActionInpu
   const choosesTarget =
     isExactTargetName ||
     /\b(choose|pick|select|target|go with|take|that one|this one)\b/u.test(command);
-  const movesOn = /\b(pass|wait|skip|rest|dawn|continue|next|go on|nothing|do nothing|no action)\b/u.test(
-    command,
-  );
+  const movesOn =
+    /\b(pass|wait|skip|rest|dawn|continue|next|go on|nothing|do nothing|no action)\b/u.test(
+      command,
+    );
   const chooseForMe =
     /\b(choose|pick|select|decide)\b.*\b(for me|someone|anyone|a player)\b/u.test(command) ||
     /\b(surprise me|you decide)\b/u.test(command);
-  const firstLivingOther = (predicate: (candidate: Game["players"][number]) => boolean = () => true) =>
-    game.players.find((candidate) => candidate.alive && candidate.id !== actorId && predicate(candidate));
+  const firstLivingOther = (
+    predicate: (candidate: Game["players"][number]) => boolean = () => true,
+  ) =>
+    game.players.find(
+      (candidate) => candidate.alive && candidate.id !== actorId && predicate(candidate),
+    );
 
   if (/\b(pause|hold|freeze)\b.*\b(game|match|play)\b/u.test(command)) return { type: "pause" };
   if (/\b(resume|continue|unpause)\b.*\b(game|match|play)\b/u.test(command))
@@ -112,11 +117,15 @@ function parseGameCommand(text: string, game: Game, actorId: string): ActionInpu
     if (targets.length >= 2)
       return { type: "lovers", first: targets[0]!.id, second: targets[1]!.id };
     if (chooseForMe) {
-      const choices = game.players.filter((candidate) => candidate.alive && candidate.id !== actorId).slice(0, 2);
+      const choices = game.players
+        .filter((candidate) => candidate.alive && candidate.id !== actorId)
+        .slice(0, 2);
       if (choices.length === 2)
         return { type: "lovers", first: choices[0]!.id, second: choices[1]!.id };
     }
-    throw new Error("Name two players, for example ‘choose Camille and Jules’, or say ‘choose for me’.");
+    throw new Error(
+      "Name two players, for example ‘choose Camille and Jules’, or say ‘choose for me’.",
+    );
   }
 
   // Eliminated players retain only their Hunter shot or the ability to advance the story.
@@ -127,14 +136,17 @@ function parseGameCommand(text: string, game: Game, actorId: string): ActionInpu
 
   if (game.phase === "night") {
     if (actor.role === "werewolf") {
-      if (movesOn || /\b(delegate|pack decide|let the pack)\b/u.test(command)) return { type: "night" };
+      if (movesOn || /\b(delegate|pack decide|let the pack)\b/u.test(command))
+        return { type: "night" };
       if (target && (choosesTarget || /\b(hunt|attack|kill)\b/u.test(command)))
         return { type: "night", target: target.id };
       if (chooseForMe) {
         const automaticTarget = firstLivingOther((candidate) => candidate.role !== "werewolf");
         if (automaticTarget) return { type: "night", target: automaticTarget.id };
       }
-      throw new Error("Say ‘choose Camille’, ‘hunt Camille’, ‘choose for me’, or ‘let the pack decide’.");
+      throw new Error(
+        "Say ‘choose Camille’, ‘hunt Camille’, ‘choose for me’, or ‘let the pack decide’.",
+      );
     }
     if (actor.role === "seer") {
       if (movesOn) return { type: "night" };
@@ -149,14 +161,13 @@ function parseGameCommand(text: string, game: Game, actorId: string): ActionInpu
         );
         if (automaticTarget) return { type: "night", target: automaticTarget.id };
       }
-      throw new Error("Say ‘choose Camille’, ‘investigate Camille’, ‘choose for me’, or ‘wait for dawn’.");
+      throw new Error(
+        "Say ‘choose Camille’, ‘investigate Camille’, ‘choose for me’, or ‘wait for dawn’.",
+      );
     }
     if (actor.role === "witch") {
       if (/\b(save|heal|rescue)\b/u.test(command)) return { type: "night", heal: true };
-      if (
-        target &&
-        (choosesTarget || /\b(poison|dose|kill)\b/u.test(command))
-      )
+      if (target && (choosesTarget || /\b(poison|dose|kill)\b/u.test(command)))
         return { type: "night", poison: target.id };
       if (movesOn) return { type: "night" };
       if (chooseForMe) {
@@ -419,10 +430,10 @@ export const loupsGarous: GameModule<Game, CreateInput, ActionInput, GameView> =
             });
           }
         } else if (human.role === "seer") {
-          if (action.target) submitNightAction(game, human.id, { kind: "seer", targetId: action.target });
+          if (action.target)
+            submitNightAction(game, human.id, { kind: "seer", targetId: action.target });
           else submitNightAction(game, human.id, { kind: "pass" });
-        }
-        else if (human.role === "witch")
+        } else if (human.role === "witch")
           submitNightAction(game, human.id, {
             kind: "witch",
             heal: action.heal,

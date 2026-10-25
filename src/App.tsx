@@ -98,7 +98,8 @@ function currentActionHelp(game: GameView) {
   if (game.phase === "night") {
     if (me.role === "werewolf")
       return "It is night. Say ‘hunt’ and a living player’s name, or say ‘let the pack decide’.";
-    if (me.role === "seer") return "It is night. Say ‘choose’ or ‘investigate’ followed by a living player’s name.";
+    if (me.role === "seer")
+      return "It is night. Say ‘choose’ or ‘investigate’ followed by a living player’s name.";
     if (me.role === "witch")
       return "It is night. Say ‘save’, ‘poison’ and a living player’s name, or ‘pass’.";
     return "It is night. Say ‘wait for dawn’ to continue.";
@@ -117,7 +118,11 @@ function voiceActionFeedback(game: GameView, command: string) {
   const newestPrivate = [...game.feed].reverse().find((entry) => entry.kind === "private");
   const newestEvent = [...game.feed].reverse().find((entry) => entry.kind === "event");
 
-  if (/\b(choose|pick|select|investigate|check|inspect|hunt|attack|kill|poison|save|heal)\b/u.test(normalized)) {
+  if (
+    /\b(choose|pick|select|investigate|check|inspect|hunt|attack|kill|poison|save|heal)\b/u.test(
+      normalized,
+    )
+  ) {
     return `Done. ${newestPrivate?.text ?? newestEvent?.text ?? "Your choice has been recorded."} ${currentActionHelp(game)}`;
   }
   if (/\b(vote|eliminate|exile|remove|kick out)\b/u.test(normalized)) {
@@ -276,6 +281,7 @@ export default function App() {
   const voiceFailureRef = useRef<string | undefined>(undefined);
   const presentedGameRef = useRef<GameView | undefined>(undefined);
   const voiceCommandHandlerRef = useRef<(transcript: string) => void>(() => undefined);
+  const startVoiceRef = useRef<() => void>(() => undefined);
   const liveConnectionRef = useRef<LiveVoiceSession | null>(null);
   const useLiveFallbackRef = useRef(false);
   const narrationBackend = useMemo(
@@ -327,14 +333,14 @@ export default function App() {
       void navigator.permissions
         .query({ name: "microphone" as PermissionName })
         .then((permission) => {
-          if (permission.state === "granted") startAlwaysOnVoice();
+          if (permission.state === "granted") startVoiceRef.current();
         })
         .catch(() => undefined);
     }
     const enableVoice = () => {
       if (recognitionRef.current || liveConnectionRef.current) return;
       primeBrowserNarration();
-      startAlwaysOnVoice();
+      startVoiceRef.current();
     };
     // Keep this listener until the page closes: if permission was declined or a
     // microphone was connected later, the next ordinary tap can retry it.
@@ -420,10 +426,12 @@ export default function App() {
       if (!response.ok) throw new Error(data.error ?? "That action could not be completed.");
       const game = data as GameView;
       commitGame(game, session.token);
-      if (announceFailure)
-        queueAssistant(voiceActionFeedback(game, String(input.command ?? "")), "local", {
+      if (announceFailure) {
+        const command = typeof input.command === "string" ? input.command : "";
+        queueAssistant(voiceActionFeedback(game, command), "local", {
           instant: true,
         });
+      }
       setSelected([]);
       setMessage("");
       setCommandText("");
@@ -523,6 +531,10 @@ export default function App() {
     const command = transcript.trim();
     if (!command) return;
     setVoiceTranscript(command);
+    // The Live model receives every microphone turn. Keep its remote audio
+    // quiet while the app carries out a game command and speaks the verified
+    // result. It is re-enabled below only for open-ended guide questions.
+    liveConnectionRef.current?.setGuideAudioEnabled(false);
     if (/\bpause\b.*\b(listening|voice control|microphone)\b/iu.test(command)) {
       setVoiceCommandsPaused(true);
       setVoiceStatus("Voice commands are paused. Say ‘resume listening’ to continue.");
@@ -711,7 +723,10 @@ export default function App() {
     }
     if (isGuideQuestion(command)) {
       // GPT-Live is already answering this question aloud in its own audio track.
-      if (liveConnectionRef.current) return;
+      if (liveConnectionRef.current) {
+        liveConnectionRef.current.setGuideAudioEnabled(true);
+        return;
+      }
       await askGuide(command);
       return;
     }
@@ -735,7 +750,9 @@ export default function App() {
           // an interruption the player needs to hear about.
           if (reason === "aborted" || reason === "no-speech") {
             setVoiceStatus(
-              sessionRef.current ? "Voice companion is listening" : "Listening — say “start the game”",
+              sessionRef.current
+                ? "Voice companion is listening"
+                : "Listening — say “start the game”",
             );
             return;
           }
@@ -749,9 +766,7 @@ export default function App() {
             return;
           }
           if (["not-allowed", "service-not-allowed"].includes(reason)) {
-            setVoiceStatus(
-              "Tap anywhere once to allow the microphone, then say “start the game”.",
-            );
+            setVoiceStatus("Tap anywhere once to allow the microphone, then say “start the game”.");
             return;
           }
           setVoiceStatus(`Voice input interrupted (${reason}). Reconnecting when possible…`);
@@ -781,7 +796,9 @@ export default function App() {
         },
       });
       if (!recognition) {
-        setVoiceStatus("Hands-free voice is unavailable in this browser. Use a browser with voice recognition.");
+        setVoiceStatus(
+          "Hands-free voice is unavailable in this browser. Use a browser with voice recognition.",
+        );
         return;
       }
       recognitionRef.current = recognition;
@@ -796,6 +813,8 @@ export default function App() {
       setVoiceStatus("Tap anywhere once to allow the microphone, then say “start the game”.");
     }
   }
+
+  startVoiceRef.current = startAlwaysOnVoice;
 
   function resetVoiceGuide(status: string) {
     setListening(false);
@@ -873,11 +892,16 @@ export default function App() {
           setVoiceTranscript(text);
           void handleVoiceCommand(text);
         },
-        onGuideReply: (reply) =>
+        onGuideReply: (reply) => {
+          // A Live reply is allowed only for an open guide question. Mute the
+          // remote track immediately afterwards so a later game command cannot
+          // overlap with an automatic model acknowledgement.
+          liveConnectionRef.current?.setGuideAudioEnabled(false);
           setGuideMessages((current) => [
             ...current,
             { role: "assistant", text: reply, mode: "model" },
-          ]),
+          ]);
+        },
         onClosed: () => {
           liveConnectionRef.current = null;
           setLiveConnected(false);
@@ -971,8 +995,8 @@ export default function App() {
               <span>4 players · Seer role · bot opponents</span>
             </button>
             <p className="voice-entry-status" aria-live="polite">
-              Tap anywhere once to allow the browser microphone, then say “start the game” or
-              “start a quick test”. Your voice companion stays on for the whole match.
+              Tap anywhere once to allow the browser microphone, then say “start the game” or “start
+              a quick test”. Your voice companion stays on for the whole match.
             </p>
             <details className="game-options">
               <summary>Game options</summary>
@@ -1146,9 +1170,7 @@ export default function App() {
             DAY {game.day} · {phaseNames[game.phase].toUpperCase()}
           </p>
           <h1>{phaseTitle}</h1>
-          <p className="round-subtitle">
-            {phaseSubtitle}
-          </p>
+          <p className="round-subtitle">{phaseSubtitle}</p>
           {latestUpdate && (
             <p className="latest-update" aria-live="polite" role="status">
               <span>{latestUpdate.kind === "private" ? "PRIVATE UPDATE" : "VILLAGE UPDATE"}</span>

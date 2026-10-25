@@ -1,4 +1,12 @@
-export type LiveVoiceSession = { stop: () => void };
+export type LiveVoiceSession = {
+  stop: () => void;
+  /**
+   * Live output is reserved for open guide questions. Game commands are spoken
+   * by the app after their result has been validated, so the two paths never
+   * narrate the same outcome.
+   */
+  setGuideAudioEnabled: (enabled: boolean) => void;
+};
 
 export type LiveVoiceCallbacks = {
   onStatus: (message: string) => void;
@@ -43,7 +51,13 @@ export async function startLiveVoice({
   let outputTranscript = "";
   let inputTranscript = "";
   let inputPauseTimer: number | undefined;
+  let outputPauseTimer: number | undefined;
   let resumeAudioOnGesture: (() => void) | undefined;
+  let guideAudioEnabled = false;
+
+  const applyGuideAudioState = () => {
+    if (audio) audio.muted = !guideAudioEnabled;
+  };
 
   const flushInputTranscript = () => {
     const transcript = inputTranscript.trim();
@@ -51,12 +65,19 @@ export async function startLiveVoice({
     if (transcript) onInputTranscriptComplete(transcript);
   };
 
+  const flushOutputTranscript = () => {
+    const transcript = outputTranscript.trim();
+    outputTranscript = "";
+    if (transcript && guideAudioEnabled) onGuideReply(transcript);
+    onStatus("Listening…");
+  };
+
   const stop = (status = "Voice is off") => {
     if (closed) return;
     closed = true;
     if (inputPauseTimer) window.clearTimeout(inputPauseTimer);
-    if (resumeAudioOnGesture)
-      window.removeEventListener("pointerdown", resumeAudioOnGesture);
+    if (outputPauseTimer) window.clearTimeout(outputPauseTimer);
+    if (resumeAudioOnGesture) window.removeEventListener("pointerdown", resumeAudioOnGesture);
     dataChannel?.close();
     stream?.getTracks().forEach((track) => track.stop());
     peerConnection?.close();
@@ -77,36 +98,33 @@ export async function startLiveVoice({
       try {
         const payload = JSON.parse(String(event.data)) as LiveTransportEvent;
         const text = payload.delta ?? payload.transcript;
-        if (payload.type === "conversation.item.input_audio_transcription.delta" && text) {
-          onInputTranscript(text);
-        }
-        if (payload.type === "conversation.item.input_audio_transcription.completed" && text) {
-          onInputTranscriptComplete(text);
-        }
-        // Backward-compatible handling for the preview event names used by an
-        // earlier Realtime transport. Current sessions use the two events above.
+        // GPT-Live streams transcript fragments without a final-turn event.
+        // A short quiet period marks one completed player command.
         if (payload.type === "session.input_transcript.delta" && text) {
           inputTranscript += text;
           onInputTranscript(text);
           if (inputPauseTimer) window.clearTimeout(inputPauseTimer);
-          // GPT-Live streams transcript fragments without a turn-complete event.
-          // A brief silence lets the same command router handle a spoken sentence once.
           inputPauseTimer = window.setTimeout(flushInputTranscript, 900);
         }
-        if (
-          (payload.type === "response.output_audio_transcript.delta" ||
-            payload.type === "session.output_transcript.delta") &&
-          text
-        ) {
+        if (payload.type === "session.output_transcript.delta" && text) {
           outputTranscript += text;
-          onStatus("Guide is speaking…");
+          if (guideAudioEnabled) onStatus("Guide is speaking…");
+          if (outputPauseTimer) window.clearTimeout(outputPauseTimer);
+          outputPauseTimer = window.setTimeout(flushOutputTranscript, 900);
         }
+        // Realtime compatibility remains useful for a future Realtime transport,
+        // but GPT-Live sessions use the two session transcript events above.
+        if (payload.type === "conversation.item.input_audio_transcription.delta" && text)
+          onInputTranscript(text);
+        if (payload.type === "conversation.item.input_audio_transcription.completed" && text)
+          onInputTranscriptComplete(text);
         if (
           (payload.type === "response.output_audio_transcript.done" ||
             payload.type === "session.output_transcript.done") &&
           (text || outputTranscript.trim())
         ) {
-          onGuideReply((payload.transcript ?? outputTranscript).trim());
+          const transcript = (payload.transcript ?? outputTranscript).trim();
+          if (transcript && guideAudioEnabled) onGuideReply(transcript);
           outputTranscript = "";
           onStatus("Listening…");
         }
@@ -120,6 +138,7 @@ export async function startLiveVoice({
       audio = new Audio();
       audio.autoplay = true;
       audio.srcObject = event.streams[0] ?? new MediaStream([event.track]);
+      applyGuideAudioState();
       void audio.play().catch(() => {
         onStatus("Tap anywhere once to hear the guide.");
         resumeAudioOnGesture = () => {
@@ -143,7 +162,13 @@ export async function startLiveVoice({
     const data = await response.json();
     if (!response.ok) throw new Error(data.error ?? "Could not start live voice.");
     await peerConnection.setRemoteDescription({ type: "answer", sdp: data.sdp });
-    return { stop: () => stop() };
+    return {
+      stop: () => stop(),
+      setGuideAudioEnabled(enabled) {
+        guideAudioEnabled = enabled;
+        applyGuideAudioState();
+      },
+    };
   } catch (cause) {
     stop();
     throw cause;
