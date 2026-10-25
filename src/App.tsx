@@ -730,6 +730,15 @@ export default function App() {
         onTranscript: (transcript) => voiceCommandHandlerRef.current(transcript),
         onError: (reason) => {
           voiceFailureRef.current = reason;
+          // Chromium can emit `aborted` while it rotates a continuous
+          // recognition session. The session restarts internally, so it is not
+          // an interruption the player needs to hear about.
+          if (reason === "aborted" || reason === "no-speech") {
+            setVoiceStatus(
+              sessionRef.current ? "Voice companion is listening" : "Listening — say “start the game”",
+            );
+            return;
+          }
           if (reason === "network") {
             if (sessionRef.current) {
               useLiveFallbackRef.current = true;
