@@ -1,0 +1,1352 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Static Chess preview — Marine theme</title>
+    <link rel="stylesheet" href="./product-preview.css" />
+  </head>
+  <body>
+    <div inert class="app-shell page-chess theme-green">
+      <a href="#main-content" class="skip-link">Skip to main content</a>
+      <header class="site-header">
+        <button class="brand" aria-label="Play by Voice, game picker">Play by Voice</button
+        ><span class="header-game"><span aria-hidden="true">•</span> Chess</span>
+        <nav aria-label="Main navigation"><button>Audio Settings</button><button>Help</button></nav>
+      </header>
+      <main id="main-content" class="main-content">
+        <section class="chess-page" aria-labelledby="page-heading">
+          <h1 id="page-heading" class="sr-only" tabindex="-1">Chess</h1>
+          <nav class="game-rail" aria-label="Game navigation">
+            <button class="round-control" aria-label="Start a new game" title="Start a new game">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="23"
+                height="23"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                class="lucide lucide-rotate-cw"
+                aria-hidden="true"
+              >
+                <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"></path>
+                <path d="M21 3v5h-5"></path>
+              </svg></button
+            ><button
+              class="round-control"
+              aria-label="Return to game picker"
+              title="Return to game picker"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="22"
+                height="22"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                class="lucide lucide-house"
+                aria-hidden="true"
+              >
+                <path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8"></path>
+                <path
+                  d="M3 10a2 2 0 0 1 .709-1.528l7-6a2 2 0 0 1 2.582 0l7 6A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"
+                ></path>
+              </svg>
+            </button>
+          </nav>
+          <div class="chess-layout">
+            <div class="chess-board-column">
+              <div class="board-wrapper theme-classic">
+                <div
+                  class="board"
+                  role="grid"
+                  aria-label="Chess board, White at bottom"
+                  aria-rowcount="8"
+                  aria-colcount="8"
+                >
+                  <div role="row" aria-rowindex="1" class="board-row">
+                    <button
+                      type="button"
+                      role="gridcell"
+                      aria-colindex="1"
+                      aria-label="Black rook at a8"
+                      aria-selected="false"
+                      class="square square-light"
+                      data-square="a8"
+                      tabindex="-1"
+                    >
+                      <span class="label-rank" aria-hidden="true">8</span
+                      ><span
+                        class="piece piece-b piece-set-merida"
+                        aria-hidden="true"
+                        data-piece="br"
+                        ><img
+                          alt=""
+                          draggable="false"
+                          width="160"
+                          height="160"
+                          src="/artwork/pieces/br.webp"
+                      /></span></button
+                    ><button
+                      type="button"
+                      role="gridcell"
+                      aria-colindex="2"
+                      aria-label="Black knight at b8"
+                      aria-selected="false"
+                      class="square square-dark"
+                      data-square="b8"
+                      tabindex="-1"
+                    >
+                      <span
+                        class="piece piece-b piece-set-merida"
+                        aria-hidden="true"
+                        data-piece="bn"
+                        ><img
+                          alt=""
+                          draggable="false"
+                          width="160"
+                          height="160"
+                          src="/artwork/pieces/bn.webp"
+                      /></span></button
+                    ><button
+                      type="button"
+                      role="gridcell"
+                      aria-colindex="3"
+                      aria-label="Black bishop at c8"
+                      aria-selected="false"
+                      class="square square-light"
+                      data-square="c8"
+                      tabindex="-1"
+                    >
+                      <span
+                        class="piece piece-b piece-set-merida"
+                        aria-hidden="true"
+                        data-piece="bb"
+                        ><img
+                          alt=""
+                          draggable="false"
+                          width="160"
+                          height="160"
+                          src="/artwork/pieces/bb.webp"
+                      /></span></button
+                    ><button
+                      type="button"
+                      role="gridcell"
+                      aria-colindex="4"
+                      aria-label="Black queen at d8"
+                      aria-selected="false"
+                      class="square square-dark"
+                      data-square="d8"
+                      tabindex="-1"
+                    >
+                      <span
+                        class="piece piece-b piece-set-merida"
+                        aria-hidden="true"
+                        data-piece="bq"
+                        ><img
+                          alt=""
+                          draggable="false"
+                          width="160"
+                          height="160"
+                          src="/artwork/pieces/bq.webp"
+                      /></span></button
+                    ><button
+                      type="button"
+                      role="gridcell"
+                      aria-colindex="5"
+                      aria-label="Black king at e8"
+                      aria-selected="false"
+                      class="square square-light"
+                      data-square="e8"
+                      tabindex="-1"
+                    >
+                      <span
+                        class="piece piece-b piece-set-merida"
+                        aria-hidden="true"
+                        data-piece="bk"
+                        ><img
+                          alt=""
+                          draggable="false"
+                          width="160"
+                          height="160"
+                          src="/artwork/pieces/bk.webp"
+                      /></span></button
+                    ><button
+                      type="button"
+                      role="gridcell"
+                      aria-colindex="6"
+                      aria-label="Black bishop at f8"
+                      aria-selected="false"
+                      class="square square-dark"
+                      data-square="f8"
+                      tabindex="-1"
+                    >
+                      <span
+                        class="piece piece-b piece-set-merida"
+                        aria-hidden="true"
+                        data-piece="bb"
+                        ><img
+                          alt=""
+                          draggable="false"
+                          width="160"
+                          height="160"
+                          src="/artwork/pieces/bb.webp"
+                      /></span></button
+                    ><button
+                      type="button"
+                      role="gridcell"
+                      aria-colindex="7"
+                      aria-label="Black knight at g8"
+                      aria-selected="false"
+                      class="square square-light"
+                      data-square="g8"
+                      tabindex="-1"
+                    >
+                      <span
+                        class="piece piece-b piece-set-merida"
+                        aria-hidden="true"
+                        data-piece="bn"
+                        ><img
+                          alt=""
+                          draggable="false"
+                          width="160"
+                          height="160"
+                          src="/artwork/pieces/bn.webp"
+                      /></span></button
+                    ><button
+                      type="button"
+                      role="gridcell"
+                      aria-colindex="8"
+                      aria-label="Black rook at h8"
+                      aria-selected="false"
+                      class="square square-dark"
+                      data-square="h8"
+                      tabindex="-1"
+                    >
+                      <span
+                        class="piece piece-b piece-set-merida"
+                        aria-hidden="true"
+                        data-piece="br"
+                        ><img
+                          alt=""
+                          draggable="false"
+                          width="160"
+                          height="160"
+                          src="/artwork/pieces/br.webp"
+                      /></span>
+                    </button>
+                  </div>
+                  <div role="row" aria-rowindex="2" class="board-row">
+                    <button
+                      type="button"
+                      role="gridcell"
+                      aria-colindex="1"
+                      aria-label="Black pawn at a7"
+                      aria-selected="false"
+                      class="square square-dark"
+                      data-square="a7"
+                      tabindex="-1"
+                    >
+                      <span class="label-rank" aria-hidden="true">7</span
+                      ><span
+                        class="piece piece-b piece-set-merida"
+                        aria-hidden="true"
+                        data-piece="bp"
+                        ><img
+                          alt=""
+                          draggable="false"
+                          width="160"
+                          height="160"
+                          src="/artwork/pieces/bp.webp"
+                      /></span></button
+                    ><button
+                      type="button"
+                      role="gridcell"
+                      aria-colindex="2"
+                      aria-label="Black pawn at b7"
+                      aria-selected="false"
+                      class="square square-light"
+                      data-square="b7"
+                      tabindex="-1"
+                    >
+                      <span
+                        class="piece piece-b piece-set-merida"
+                        aria-hidden="true"
+                        data-piece="bp"
+                        ><img
+                          alt=""
+                          draggable="false"
+                          width="160"
+                          height="160"
+                          src="/artwork/pieces/bp.webp"
+                      /></span></button
+                    ><button
+                      type="button"
+                      role="gridcell"
+                      aria-colindex="3"
+                      aria-label="Black pawn at c7"
+                      aria-selected="false"
+                      class="square square-dark"
+                      data-square="c7"
+                      tabindex="-1"
+                    >
+                      <span
+                        class="piece piece-b piece-set-merida"
+                        aria-hidden="true"
+                        data-piece="bp"
+                        ><img
+                          alt=""
+                          draggable="false"
+                          width="160"
+                          height="160"
+                          src="/artwork/pieces/bp.webp"
+                      /></span></button
+                    ><button
+                      type="button"
+                      role="gridcell"
+                      aria-colindex="4"
+                      aria-label="Black pawn at d7"
+                      aria-selected="false"
+                      class="square square-light"
+                      data-square="d7"
+                      tabindex="-1"
+                    >
+                      <span
+                        class="piece piece-b piece-set-merida"
+                        aria-hidden="true"
+                        data-piece="bp"
+                        ><img
+                          alt=""
+                          draggable="false"
+                          width="160"
+                          height="160"
+                          src="/artwork/pieces/bp.webp"
+                      /></span></button
+                    ><button
+                      type="button"
+                      role="gridcell"
+                      aria-colindex="5"
+                      aria-label="Black pawn at e7"
+                      aria-selected="false"
+                      class="square square-dark"
+                      data-square="e7"
+                      tabindex="-1"
+                    >
+                      <span
+                        class="piece piece-b piece-set-merida"
+                        aria-hidden="true"
+                        data-piece="bp"
+                        ><img
+                          alt=""
+                          draggable="false"
+                          width="160"
+                          height="160"
+                          src="/artwork/pieces/bp.webp"
+                      /></span></button
+                    ><button
+                      type="button"
+                      role="gridcell"
+                      aria-colindex="6"
+                      aria-label="Black pawn at f7"
+                      aria-selected="false"
+                      class="square square-light"
+                      data-square="f7"
+                      tabindex="-1"
+                    >
+                      <span
+                        class="piece piece-b piece-set-merida"
+                        aria-hidden="true"
+                        data-piece="bp"
+                        ><img
+                          alt=""
+                          draggable="false"
+                          width="160"
+                          height="160"
+                          src="/artwork/pieces/bp.webp"
+                      /></span></button
+                    ><button
+                      type="button"
+                      role="gridcell"
+                      aria-colindex="7"
+                      aria-label="Black pawn at g7"
+                      aria-selected="false"
+                      class="square square-dark"
+                      data-square="g7"
+                      tabindex="-1"
+                    >
+                      <span
+                        class="piece piece-b piece-set-merida"
+                        aria-hidden="true"
+                        data-piece="bp"
+                        ><img
+                          alt=""
+                          draggable="false"
+                          width="160"
+                          height="160"
+                          src="/artwork/pieces/bp.webp"
+                      /></span></button
+                    ><button
+                      type="button"
+                      role="gridcell"
+                      aria-colindex="8"
+                      aria-label="Black pawn at h7"
+                      aria-selected="false"
+                      class="square square-light"
+                      data-square="h7"
+                      tabindex="-1"
+                    >
+                      <span
+                        class="piece piece-b piece-set-merida"
+                        aria-hidden="true"
+                        data-piece="bp"
+                        ><img
+                          alt=""
+                          draggable="false"
+                          width="160"
+                          height="160"
+                          src="/artwork/pieces/bp.webp"
+                      /></span>
+                    </button>
+                  </div>
+                  <div role="row" aria-rowindex="3" class="board-row">
+                    <button
+                      type="button"
+                      role="gridcell"
+                      aria-colindex="1"
+                      aria-label="Empty square a6"
+                      aria-selected="false"
+                      class="square square-light"
+                      data-square="a6"
+                      tabindex="-1"
+                    >
+                      <span class="label-rank" aria-hidden="true">6</span></button
+                    ><button
+                      type="button"
+                      role="gridcell"
+                      aria-colindex="2"
+                      aria-label="Empty square b6"
+                      aria-selected="false"
+                      class="square square-dark"
+                      data-square="b6"
+                      tabindex="-1"
+                    ></button
+                    ><button
+                      type="button"
+                      role="gridcell"
+                      aria-colindex="3"
+                      aria-label="Empty square c6"
+                      aria-selected="false"
+                      class="square square-light"
+                      data-square="c6"
+                      tabindex="-1"
+                    ></button
+                    ><button
+                      type="button"
+                      role="gridcell"
+                      aria-colindex="4"
+                      aria-label="Empty square d6"
+                      aria-selected="false"
+                      class="square square-dark"
+                      data-square="d6"
+                      tabindex="-1"
+                    ></button
+                    ><button
+                      type="button"
+                      role="gridcell"
+                      aria-colindex="5"
+                      aria-label="Empty square e6"
+                      aria-selected="false"
+                      class="square square-light"
+                      data-square="e6"
+                      tabindex="-1"
+                    ></button
+                    ><button
+                      type="button"
+                      role="gridcell"
+                      aria-colindex="6"
+                      aria-label="Empty square f6"
+                      aria-selected="false"
+                      class="square square-dark"
+                      data-square="f6"
+                      tabindex="-1"
+                    ></button
+                    ><button
+                      type="button"
+                      role="gridcell"
+                      aria-colindex="7"
+                      aria-label="Empty square g6"
+                      aria-selected="false"
+                      class="square square-light"
+                      data-square="g6"
+                      tabindex="-1"
+                    ></button
+                    ><button
+                      type="button"
+                      role="gridcell"
+                      aria-colindex="8"
+                      aria-label="Empty square h6"
+                      aria-selected="false"
+                      class="square square-dark"
+                      data-square="h6"
+                      tabindex="-1"
+                    ></button>
+                  </div>
+                  <div role="row" aria-rowindex="4" class="board-row">
+                    <button
+                      type="button"
+                      role="gridcell"
+                      aria-colindex="1"
+                      aria-label="Empty square a5"
+                      aria-selected="false"
+                      class="square square-dark"
+                      data-square="a5"
+                      tabindex="-1"
+                    >
+                      <span class="label-rank" aria-hidden="true">5</span></button
+                    ><button
+                      type="button"
+                      role="gridcell"
+                      aria-colindex="2"
+                      aria-label="Empty square b5"
+                      aria-selected="false"
+                      class="square square-light"
+                      data-square="b5"
+                      tabindex="-1"
+                    ></button
+                    ><button
+                      type="button"
+                      role="gridcell"
+                      aria-colindex="3"
+                      aria-label="Empty square c5"
+                      aria-selected="false"
+                      class="square square-dark"
+                      data-square="c5"
+                      tabindex="-1"
+                    ></button
+                    ><button
+                      type="button"
+                      role="gridcell"
+                      aria-colindex="4"
+                      aria-label="Empty square d5"
+                      aria-selected="false"
+                      class="square square-light"
+                      data-square="d5"
+                      tabindex="-1"
+                    ></button
+                    ><button
+                      type="button"
+                      role="gridcell"
+                      aria-colindex="5"
+                      aria-label="Empty square e5"
+                      aria-selected="false"
+                      class="square square-dark"
+                      data-square="e5"
+                      tabindex="-1"
+                    ></button
+                    ><button
+                      type="button"
+                      role="gridcell"
+                      aria-colindex="6"
+                      aria-label="Empty square f5"
+                      aria-selected="false"
+                      class="square square-light"
+                      data-square="f5"
+                      tabindex="-1"
+                    ></button
+                    ><button
+                      type="button"
+                      role="gridcell"
+                      aria-colindex="7"
+                      aria-label="Empty square g5"
+                      aria-selected="false"
+                      class="square square-dark"
+                      data-square="g5"
+                      tabindex="-1"
+                    ></button
+                    ><button
+                      type="button"
+                      role="gridcell"
+                      aria-colindex="8"
+                      aria-label="Empty square h5"
+                      aria-selected="false"
+                      class="square square-light"
+                      data-square="h5"
+                      tabindex="-1"
+                    ></button>
+                  </div>
+                  <div role="row" aria-rowindex="5" class="board-row">
+                    <button
+                      type="button"
+                      role="gridcell"
+                      aria-colindex="1"
+                      aria-label="Empty square a4"
+                      aria-selected="false"
+                      class="square square-light"
+                      data-square="a4"
+                      tabindex="-1"
+                    >
+                      <span class="label-rank" aria-hidden="true">4</span></button
+                    ><button
+                      type="button"
+                      role="gridcell"
+                      aria-colindex="2"
+                      aria-label="Empty square b4"
+                      aria-selected="false"
+                      class="square square-dark"
+                      data-square="b4"
+                      tabindex="-1"
+                    ></button
+                    ><button
+                      type="button"
+                      role="gridcell"
+                      aria-colindex="3"
+                      aria-label="Empty square c4"
+                      aria-selected="false"
+                      class="square square-light"
+                      data-square="c4"
+                      tabindex="-1"
+                    ></button
+                    ><button
+                      type="button"
+                      role="gridcell"
+                      aria-colindex="4"
+                      aria-label="Empty square d4"
+                      aria-selected="false"
+                      class="square square-dark"
+                      data-square="d4"
+                      tabindex="-1"
+                    ></button
+                    ><button
+                      type="button"
+                      role="gridcell"
+                      aria-colindex="5"
+                      aria-label="Empty square e4"
+                      aria-selected="false"
+                      class="square square-light"
+                      data-square="e4"
+                      tabindex="-1"
+                    ></button
+                    ><button
+                      type="button"
+                      role="gridcell"
+                      aria-colindex="6"
+                      aria-label="Empty square f4"
+                      aria-selected="false"
+                      class="square square-dark"
+                      data-square="f4"
+                      tabindex="-1"
+                    ></button
+                    ><button
+                      type="button"
+                      role="gridcell"
+                      aria-colindex="7"
+                      aria-label="Empty square g4"
+                      aria-selected="false"
+                      class="square square-light"
+                      data-square="g4"
+                      tabindex="-1"
+                    ></button
+                    ><button
+                      type="button"
+                      role="gridcell"
+                      aria-colindex="8"
+                      aria-label="Empty square h4"
+                      aria-selected="false"
+                      class="square square-dark"
+                      data-square="h4"
+                      tabindex="-1"
+                    ></button>
+                  </div>
+                  <div role="row" aria-rowindex="6" class="board-row">
+                    <button
+                      type="button"
+                      role="gridcell"
+                      aria-colindex="1"
+                      aria-label="Empty square a3"
+                      aria-selected="false"
+                      class="square square-dark"
+                      data-square="a3"
+                      tabindex="-1"
+                    >
+                      <span class="label-rank" aria-hidden="true">3</span></button
+                    ><button
+                      type="button"
+                      role="gridcell"
+                      aria-colindex="2"
+                      aria-label="Empty square b3"
+                      aria-selected="false"
+                      class="square square-light"
+                      data-square="b3"
+                      tabindex="-1"
+                    ></button
+                    ><button
+                      type="button"
+                      role="gridcell"
+                      aria-colindex="3"
+                      aria-label="Empty square c3"
+                      aria-selected="false"
+                      class="square square-dark"
+                      data-square="c3"
+                      tabindex="-1"
+                    ></button
+                    ><button
+                      type="button"
+                      role="gridcell"
+                      aria-colindex="4"
+                      aria-label="Empty square d3"
+                      aria-selected="false"
+                      class="square square-light"
+                      data-square="d3"
+                      tabindex="-1"
+                    ></button
+                    ><button
+                      type="button"
+                      role="gridcell"
+                      aria-colindex="5"
+                      aria-label="Empty square e3"
+                      aria-selected="false"
+                      class="square square-dark"
+                      data-square="e3"
+                      tabindex="-1"
+                    ></button
+                    ><button
+                      type="button"
+                      role="gridcell"
+                      aria-colindex="6"
+                      aria-label="Empty square f3"
+                      aria-selected="false"
+                      class="square square-light"
+                      data-square="f3"
+                      tabindex="-1"
+                    ></button
+                    ><button
+                      type="button"
+                      role="gridcell"
+                      aria-colindex="7"
+                      aria-label="Empty square g3"
+                      aria-selected="false"
+                      class="square square-dark"
+                      data-square="g3"
+                      tabindex="-1"
+                    ></button
+                    ><button
+                      type="button"
+                      role="gridcell"
+                      aria-colindex="8"
+                      aria-label="Empty square h3"
+                      aria-selected="false"
+                      class="square square-light"
+                      data-square="h3"
+                      tabindex="-1"
+                    ></button>
+                  </div>
+                  <div role="row" aria-rowindex="7" class="board-row">
+                    <button
+                      type="button"
+                      role="gridcell"
+                      aria-colindex="1"
+                      aria-label="White pawn at a2"
+                      aria-selected="false"
+                      class="square square-light"
+                      data-square="a2"
+                      tabindex="-1"
+                    >
+                      <span class="label-rank" aria-hidden="true">2</span
+                      ><span
+                        class="piece piece-w piece-set-merida"
+                        aria-hidden="true"
+                        data-piece="wp"
+                        ><img
+                          alt=""
+                          draggable="false"
+                          width="160"
+                          height="160"
+                          src="/artwork/pieces/wp.webp"
+                      /></span></button
+                    ><button
+                      type="button"
+                      role="gridcell"
+                      aria-colindex="2"
+                      aria-label="White pawn at b2"
+                      aria-selected="false"
+                      class="square square-dark"
+                      data-square="b2"
+                      tabindex="-1"
+                    >
+                      <span
+                        class="piece piece-w piece-set-merida"
+                        aria-hidden="true"
+                        data-piece="wp"
+                        ><img
+                          alt=""
+                          draggable="false"
+                          width="160"
+                          height="160"
+                          src="/artwork/pieces/wp.webp"
+                      /></span></button
+                    ><button
+                      type="button"
+                      role="gridcell"
+                      aria-colindex="3"
+                      aria-label="White pawn at c2"
+                      aria-selected="false"
+                      class="square square-light"
+                      data-square="c2"
+                      tabindex="-1"
+                    >
+                      <span
+                        class="piece piece-w piece-set-merida"
+                        aria-hidden="true"
+                        data-piece="wp"
+                        ><img
+                          alt=""
+                          draggable="false"
+                          width="160"
+                          height="160"
+                          src="/artwork/pieces/wp.webp"
+                      /></span></button
+                    ><button
+                      type="button"
+                      role="gridcell"
+                      aria-colindex="4"
+                      aria-label="White pawn at d2"
+                      aria-selected="false"
+                      class="square square-dark"
+                      data-square="d2"
+                      tabindex="-1"
+                    >
+                      <span
+                        class="piece piece-w piece-set-merida"
+                        aria-hidden="true"
+                        data-piece="wp"
+                        ><img
+                          alt=""
+                          draggable="false"
+                          width="160"
+                          height="160"
+                          src="/artwork/pieces/wp.webp"
+                      /></span></button
+                    ><button
+                      type="button"
+                      role="gridcell"
+                      aria-colindex="5"
+                      aria-label="White pawn at e2"
+                      aria-selected="false"
+                      class="square square-light"
+                      data-square="e2"
+                      tabindex="-1"
+                    >
+                      <span
+                        class="piece piece-w piece-set-merida"
+                        aria-hidden="true"
+                        data-piece="wp"
+                        ><img
+                          alt=""
+                          draggable="false"
+                          width="160"
+                          height="160"
+                          src="/artwork/pieces/wp.webp"
+                      /></span></button
+                    ><button
+                      type="button"
+                      role="gridcell"
+                      aria-colindex="6"
+                      aria-label="White pawn at f2"
+                      aria-selected="false"
+                      class="square square-dark"
+                      data-square="f2"
+                      tabindex="-1"
+                    >
+                      <span
+                        class="piece piece-w piece-set-merida"
+                        aria-hidden="true"
+                        data-piece="wp"
+                        ><img
+                          alt=""
+                          draggable="false"
+                          width="160"
+                          height="160"
+                          src="/artwork/pieces/wp.webp"
+                      /></span></button
+                    ><button
+                      type="button"
+                      role="gridcell"
+                      aria-colindex="7"
+                      aria-label="White pawn at g2"
+                      aria-selected="false"
+                      class="square square-light"
+                      data-square="g2"
+                      tabindex="-1"
+                    >
+                      <span
+                        class="piece piece-w piece-set-merida"
+                        aria-hidden="true"
+                        data-piece="wp"
+                        ><img
+                          alt=""
+                          draggable="false"
+                          width="160"
+                          height="160"
+                          src="/artwork/pieces/wp.webp"
+                      /></span></button
+                    ><button
+                      type="button"
+                      role="gridcell"
+                      aria-colindex="8"
+                      aria-label="White pawn at h2"
+                      aria-selected="false"
+                      class="square square-dark"
+                      data-square="h2"
+                      tabindex="-1"
+                    >
+                      <span
+                        class="piece piece-w piece-set-merida"
+                        aria-hidden="true"
+                        data-piece="wp"
+                        ><img
+                          alt=""
+                          draggable="false"
+                          width="160"
+                          height="160"
+                          src="/artwork/pieces/wp.webp"
+                      /></span>
+                    </button>
+                  </div>
+                  <div role="row" aria-rowindex="8" class="board-row">
+                    <button
+                      type="button"
+                      role="gridcell"
+                      aria-colindex="1"
+                      aria-label="White rook at a1"
+                      aria-selected="false"
+                      class="square square-dark"
+                      data-square="a1"
+                      tabindex="-1"
+                    >
+                      <span class="label-rank" aria-hidden="true">1</span
+                      ><span class="label-file" aria-hidden="true">a</span
+                      ><span
+                        class="piece piece-w piece-set-merida"
+                        aria-hidden="true"
+                        data-piece="wr"
+                        ><img
+                          alt=""
+                          draggable="false"
+                          width="160"
+                          height="160"
+                          src="/artwork/pieces/wr.webp"
+                      /></span></button
+                    ><button
+                      type="button"
+                      role="gridcell"
+                      aria-colindex="2"
+                      aria-label="White knight at b1"
+                      aria-selected="false"
+                      class="square square-light"
+                      data-square="b1"
+                      tabindex="-1"
+                    >
+                      <span class="label-file" aria-hidden="true">b</span
+                      ><span
+                        class="piece piece-w piece-set-merida"
+                        aria-hidden="true"
+                        data-piece="wn"
+                        ><img
+                          alt=""
+                          draggable="false"
+                          width="160"
+                          height="160"
+                          src="/artwork/pieces/wn.webp"
+                      /></span></button
+                    ><button
+                      type="button"
+                      role="gridcell"
+                      aria-colindex="3"
+                      aria-label="White bishop at c1"
+                      aria-selected="false"
+                      class="square square-dark"
+                      data-square="c1"
+                      tabindex="-1"
+                    >
+                      <span class="label-file" aria-hidden="true">c</span
+                      ><span
+                        class="piece piece-w piece-set-merida"
+                        aria-hidden="true"
+                        data-piece="wb"
+                        ><img
+                          alt=""
+                          draggable="false"
+                          width="160"
+                          height="160"
+                          src="/artwork/pieces/wb.webp"
+                      /></span></button
+                    ><button
+                      type="button"
+                      role="gridcell"
+                      aria-colindex="4"
+                      aria-label="White queen at d1"
+                      aria-selected="false"
+                      class="square square-light"
+                      data-square="d1"
+                      tabindex="-1"
+                    >
+                      <span class="label-file" aria-hidden="true">d</span
+                      ><span
+                        class="piece piece-w piece-set-merida"
+                        aria-hidden="true"
+                        data-piece="wq"
+                        ><img
+                          alt=""
+                          draggable="false"
+                          width="160"
+                          height="160"
+                          src="/artwork/pieces/wq.webp"
+                      /></span></button
+                    ><button
+                      type="button"
+                      role="gridcell"
+                      aria-colindex="5"
+                      aria-label="White king at e1"
+                      aria-selected="false"
+                      class="square square-dark"
+                      data-square="e1"
+                      tabindex="0"
+                    >
+                      <span class="label-file" aria-hidden="true">e</span
+                      ><span
+                        class="piece piece-w piece-set-merida"
+                        aria-hidden="true"
+                        data-piece="wk"
+                        ><img
+                          alt=""
+                          draggable="false"
+                          width="160"
+                          height="160"
+                          src="/artwork/pieces/wk.webp"
+                      /></span></button
+                    ><button
+                      type="button"
+                      role="gridcell"
+                      aria-colindex="6"
+                      aria-label="White bishop at f1"
+                      aria-selected="false"
+                      class="square square-light"
+                      data-square="f1"
+                      tabindex="-1"
+                    >
+                      <span class="label-file" aria-hidden="true">f</span
+                      ><span
+                        class="piece piece-w piece-set-merida"
+                        aria-hidden="true"
+                        data-piece="wb"
+                        ><img
+                          alt=""
+                          draggable="false"
+                          width="160"
+                          height="160"
+                          src="/artwork/pieces/wb.webp"
+                      /></span></button
+                    ><button
+                      type="button"
+                      role="gridcell"
+                      aria-colindex="7"
+                      aria-label="White knight at g1"
+                      aria-selected="false"
+                      class="square square-dark"
+                      data-square="g1"
+                      tabindex="-1"
+                    >
+                      <span class="label-file" aria-hidden="true">g</span
+                      ><span
+                        class="piece piece-w piece-set-merida"
+                        aria-hidden="true"
+                        data-piece="wn"
+                        ><img
+                          alt=""
+                          draggable="false"
+                          width="160"
+                          height="160"
+                          src="/artwork/pieces/wn.webp"
+                      /></span></button
+                    ><button
+                      type="button"
+                      role="gridcell"
+                      aria-colindex="8"
+                      aria-label="White rook at h1"
+                      aria-selected="false"
+                      class="square square-light"
+                      data-square="h1"
+                      tabindex="-1"
+                    >
+                      <span class="label-file" aria-hidden="true">h</span
+                      ><span
+                        class="piece piece-w piece-set-merida"
+                        aria-hidden="true"
+                        data-piece="wr"
+                        ><img
+                          alt=""
+                          draggable="false"
+                          width="160"
+                          height="160"
+                          src="/artwork/pieces/wr.webp"
+                      /></span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+              <div class="board-status" role="status">
+                <span class="status-dot"></span><span>White to move</span
+                ><span class="playing-as">You play White</span>
+              </div>
+              <div class="board-actions" aria-label="Chess controls">
+                <button disabled="">
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="16"
+                    height="16"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    class="lucide lucide-undo2 lucide-undo-2"
+                    aria-hidden="true"
+                  >
+                    <path d="M9 14 4 9l5-5"></path>
+                    <path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5a5.5 5.5 0 0 1-5.5 5.5H11"></path>
+                  </svg>
+                  Undo</button
+                ><button>
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="15"
+                    height="15"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    class="lucide lucide-pause"
+                    aria-hidden="true"
+                  >
+                    <rect x="14" y="3" width="5" height="18" rx="1"></rect>
+                    <rect x="5" y="3" width="5" height="18" rx="1"></rect>
+                  </svg>
+                  Pause</button
+                ><button>
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="15"
+                    height="15"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    class="lucide lucide-flip-vertical2 lucide-flip-vertical-2"
+                    aria-hidden="true"
+                  >
+                    <path d="m17 3-5 5-5-5h10"></path>
+                    <path d="m17 21-5-5-5 5h10"></path>
+                    <path d="M4 12H2"></path>
+                    <path d="M10 12H8"></path>
+                    <path d="M16 12h-2"></path>
+                    <path d="M22 12h-2"></path>
+                  </svg>
+                  Flip</button
+                ><button disabled="">
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="15"
+                    height="15"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    class="lucide lucide-flag"
+                    aria-hidden="true"
+                  >
+                    <path
+                      d="M4 22V4a1 1 0 0 1 .4-.8A6 6 0 0 1 8 2c3 0 5 2 7.333 2q2 0 3.067-.8A1 1 0 0 1 20 4v10a1 1 0 0 1-.4.8A6 6 0 0 1 16 16c-3 0-5-2-8-2a6 6 0 0 0-4 1.528"
+                    ></path>
+                  </svg>
+                  Resign
+                </button>
+              </div>
+              <div class="engine-notice" role="alert">
+                <p>
+                  The local engine could not load. Computer turns and hints need Stockfish. Retry
+                  the engine, or choose Local two-player in Audio Settings.
+                </p>
+                <button class="pill-button">Retry engine</button>
+              </div>
+            </div>
+            <div class="chess-side-column">
+              <section class="surface move-history" aria-labelledby="history-heading">
+                <h2 id="history-heading">Move history</h2>
+                <ol class="move-list" aria-label="Played moves"></ol>
+                <p class="empty-history">
+                  Your story starts with the first move.<br /><span
+                    >Try "e2 to e4" with your companion.</span
+                  >
+                </p>
+              </section>
+              <section class="surface assistant-panel" aria-labelledby="assistant-heading">
+                <h2 id="assistant-heading">Assistant</h2>
+                <button class="assistant-card">
+                  <span class="assistant-icon"
+                    ><svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      width="21"
+                      height="21"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      class="lucide lucide-headphones"
+                      aria-hidden="true"
+                    >
+                      <path
+                        d="M3 14h3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-7a9 9 0 0 1 18 0v7a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3"
+                      ></path></svg></span
+                  ><span
+                    ><strong>Listen to the board</strong
+                    ><span>Ask "describe the board" to hear the current state.</span></span
+                  ></button
+                ><button class="assistant-card">
+                  <span class="assistant-icon"
+                    ><svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      width="21"
+                      height="21"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      class="lucide lucide-lightbulb"
+                      aria-hidden="true"
+                    >
+                      <path
+                        d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5"
+                      ></path>
+                      <path d="M9 18h6"></path>
+                      <path d="M10 22h4"></path></svg></span
+                  ><span
+                    ><strong>Get a suggested move</strong
+                    ><span>Say "what should I play next?" for a quick recommendation.</span></span
+                  ></button
+                ><button class="assistant-card">
+                  <span class="assistant-icon"
+                    ><svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      width="21"
+                      height="21"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      class="lucide lucide-history"
+                      aria-hidden="true"
+                    >
+                      <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path>
+                      <path d="M3 3v5h5"></path>
+                      <path d="M12 7v5l4 2"></path></svg></span
+                  ><span
+                    ><strong>Keep the game moving</strong
+                    ><span
+                      >Use voice to undo, repeat the last move, or start a new game.</span
+                    ></span
+                  >
+                </button>
+                <div class="guide-link"><button>New to chess? Hear the quick guide</button></div>
+              </section>
+            </div>
+          </div>
+        </section>
+      </main>
+      <footer class="companion-dock dock-green" aria-label="Voice companion">
+        <div class="companion-orb-row">
+          <button type="button" class="orb-button" aria-label="Start voice companion">
+            <img
+              class="companion-orb"
+              width="201"
+              height="201"
+              alt=""
+              draggable="false"
+              src="./orb-green.svg"
+            /><span class="orb-state"
+              ><svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="13"
+                height="13"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                class="lucide lucide-mic"
+                aria-hidden="true"
+              >
+                <path d="M12 19v3"></path>
+                <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+                <rect x="9" y="2" width="6" height="13" rx="3"></rect>
+              </svg>
+              Start voice</span
+            ></button
+          ><button
+            class="dock-icon typed-toggle"
+            aria-label="Type a command"
+            aria-expanded="false"
+            aria-controls="command-panel"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              class="lucide lucide-keyboard"
+              aria-hidden="true"
+            >
+              <path d="M10 8h.01"></path>
+              <path d="M12 12h.01"></path>
+              <path d="M14 8h.01"></path>
+              <path d="M16 12h.01"></path>
+              <path d="M18 8h.01"></path>
+              <path d="M6 8h.01"></path>
+              <path d="M7 16h10"></path>
+              <path d="M8 12h.01"></path>
+              <rect width="20" height="16" x="2" y="4" rx="2"></rect>
+            </svg>
+          </button>
+        </div>
+        <p class="companion-caption" aria-live="off" aria-atomic="true">
+          Chess is ready. You play White. Would you like a quick spoken guide, or do you already
+          know the rules?
+        </p>
+      </footer>
+    </div>
+  </body>
+</html>
