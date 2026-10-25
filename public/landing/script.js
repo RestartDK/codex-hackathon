@@ -474,6 +474,20 @@ reducedOrbMotion.addEventListener("change", () => {
 });
 syncLiquidMotion();
 
+// Prefer the user's liquid-glass export where WebGPU is available.
+import("./liquid-orb.js")
+  .then(({ enhanceLiquidOrbs }) =>
+    enhanceLiquidOrbs((orb) => {
+      const previous = liquidOrbs.get(orb);
+      previous?.release();
+      previous?.canvas.remove();
+      liquidOrbs.delete(orb);
+    }),
+  )
+  .catch(() => {
+    /* Existing WebGL/SVG orbs remain available. */
+  });
+
 // Short entrance choreography preserves readable content if enhancement is unavailable.
 if ("IntersectionObserver" in window && !reducedOrbMotion.matches) {
   const reveals = new IntersectionObserver(

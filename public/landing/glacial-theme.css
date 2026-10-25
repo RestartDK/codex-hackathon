@@ -1493,3 +1493,25 @@ p {
 .footer-wordmark span {
   font-size: 16.5vw;
 }
+
+/* The user's liquid glass shader supplies its own transparent, feathered edge. */
+.orb-glass {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 3;
+  pointer-events: none;
+}
+.liquid-glass-ready > img,
+.liquid-glass-ready > span {
+  visibility: hidden;
+}
+@media (forced-colors: active) {
+  .orb-glass {
+    display: none;
+  }
+  .liquid-glass-ready > img {
+    visibility: visible;
+  }
+}
