@@ -1,11 +1,10 @@
-// Voice navigation is consent based: nothing listens until the player presses the control.
 const voiceToggle = document.querySelector("#voice-navigation-toggle");
 const voiceCaptions = document.querySelector("#voice-navigation-captions");
 
 if (voiceToggle && voiceCaptions) {
   const controls = window.landingControls;
   const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
-  const voiceState = { active: false, stop: null, mode: "idle" };
+  const voiceState = { active: false, stop: null, mode: "idle", generation: 0 };
 
   function caption(text) {
     voiceCaptions.hidden = !text;
@@ -14,6 +13,7 @@ if (voiceToggle && voiceCaptions) {
 
   function setActive(active) {
     voiceState.active = active;
+    voiceState.generation += 1;
     voiceToggle.setAttribute("aria-pressed", String(active));
     const label = active ? "Stop voice navigation" : "Start voice navigation";
     const faces = voiceToggle.querySelectorAll(".roll-face");
@@ -22,8 +22,9 @@ if (voiceToggle && voiceCaptions) {
     voiceToggle.setAttribute("aria-label", label);
     if (!active) {
       voiceState.mode = "idle";
-      voiceState.stop?.();
+      const stop = voiceState.stop;
       voiceState.stop = null;
+      stop?.();
     }
   }
 
@@ -169,61 +170,121 @@ if (voiceToggle && voiceCaptions) {
       void startTranscription();
       return;
     }
+    const generation = voiceState.generation;
+    let stopped = false;
+    const current = () => voiceState.active && voiceState.generation === generation && !stopped;
+    const stop = () => {
+      stopped = true;
+      recognition.onend = null;
+      recognition.onerror = null;
+      recognition.stop();
+    };
     recognition.continuous = true;
     recognition.interimResults = false;
     recognition.lang = "en-US";
     recognition.onresult = (event) => {
+      if (!current()) return;
       for (let index = event.resultIndex; index < event.results.length; index += 1)
         if (event.results[index].isFinal) handleCommand(event.results[index][0].transcript);
     };
     recognition.onerror = (event) => {
+      if (!current() || event.error === "no-speech") return;
       if (event.error === "network") {
-        voiceState.stop?.();
+        stop();
         voiceState.stop = null;
         void startTranscription();
+        return;
       }
+      setActive(false);
+      caption(
+        event.error === "not-allowed" || event.error === "service-not-allowed"
+          ? "Microphone permission was denied. Allow microphone access, then press Start voice navigation to retry."
+          : "Speech recognition stopped (" + event.error + "). Press Start voice navigation to retry.",
+      );
     };
     recognition.onend = () => {
-      if (voiceState.active && voiceState.mode === "browser") {
-        try {
-          recognition.start();
-        } catch {
-          /* A restart can be refused while the engine is closing; onend runs again. */
-        }
+      if (!current()) return;
+      try {
+        recognition.start();
+      } catch {
+        setActive(false);
+        caption("Speech recognition stopped. Press Start voice navigation to retry.");
       }
     };
     voiceState.mode = "browser";
-    voiceState.stop = () => {
-      try {
-        recognition.stop();
-      } catch {
-        /* The recognizer may already be stopped. */
-      }
-    };
-    recognition.start();
-    caption("Listening. Say start playing, games, how it works, FAQ, menu, or stop voice.");
+    voiceState.stop = stop;
+    try {
+      recognition.start();
+      caption("Listening. Say start playing, games, how it works, FAQ, menu, or stop voice.");
+    } catch {
+      setActive(false);
+      caption("Speech recognition could not start. Press Start voice navigation to retry.");
+    }
   }
 
-  function flushTranscript(session, text, immediate) {
-    session.pending += text;
-    window.clearTimeout(session.timer);
-    const send = () => {
-      const command = session.pending.trim();
-      session.pending = "";
-      if (command) handleCommand(command);
-    };
-    if (immediate) send();
-    else session.timer = window.setTimeout(send, 650);
+  async function waitForIce(peer, signal) {
+    if (peer.iceGatheringState === "complete") return;
+    await new Promise((resolve, reject) => {
+      const cleanup = () => {
+        window.clearTimeout(timeout);
+        peer.removeEventListener("icegatheringstatechange", changed);
+        signal.removeEventListener("abort", aborted);
+      };
+      const changed = () => {
+        if (peer.iceGatheringState !== "complete") return;
+        cleanup();
+        resolve();
+      };
+      const aborted = () => {
+        cleanup();
+        reject(new DOMException("Voice stopped", "AbortError"));
+      };
+      const timeout = window.setTimeout(() => {
+        cleanup();
+        reject(new Error("Voice connection timed out. Press Start voice navigation to retry."));
+      }, 10_000);
+      peer.addEventListener("icegatheringstatechange", changed);
+      signal.addEventListener("abort", aborted, { once: true });
+      if (signal.aborted) aborted();
+    });
   }
 
   async function startTranscription() {
-    caption("Browser speech recognition is unavailable. Connecting the live transcription companion…");
-    const session = { pending: "", timer: undefined, close: undefined };
+    if (!voiceState.active) return;
+    caption("Browser speech recognition is unavailable. Connecting live transcription…");
+    const generation = voiceState.generation;
+    const controller = new AbortController();
+    const session = { stream: null, peer: null, channel: null, pending: "", timer: null, closed: false, transport: null };
+    const current = () => voiceState.active && voiceState.generation === generation && !session.closed;
+    const close = () => {
+      session.closed = true;
+      window.clearTimeout(session.timer);
+      session.pending = "";
+      controller.abort();
+      session.channel?.close();
+      session.stream?.getTracks().forEach((track) => track.stop());
+      session.peer?.close();
+    };
+    const fail = (message) => {
+      if (!current()) return;
+      setActive(false);
+      caption(message);
+    };
+    voiceState.mode = "connecting";
+    voiceState.stop = close;
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      if (!current()) {
+        stream.getTracks().forEach((track) => track.stop());
+        return;
+      }
+      session.stream = stream;
       const peer = new RTCPeerConnection();
+      session.peer = peer;
       const channel = peer.createDataChannel("oai-events");
+      session.channel = channel;
       channel.onmessage = (event) => {
+        if (!current()) return;
         let payload;
         try {
           payload = JSON.parse(String(event.data));
@@ -231,47 +292,55 @@ if (voiceToggle && voiceCaptions) {
           return;
         }
         const text = payload.delta ?? payload.transcript;
-        if (payload.type === "session.input_transcript.delta" && text)
-          flushTranscript(session, text, false);
+        if (payload.type === "session.input_transcript.delta" && typeof text === "string") {
+          session.transport = "live";
+          session.pending += text;
+          window.clearTimeout(session.timer);
+          session.timer = window.setTimeout(() => {
+            if (!current()) return;
+            const command = session.pending.trim();
+            session.pending = "";
+            if (command) handleCommand(command);
+          }, 650);
+        }
         if (
+          session.transport !== "live" &&
           payload.type === "conversation.item.input_audio_transcription.completed" &&
           typeof payload.transcript === "string"
-        )
-          flushTranscript(session, payload.transcript, true);
-      };
-      channel.onerror = () => caption("The voice connection had an error. Press Start voice navigation to retry.");
-      peer.onconnectionstatechange = () => {
-        if (peer.connectionState === "failed" && voiceState.active) {
-          setActive(false);
-          caption("The voice connection ended. Press Start voice navigation to retry.");
+        ) {
+          session.transport = "compatibility";
+          handleCommand(payload.transcript);
         }
+        if (payload.type === "error")
+          fail("The voice service reported an error. Press Start voice navigation to retry.");
+      };
+      channel.onerror = () => fail("The voice connection had an error. Press Start voice navigation to retry.");
+      channel.onclose = () => fail("The voice connection ended. Press Start voice navigation to retry.");
+      peer.onconnectionstatechange = () => {
+        if (peer.connectionState === "failed" || peer.connectionState === "closed")
+          fail("The voice connection ended. Press Start voice navigation to retry.");
       };
       stream.getTracks().forEach((track) => peer.addTrack(track, stream));
       await peer.setLocalDescription(await peer.createOffer());
+      if (!current()) return;
+      await waitForIce(peer, controller.signal);
+      if (!current()) return;
       const response = await fetch("/api/voice/session", {
         method: "POST",
+        signal: AbortSignal.any([controller.signal, AbortSignal.timeout(25_000)]),
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ sdp: peer.localDescription?.sdp, mode: "lobby" }),
       });
-      const data = await response.json().catch(() => ({}));
+      const data = await response.json();
+      if (!current()) return;
       if (!response.ok) throw new Error(data.error ?? "Voice could not connect.");
-      await peer.setRemoteDescription({
-        type: "answer",
-        sdp: data.transport?.sdp ?? data.sdp,
-      });
-      session.close = () => {
-        channel.close();
-        stream.getTracks().forEach((track) => track.stop());
-        peer.close();
-      };
+      if (typeof data.transport?.sdp !== "string") throw new Error("Voice returned no connection. Press Start voice navigation to retry.");
+      await peer.setRemoteDescription({ type: "answer", sdp: data.transport.sdp });
+      if (!current()) return;
       voiceState.mode = "transcription";
-      voiceState.stop = () => {
-        session.close?.();
-        window.clearTimeout(session.timer);
-      };
       caption("Listening. Say start playing, games, how it works, FAQ, menu, or stop voice.");
     } catch (cause) {
-      session.close?.();
+      if (!current()) return;
       setActive(false);
       caption(cause instanceof Error ? cause.message : "Voice navigation could not start.");
     }

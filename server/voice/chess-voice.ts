@@ -426,7 +426,7 @@ export async function handleChessVoiceSession(
 
   const lobby = mode === "lobby";
   const greeting = lobby
-    ? "Say start the game, play chess, or ask for the setup options."
+    ? "Voice navigation is ready. Say start playing or help."
     : greetingFor(body.view);
   let upstream: Response;
   try {

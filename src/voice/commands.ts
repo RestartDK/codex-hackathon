@@ -33,15 +33,15 @@ export function localIntent(command: string): { name: string; args: Record<strin
   if (/^(start with (?:the )?defaults?|start defaults?)$/.test(text))
     return { name: "chess_setup", args: { action: "defaults", value: null } };
   if (/^(start game)$/.test(text)) return { name: "game_control", args: { action: "start_game" } };
-  if (/^(pause voice commands|pause commands|pause voice control)$/.test(text))
+  if (/^(pause voice commands|pause commands|pause voice control|pause listening|pause microphone)$/.test(text))
     return { name: "voice_control", args: { action: "pause_commands" } };
-  if (/^(resume voice commands|resume commands|resume voice control)$/.test(text))
+  if (/^(resume voice commands|resume commands|resume voice control|resume listening|continue listening)$/.test(text))
     return { name: "voice_control", args: { action: "resume_commands" } };
-  if (/^(mute microphone|mute the microphone)$/.test(text))
+  if (/^(mute (?:the )?(?:microphone|mic)|turn off (?:the )?(?:microphone|mic))$/.test(text))
     return { name: "voice_control", args: { action: "mute_microphone" } };
-  if (/^(unmute microphone|unmute the microphone)$/.test(text))
+  if (/^(unmute (?:the )?(?:microphone|mic)|turn on (?:the )?(?:microphone|mic))$/.test(text))
     return { name: "voice_control", args: { action: "unmute_microphone" } };
-  if (/^(end voice|stop voice|end the voice session)$/.test(text))
+  if (/^(end voice|stop voice|end the voice session|stop listening|disable listening|turn off voice)$/.test(text))
     return { name: "voice_control", args: { action: "end_voice" } };
   if (/^(voice status|read voice state|is voice listening)$/.test(text))
     return { name: "voice_control", args: { action: "read_state" } };
@@ -49,7 +49,7 @@ export function localIntent(command: string): { name: string; args: Record<strin
     return { name: "app_control", args: { action: "back" } };
   if (/^(close|dismiss|close dialog|close dialogue)$/.test(text))
     return { name: "app_control", args: { action: "close" } };
-  if (/^(review result|review the result|review the game|review moves)$/.test(text))
+  if (/^(review result|review the result|review game|review the game|review moves)$/.test(text))
     return { name: "app_control", args: { action: "review_result" } };
   if (/^(next step|next setup step)$/.test(text))
     return { name: "chess_setup", args: { action: "next", value: null } };

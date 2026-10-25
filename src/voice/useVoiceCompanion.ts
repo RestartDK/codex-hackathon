@@ -162,7 +162,7 @@ export function useVoiceCompanion(
           commandsPaused: commandsPausedRef.current,
           microphoneMuted: microphoneMutedRef.current,
         };
-      const result = applyVoiceControl(currentControlState(true), action);
+      const result = applyVoiceControl(currentControlState(channelRef.current?.readyState === "open"), action);
       if (result.effect === "pause") {
         commandsPausedRef.current = true;
         setCommandsPaused(true);
@@ -221,7 +221,7 @@ export function useVoiceCompanion(
     [audioMuted, send],
   );
 
-  const cleanup = useCallback(() => {
+  const cleanup = useCallback((controlPolicy: "reset" | "preserve" = "reset") => {
     generation.current++;
     starting.current = false;
     requestRef.current?.abort();
@@ -253,10 +253,12 @@ export function useVoiceCompanion(
     speechContextRef.current = null;
     speechAnalyserRef.current = null;
     setIsSpeaking(false);
-    setMicrophoneMuted(false);
-    setCommandsPaused(false);
-    microphoneMutedRef.current = false;
-    commandsPausedRef.current = false;
+    if (controlPolicy === "reset") {
+      setMicrophoneMuted(false);
+      setCommandsPaused(false);
+      microphoneMutedRef.current = false;
+      commandsPausedRef.current = false;
+    }
     setStatus("idle");
   }, [executor]);
 
@@ -321,7 +323,7 @@ export function useVoiceCompanion(
         case "closed":
           if (closeResolver.current) closeResolver.current();
           else {
-            cleanup();
+            cleanup("preserve");
             scheduleRecovery("The voice connection ended.");
           }
           return;
@@ -411,6 +413,7 @@ export function useVoiceCompanion(
         return;
       }
       streamRef.current = stream;
+      setMicrophoneEnabled(!microphoneMutedRef.current);
       connectionTimeout.current = setTimeout(() => {
         if (generation.current !== attempt) return;
         cleanup();
@@ -455,7 +458,7 @@ export function useVoiceCompanion(
           disconnectTimeout.current = null;
         }
         const fail = () => {
-          cleanup();
+          cleanup("preserve");
           scheduleRecovery("The voice connection ended.");
         };
         if (peer.connectionState === "failed") fail();
@@ -507,7 +510,7 @@ export function useVoiceCompanion(
           : "Voice startup failed. Check microphone permission and try again.",
       );
     }
-  }, [audioMuted, cleanup, gameId, handleEvent, scheduleRecovery, status, volume, view]);
+  }, [audioMuted, cleanup, gameId, handleEvent, scheduleRecovery, setMicrophoneEnabled, status, volume, view]);
 
   stopRef.current = stop;
   startRef.current = start;

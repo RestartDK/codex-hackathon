@@ -59,9 +59,7 @@ export function parseVoiceControlAction(rawArguments: string): VoiceControlActio
 }
 
 export function voiceControlAllowedWhilePaused(toolName: string): boolean {
-  return (
-    toolName === voiceControlTool.name || toolName === "navigate_app" || toolName === "app_control"
-  );
+  return [voiceControlTool.name, "navigate_app", "app_control", "get_preferences", "set_preference", "submit_player_command"].includes(toolName);
 }
 
 export function pausedCommandMessage(state: VoiceControlState): string {
@@ -71,6 +69,7 @@ export function pausedCommandMessage(state: VoiceControlState): string {
 }
 
 export function describeVoiceControlState(state: VoiceControlState): string {
+  if (!state.connected) return "Voice is not connected. Use the on-screen Start voice companion control to connect.";
   const connection = state.connected ? "Voice is connected" : "Voice is not connected";
   const commands = state.commandsPaused ? "commands paused" : "commands active";
   const microphone = state.microphoneMuted ? "microphone muted" : "microphone on";
@@ -81,6 +80,8 @@ export function applyVoiceControl(
   state: VoiceControlState,
   action: VoiceControlAction,
 ): VoiceControlResult {
+  if (!state.connected && action !== "read_state")
+    return { message: describeVoiceControlState(state), effect: "none", state };
   switch (action) {
     case "pause_commands": {
       const next = { ...state, commandsPaused: true };

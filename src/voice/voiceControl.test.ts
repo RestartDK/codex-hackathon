@@ -55,6 +55,18 @@ describe("voice lifecycle control", () => {
     expect(state).toBe("Voice is connected; commands paused; microphone muted.");
   });
 
+  it("does not claim disconnected capture is listening or mutate its controls", () => {
+    const off = { ...connected, connected: false };
+    expect(applyVoiceControl(off, "read_state").message).toContain("not connected");
+    const unmute = applyVoiceControl(off, "unmute_microphone");
+    expect(unmute.effect).toBe("none");
+    expect(unmute.state).toBe(off);
+    expect(unmute.message).not.toContain("listening again");
+    expect(voiceControlAllowedWhilePaused("get_preferences")).toBe(true);
+    expect(voiceControlAllowedWhilePaused("set_preference")).toBe(true);
+    expect(voiceControlAllowedWhilePaused("submit_player_command")).toBe(true);
+  });
+
   it("bounds automatic recovery attempts", () => {
     const delays = VOICE_RECOVERY_DELAYS_MS.map((_, attempt) => recoveryDelay(attempt));
     expect(delays).toEqual([...VOICE_RECOVERY_DELAYS_MS]);

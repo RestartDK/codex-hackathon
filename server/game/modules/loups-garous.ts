@@ -119,10 +119,6 @@ function mentionedPlayers(game: Game, text: string, actorId: string) {
     .map(({ candidate }) => candidate);
 }
 
-/**
- * The Witch may spend both potions in one night, so a spoken sentence that names
- * a save and a poison is resolved as one validated night action.
- */
 function witchPotionPair(
   game: Game,
   actorId: string,

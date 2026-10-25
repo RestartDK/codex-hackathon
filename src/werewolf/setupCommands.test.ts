@@ -47,10 +47,7 @@ describe("Loups-Garous setup voice commands", () => {
       enabled: true,
     });
     expect(parseWerewolfSetupCommand("read the setup", 8)).toEqual({ kind: "read" });
-    expect(parseWerewolfSetupCommand("start with the defaults", 8)).toEqual({
-      kind: "start",
-      quickTest: false,
-    });
+    expect(parseWerewolfSetupCommand("start with the defaults", 8)).toEqual({ kind: "defaults" });
     expect(parseWerewolfSetupCommand("start a quick test", 8)).toEqual({
       kind: "start",
       quickTest: true,
@@ -85,11 +82,17 @@ describe("Loups-Garous public speech routing", () => {
     expect(looksLikeControlCommand("cancel")).toBe(true);
     expect(looksLikeControlCommand("undo")).toBe(true);
     expect(looksLikeControlCommand("pause game")).toBe(true);
+    expect(looksLikeControlCommand("set audio balance for Emma to the left")).toBe(true);
   });
 
   it("keeps ordinary day speech public", () => {
     expect(looksLikeControlCommand("I think Lucas is suspicious")).toBe(false);
     expect(looksLikeControlCommand("Emma, who do you suspect?")).toBe(false);
     expect(looksLikeControlCommand("tell the village I trust Lucas")).toBe(false);
+    expect(looksLikeControlCommand("Stop being so suspicious")).toBe(false);
+    expect(looksLikeControlCommand("Read the room")).toBe(false);
+    expect(looksLikeControlCommand("Go ahead, Emma")).toBe(false);
+    expect(looksLikeControlCommand("save Noah and poison Emma")).toBe(false);
+    expect(looksLikeControlCommand("use both potions")).toBe(false);
   });
 });

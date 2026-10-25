@@ -11,6 +11,7 @@ export type WerewolfSetupCommand =
   | { kind: "read" }
   | { kind: "back" }
   | { kind: "cancel" }
+  | { kind: "defaults" }
   | { kind: "start"; quickTest: boolean };
 
 const NUMBER_WORDS: Record<string, number> = {
@@ -65,6 +66,7 @@ export function parseWerewolfSetupCommand(
     return { kind: "read" };
   if (/^(back|go back|previous step)$/u.test(command)) return { kind: "back" };
   if (/^(cancel|never mind|cancel setup|stop setup)$/u.test(command)) return { kind: "cancel" };
+  if (/^start (?:with (?:the )?)?defaults?$/u.test(command)) return { kind: "defaults" };
   if (/\b(quick|test)\b/u.test(command) && /\b(start|begin|play|try|run)\b/u.test(command))
     return { kind: "start", quickTest: true };
   if (

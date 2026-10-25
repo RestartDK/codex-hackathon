@@ -28,7 +28,6 @@ export default function AppShell() {
     return new URLSearchParams(window.location.search).get("voice") === "1";
   });
   useEffect(() => {
-    // The landing handoff is consumed once, so it never becomes a standing microphone opt-in.
     const url = new URL(window.location.href);
     if (url.searchParams.get("voice") !== "1") return;
     url.searchParams.delete("voice");
