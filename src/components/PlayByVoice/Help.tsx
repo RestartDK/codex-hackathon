@@ -61,8 +61,8 @@ export default function Help({
           <h2>Pick up later</h2>
           <p>
             Your chess position and preferences stay on this device. Leaving a game saves and pauses
-            it. Chess and Loups-Garous are playable, but leaving a Loups-Garous match returns you to
-            setup. Tic-Tac-Toe is coming soon.
+            it. Chess, Ludo, The Intercept, and Tic-Tac-Toe keep separate saves. Loups-Garous is
+            also playable; leaving a village returns you to setup.
           </p>
         </section>
       </div>

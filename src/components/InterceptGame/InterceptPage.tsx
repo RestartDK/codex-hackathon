@@ -7,7 +7,7 @@ import {
   type InterceptToolBridge,
 } from "../../games/intercept/interceptTools";
 import { useInterceptGame } from "../../games/intercept/useInterceptGame";
-import { useVoiceCompanion } from "../../voice/useVoiceCompanion";
+import { useLibraryVoice } from "../../voice/useLibraryVoice";
 import { Button } from "../ui/Button";
 import { Card } from "../ui/Card";
 
@@ -45,7 +45,7 @@ export default function InterceptPage({
     );
   }
   const executor = executorRef.current;
-  const voice = useVoiceCompanion(executor, settings.screenReaderMode, "intercept");
+  const { voice, runGlobalCommand } = useLibraryVoice(executor, "intercept");
   const [typedCommand, setTypedCommand] = useState("");
   const [response, setResponse] = useState(
     "Ready. Start the voice companion or choose with the controls below.",
@@ -86,6 +86,11 @@ export default function InterceptPage({
       .replace(/\s+/g, " ");
     setTypedCommand("");
     if (!normalized) return;
+    const global = await runGlobalCommand(normalized);
+    if (global !== null) {
+      setResponse(global);
+      return;
+    }
     if (/^(guide|tutorial|how to play|help)$/.test(normalized)) {
       setResponse(GUIDE);
       if (voice.status === "connected") voice.announce(GUIDE);
@@ -165,9 +170,9 @@ export default function InterceptPage({
                 {voice.status === "connected"
                   ? "Listening"
                   : voice.status === "connecting"
-                    ? "ConnectingÃ¢â‚¬Â¦"
+                    ? "Connecting…"
                     : voice.status === "closing"
-                      ? "Ending voiceÃ¢â‚¬Â¦"
+                      ? "Ending voice…"
                       : voice.status === "error"
                         ? "Voice unavailable"
                         : "Voice is off"}
@@ -199,7 +204,7 @@ export default function InterceptPage({
             )}
           </div>
           <p className="voice-help">
-            Try: Ã¢â‚¬Å“choice two,Ã¢â‚¬Â Ã¢â‚¬Å“repeat,Ã¢â‚¬Â Ã¢â‚¬Å“recap,Ã¢â‚¬Â Ã¢â‚¬Å“undo,Ã¢â‚¬Â or Ã¢â‚¬Å“list the choices.Ã¢â‚¬Â
+            Try: “choice two,” “repeat,” “recap,” “undo,” or “list the choices.”
           </p>
           <p id="intercept-dashboard" className="dashboard-overview">
             {DASHBOARD}
@@ -392,10 +397,9 @@ export default function InterceptPage({
           </ol>
         </details>
         <p className="intercept-credit">
-          The Intercept story Ã‚Â© 2016 inkle Ltd., used under the MIT License.
+          The Intercept story © 2016 inkle Ltd., used under the MIT License.
         </p>
       </main>
     </div>
   );
 }
-

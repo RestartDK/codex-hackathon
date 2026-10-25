@@ -8,7 +8,7 @@ at commit `84ffb2e4af5128eb41e821290827a3b40a7df78c`.
 
 MIT License
 
-Copyright (c) 2026 MiraÃƒÂ§ Deprem
+Copyright (c) 2026 Miraç Deprem
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -123,4 +123,3 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
-

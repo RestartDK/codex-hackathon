@@ -3,7 +3,7 @@ import { Mic, MicOff, Square, Volume2 } from "lucide-react";
 import { Button } from "../ui/Button";
 import { Card } from "../ui/Card";
 import type { Preferences } from "../../hooks/useSettings";
-import { useVoiceCompanion } from "../../voice/useVoiceCompanion";
+import { useLibraryVoice } from "../../voice/useLibraryVoice";
 import { useTicTacToeGame } from "../../games/tic-tac-toe/useTicTacToeGame";
 import {
   parseTicTacToePosition,
@@ -97,7 +97,7 @@ export default function TicTacToePage({
       () => refreshPending((value) => value + 1),
     );
   const executor = executorRef.current;
-  const voice = useVoiceCompanion(executor, settings.screenReaderMode, "tic-tac-toe");
+  const { voice, runGlobalCommand } = useLibraryVoice(executor, "tic-tac-toe");
   const previousVoiceStatus = useRef(voice.status);
   const lastAnnouncedRevision = useRef(game.state.revision);
   const cellsRef = useRef<Array<HTMLButtonElement | null>>([]);
@@ -139,6 +139,11 @@ export default function TicTacToePage({
     const value = typedCommand.trim();
     setTypedCommand("");
     if (!value) return;
+    const global = await runGlobalCommand(value);
+    if (global !== null) {
+      setResponse(global);
+      return;
+    }
     const normalized = value
       .toLowerCase()
       .replace(/[,.!?]/g, "")
@@ -226,9 +231,9 @@ export default function TicTacToePage({
                 {voice.status === "connected"
                   ? "Listening"
                   : voice.status === "connecting"
-                    ? "ConnectingÃ¢â‚¬Â¦"
+                    ? "Connecting…"
                     : voice.status === "closing"
-                      ? "Ending voiceÃ¢â‚¬Â¦"
+                      ? "Ending voice…"
                       : voice.status === "error"
                         ? "Voice unavailable"
                         : "Voice is off"}
@@ -259,8 +264,8 @@ export default function TicTacToePage({
             )}
           </div>
           <p className="voice-help">
-            Try: Ã¢â‚¬Å“play center,Ã¢â‚¬Â Ã¢â‚¬Å“top left,Ã¢â‚¬Â Ã¢â‚¬Å“describe the board,Ã¢â‚¬Â Ã¢â‚¬Å“available
-            squares,Ã¢â‚¬Â or Ã¢â‚¬Å“suggest a move.Ã¢â‚¬Â
+            Try: “play center,” “top left,” “describe the board,” “available squares,” or “suggest a
+            move.”
           </p>
           <p className="dashboard-overview">{DASHBOARD}</p>
           {game.awaitingStartChoice && (
@@ -416,7 +421,7 @@ export default function TicTacToePage({
               })}
             </div>
             <p className="tic-tac-toe-board-help">
-              Squares 1Ã¢â‚¬â€œ9 run left to right, top to bottom. Arrow keys move focus; Enter or Space
+              Squares 1–9 run left to right, top to bottom. Arrow keys move focus; Enter or Space
               selects.
             </p>
           </section>
@@ -451,9 +456,9 @@ export default function TicTacToePage({
                   });
                 }}
               >
-                <option value="easy">Easy Ã¢â‚¬â€ random</option>
-                <option value="medium">Medium Ã¢â‚¬â€ tactical</option>
-                <option value="hard">Hard Ã¢â‚¬â€ unbeatable</option>
+                <option value="easy">Easy — random</option>
+                <option value="medium">Medium — tactical</option>
+                <option value="hard">Hard — unbeatable</option>
               </select>
             </Card>
             <Card>
@@ -462,8 +467,7 @@ export default function TicTacToePage({
                 <ol className="tic-tac-toe-history">
                   {game.state.moves.map((move, index) => (
                     <li key={`${index}-${move.index}`}>
-                      {move.mark === "X" ? "You: X" : "Computer: O"} Ã¢â‚¬â€{" "}
-                      {POSITION_NAMES[move.index]}
+                      {move.mark === "X" ? "You: X" : "Computer: O"} — {POSITION_NAMES[move.index]}
                     </li>
                   ))}
                 </ol>
@@ -539,4 +543,3 @@ export default function TicTacToePage({
     </div>
   );
 }
-

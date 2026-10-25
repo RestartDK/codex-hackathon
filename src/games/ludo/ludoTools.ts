@@ -31,7 +31,12 @@ export function createLudoToolExecutor(
   getBridge: () => LudoToolBridge,
   onPendingChange: () => void = () => undefined,
 ) {
-  let pending: { id: string; description: string; kind: "token" | "control" } | null = null;
+  let pending: {
+    id: string;
+    description: string;
+    kind: "token" | "control";
+    revision: number;
+  } | null = null;
   let nextId = 1;
 
   const invalidatePending = () => {
@@ -39,7 +44,12 @@ export function createLudoToolExecutor(
     onPendingChange();
   };
   const propose = (description: string, kind: "token" | "control" = "token") => {
-    pending = { id: `ludo-action-${nextId++}`, description, kind };
+    pending = {
+      id: `ludo-action-${nextId++}`,
+      description,
+      kind,
+      revision: getBridge().state.revision,
+    };
     onPendingChange();
     return json({ status: "confirmation_required", actionId: pending.id, description });
   };
@@ -112,6 +122,13 @@ export function createLudoToolExecutor(
       const action = pending;
       pending = null;
       onPendingChange();
+      if (action.revision !== bridge.state.revision) {
+        bridge.cancelToken();
+        return json({
+          status: "stale",
+          message: "The board changed, so that action was cancelled. Ask again on your turn.",
+        });
+      }
       const result =
         action.kind === "token"
           ? bridge.confirmToken()
@@ -126,7 +143,11 @@ export function createLudoToolExecutor(
       return json({ status: hadPending ? "cancelled" : "nothing_pending" });
     }
     if (name === "continue_turn") return json(bridge.continueGame());
-    if (name === "correct_last_move") return json(bridge.correct());
+    if (name === "correct_last_move") {
+      invalidatePending();
+      bridge.cancelToken();
+      return json(bridge.correct());
+    }
     if (name === "propose_game_control") {
       const action = String(args.action ?? "");
       if (action === "pause") return json(bridge.pauseGame());
@@ -155,4 +176,3 @@ export function createLudoToolExecutor(
     getPending: () => (pending ? { id: pending.id, description: pending.description } : null),
   };
 }
-

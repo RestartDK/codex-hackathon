@@ -92,8 +92,9 @@ export function useVoiceCompanion(
   audioMuted: boolean,
   volumeOrGameId: number | string,
   view: AvailableDestination | "loading" | "chess-setup" = "home",
+  gameVolume = 100,
 ) {
-  const volume = typeof volumeOrGameId === "number" ? volumeOrGameId : 100;
+  const volume = typeof volumeOrGameId === "number" ? volumeOrGameId : gameVolume;
   const gameId = typeof volumeOrGameId === "string" ? volumeOrGameId : "chess";
   const [status, setStatus] = useState<VoiceStatus>("idle");
   const [error, setError] = useState<string | null>(null);
@@ -101,6 +102,8 @@ export function useVoiceCompanion(
   const [microphoneMuted, setMicrophoneMuted] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const speechDeadlineRef = useRef(0);
+  const speechContextRef = useRef<AudioContext | null>(null);
+  const speechAnalyserRef = useRef<AnalyserNode | null>(null);
   const peerRef = useRef<RTCPeerConnection | null>(null);
   const channelRef = useRef<RTCDataChannel | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -121,6 +124,7 @@ export function useVoiceCompanion(
 
   const announce = useCallback(
     (content: string) => {
+      if (channelRef.current?.readyState !== "open") return;
       setCaption("");
       transcriptSource.current = null;
       send({
@@ -163,6 +167,9 @@ export function useVoiceCompanion(
     executor.cancelRequests?.();
     executor.invalidatePending?.();
     speechDeadlineRef.current = 0;
+    void speechContextRef.current?.close().catch(() => undefined);
+    speechContextRef.current = null;
+    speechAnalyserRef.current = null;
     setIsSpeaking(false);
     setMicrophoneMuted(false);
     setStatus("idle");
@@ -206,7 +213,7 @@ export function useVoiceCompanion(
           return;
         case "error":
           setError(
-            "The voice service reported an error. End voice and try again. Your chess game is safe.",
+            "The voice service reported an error. End voice and try again. Your game is saved.",
           );
           return;
         case "transcript": {
@@ -284,6 +291,17 @@ export function useVoiceCompanion(
       audioRef.current = audio;
       peer.ontrack = (event) => {
         audio.srcObject = event.streams[0];
+        try {
+          const context = new AudioContext();
+          const analyser = context.createAnalyser();
+          analyser.fftSize = 256;
+          context.createMediaStreamSource(event.streams[0]).connect(analyser);
+          speechContextRef.current = context;
+          speechAnalyserRef.current = analyser;
+          void context.resume().catch(() => undefined);
+        } catch {
+          /* Use the bounded timer if playback analysis is unavailable. */
+        }
         void audio
           .play()
           .catch(() =>
@@ -302,7 +320,7 @@ export function useVoiceCompanion(
           cleanup();
           setStatus("error");
           setError(
-            "The voice connection ended. Your chess game is still saved. You can reconnect or use typed commands.",
+            "The voice connection ended. Your game is saved. You can reconnect or use typed commands.",
           );
         };
         if (peer.connectionState === "failed") fail();
@@ -378,8 +396,15 @@ export function useVoiceCompanion(
       setIsSpeaking(false);
       return;
     }
+    const samples = new Uint8Array(256);
     const timer = window.setInterval(() => {
-      if (Date.now() >= speechDeadlineRef.current) setIsSpeaking(false);
+      const analyser = speechAnalyserRef.current;
+      if (analyser) {
+        analyser.getByteTimeDomainData(samples);
+        if (samples.some((sample) => Math.abs(sample - 128) > 3))
+          speechDeadlineRef.current = Date.now() + 650;
+      }
+      setIsSpeaking(Date.now() < speechDeadlineRef.current);
     }, 150);
     return () => window.clearInterval(timer);
   }, [audioMuted, status]);
@@ -396,4 +421,3 @@ export function useVoiceCompanion(
     announce,
   };
 }
-

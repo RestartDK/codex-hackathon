@@ -81,6 +81,21 @@ export default function ChessSetup({
           Set up your game
         </h1>
         <p>Choose your preferences, or say “Start with the defaults.”</p>
+        <button
+          type="button"
+          className="pill-button primary"
+          onClick={() =>
+            onStart({
+              gameMode: "computer",
+              difficulty: "beginner",
+              playerColor: "w",
+              timerMinutes: null,
+              explainRules: false,
+            })
+          }
+        >
+          Play now with defaults
+        </button>
       </div>
 
       <div className="setup-panel" aria-live="polite">

@@ -26,6 +26,19 @@ const tools = [
   navigationTool,
   {
     type: "function",
+    name: "promote_pawn",
+    description:
+      "Choose queen, rook, bishop or knight when a board move is waiting for pawn promotion.",
+    parameters: {
+      type: "object",
+      properties: { piece: { type: "string", enum: ["queen", "rook", "bishop", "knight"] } },
+      required: ["piece"],
+      additionalProperties: false,
+    },
+    strict: true,
+  },
+  {
+    type: "function",
     name: "get_position",
     description: "Get a concise, authoritative summary of the current chess position.",
     parameters: { type: "object", properties: {}, additionalProperties: false },
@@ -159,6 +172,7 @@ const tools = [
           type: "string",
           enum: [
             "pause",
+            "start_game",
             "resume",
             "new_game",
             "undo",
@@ -223,6 +237,7 @@ const GREETINGS = {
 } as const;
 
 const INSTRUCTIONS = `You are the calm English-speaking companion in Play by Voice for blind and low-vision players.
+In chess setup, "start with defaults" or "start game" must call game_control with start_game. Use set_preference for color, opponent and difficulty selections before starting.
 
 Backchannel policy:
 Use sparse, brief backchannels. A short command such as play chess, undo, pause, or help is an action, never a backchannel to ignore.
@@ -458,5 +473,3 @@ export async function handleChessVoiceSession(
 
   return Response.json({ transport: { sdp: session.transport.sdp } });
 }
-
-
