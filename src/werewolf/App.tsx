@@ -1,17 +1,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { FormEvent, ReactNode } from "react";
-import type { FeedEntry, GameView, Role } from "../server/game/types.js";
-import { defaultRoleCounts } from "../server/game/rules.js";
+import type { FeedEntry, GameView, Role } from "../../server/game/types.js";
+import { defaultRoleCounts } from "../../server/game/rules.js";
 import {
   createBrowserNarrationBackend,
   primeBrowserNarration,
   useStoryAudio,
-} from "./voice/browser-narration.js";
-import { startLiveVoice, type LiveVoiceSession } from "./voice/live-voice.js";
+} from "../voice/browser-narration.js";
+import { startLiveVoice, type LiveVoiceSession } from "../voice/live-voice.js";
 import {
   startPersistentSpeechRecognition,
   type SpeechRecognitionSession,
-} from "./voice/speech-recognition.js";
+} from "../voice/speech-recognition.js";
 
 type Session = { game: GameView; token: string };
 type GuideMessage = { role: "user" | "assistant"; text: string; mode?: "model" | "local" };
@@ -338,7 +338,15 @@ function updatesForReading(game: GameView, command: string) {
   return [`Reading ${label}.`, ...entries.map(readableFeedEntry)];
 }
 
-export default function App() {
+export default function WerewolfApp({
+  narrationVolume,
+  onNarrationVolumeChange,
+  onShowGamePicker,
+}: {
+  narrationVolume: number;
+  onNarrationVolumeChange: (volume: number) => void;
+  onShowGamePicker: () => void;
+}) {
   const [session, setSession] = useState<Session>();
   const [presentedGame, setPresentedGame] = useState<GameView>();
   const [name] = useState("You");
@@ -405,7 +413,13 @@ export default function App() {
       instant: true,
     },
     backend: narrationBackend,
+    initialVolume: narrationVolume,
+    onVolumeChange: onNarrationVolumeChange,
   });
+
+  useEffect(() => {
+    storyAudio.updateVolume(narrationVolume);
+  }, [narrationVolume]);
 
   function commitGame(game: GameView, token: string) {
     const previous = latestGameRef.current;
@@ -1273,11 +1287,14 @@ export default function App() {
         className="reference-wordmark"
         href="#top"
         id="top"
-        onClick={() => setCinematic(undefined)}
+        onClick={(event) => {
+          event.preventDefault();
+          onShowGamePicker();
+        }}
       >
         <strong>Play by Voice</strong>
         <span>•</span>
-        <b>Chess</b>
+        <b>Loups-Garous</b>
       </a>
       <nav aria-label="Game options">
         <button type="button" onClick={storyAudio.toggleMuted}>

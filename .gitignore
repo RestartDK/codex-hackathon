@@ -26,3 +26,7 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Generated from the pinned Stockfish package by scripts/copy-stockfish.mjs.
+public/stockfish/*.js
+public/stockfish/*.wasm

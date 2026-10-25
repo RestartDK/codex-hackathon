@@ -1,6 +1,8 @@
-# Loups-Garous
+# Play by Voice
 
-A single-player, browser-based social deduction game. You receive one secret role and play with NPC villagers. The interface stays intentionally small: a village roster, a private role panel, available actions, and the village journal.
+Choose Chess or Loups-Garous from the game picker. Audio Settings and Help are available from the shared shell. Tic-Tac-Toe is not playable yet.
+
+Chess runs in the browser with Stockfish and saves your position locally. Loups-Garous is a single-player social deduction game with NPC villagers. Use **Games** to return to the picker. Leaving a Loups-Garous match asks for confirmation because it cannot be resumed from the picker.
 
 The project uses the supplied React, Vite+, and Nitro application. Vite+ builds the browser app and Nitro API into `.output/` for a regular Node server.
 
@@ -33,7 +35,9 @@ bun run build
 bun run start
 ```
 
-The production server listens on port 3000 by default. `bun run smoke http://127.0.0.1:3000` checks the app shell, browser entry, and health route.
+The production server listens on port 3000 by default. `bun run smoke http://127.0.0.1:3000` checks the app shell, browser entry, health route, Stockfish worker and WebAssembly assets, and both voice endpoints without calling a provider.
+
+The dev and build scripts copy the engine assets from pinned `stockfish@19.0.1` into `public/stockfish/`. The generated JavaScript and WebAssembly files are not committed. The Stockfish license remains in `public/stockfish/Copying.txt`.
 
 ## Deploy to Netlify
 
@@ -73,7 +77,7 @@ NPCs retain short public-conversation memories and build suspicions from accusat
 
 The API is shared by registered game modules. `GET /api/games` returns the game catalog; `POST /api/games` accepts a `gameType` (defaults to `loups-garous`) and the selected module's create options. Session reads and action writes use the same authenticated routes for every registered game. A failed action runs against a private state copy and is discarded; successful actions are committed once and can be safely retried with the same request ID.
 
-To add a game, create a module under `server/game/modules/` that implements `GameModule<State, CreateInput, ActionInput, PublicView>`, then register it in `server/game/registry.ts`. Each module owns its state, validates its create/action inputs, applies its rules, and returns a player-safe view. The shared API handles game lookup, sessions, action locking, request IDs, and catalog discovery. Add a matching frontend renderer for that module's view shape; the current browser screen is still Loups-Garous-specific.
+To add a game, create a module under `server/game/modules/` that implements `GameModule<State, CreateInput, ActionInput, PublicView>`, then register it in `server/game/registry.ts`. Each module owns its state, validates its create/action inputs, applies its rules, and returns a player-safe view. The shared API handles game lookup, sessions, action locking, request IDs, and catalog discovery. Add a matching frontend renderer for that module's view shape. The werewolf frontend uses this API; Chess runs separately in the browser.
 
 Modules can advertise typed/voice-command and undo support. A module can implement `parseCommand` to translate typed text or a speech transcript into one of its validated actions; the shared action route accepts `{ "command": "..." }` and applies the resulting action transactionally. Loups-Garous supports commands such as “start the game”, “investigate Emma”, “wait for dawn”, “hear the villagers”, “I accuse Emma”, “vote Emma”, “pause game”, and “say …”. The always-on Voice Companion uses the same command path, while typed controls remain available. Undo remains unsupported in Loups-Garous; another module can expose an `undoAction` hook.
 
@@ -81,7 +85,10 @@ The default store is still in-memory and single-process: games and session token
 
 ## Project structure
 
-- `src/` — browser setup and gameplay interface
+- `src/shell/` — exclusive game mounting and shared preferences
+- `src/app/` and `src/components/PlayByVoice/` — picker, Chess, Audio Settings, and Help
+- `src/chess/` — browser chess rules and engine integration
+- `src/werewolf/` — Loups-Garous interface
 - `server/api/` — Nitro game catalog, session, action, and health endpoints
 - `server/game/engine.ts` — deterministic game rules and player views
 - `server/game/module.ts` and `registry.ts` — typed module contract and game catalog

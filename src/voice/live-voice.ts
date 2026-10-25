@@ -12,6 +12,8 @@ export type LiveVoiceCallbacks = {
 export type StartLiveVoiceOptions = LiveVoiceCallbacks & {
   gameId: string;
   sessionToken: string;
+  /** Lets an owning screen cancel startup before a microphone or connection leaks. */
+  signal?: AbortSignal;
 };
 
 type LiveTransportEvent = {
@@ -31,6 +33,7 @@ export async function startLiveVoice({
   onInputTranscript,
   onInputTranscriptComplete,
   onClosed,
+  signal,
 }: StartLiveVoiceOptions): Promise<LiveVoiceSession> {
   if (!navigator.mediaDevices?.getUserMedia)
     throw new Error("Live voice needs a browser with microphone support.");
@@ -43,6 +46,12 @@ export async function startLiveVoice({
   let inputPauseTimer: number | undefined;
   let inputTurnFinalized = false;
   let transcriptTransport: "live" | "compatibility" | undefined;
+  let stopOnAbort: (() => void) | undefined;
+
+  const throwIfAborted = () => {
+    if (signal?.aborted)
+      throw signal.reason ?? new DOMException("The operation was aborted.", "AbortError");
+  };
 
   const clearInputPauseTimer = () => {
     if (inputPauseTimer !== undefined) window.clearTimeout(inputPauseTimer);
@@ -74,14 +83,22 @@ export async function startLiveVoice({
     if (closed) return;
     closed = true;
     clearInputPauseTimer();
+    if (stopOnAbort) signal?.removeEventListener("abort", stopOnAbort);
     dataChannel?.close();
+    dataChannel = undefined;
     stream?.getTracks().forEach((track) => track.stop());
+    stream = undefined;
     peerConnection?.close();
+    peerConnection = undefined;
     onClosed();
     onStatus(status);
   };
 
+  stopOnAbort = () => stop();
+  signal?.addEventListener("abort", stopOnAbort, { once: true });
+
   try {
+    throwIfAborted();
     onStatus("Requesting microphone…");
     stream = await navigator.mediaDevices.getUserMedia({
       audio: {
@@ -90,6 +107,7 @@ export async function startLiveVoice({
         autoGainControl: true,
       },
     });
+    throwIfAborted();
     peerConnection = new RTCPeerConnection();
     dataChannel = peerConnection.createDataChannel("oai-events");
     dataChannel.onmessage = (event) => {
@@ -137,10 +155,13 @@ export async function startLiveVoice({
       method: "POST",
       headers: { "Content-Type": "application/json", "X-Game-Session": sessionToken },
       body: JSON.stringify({ sdp: offer.sdp }),
+      signal,
     });
     const data = await response.json();
     if (!response.ok) throw new Error(data.error ?? "Could not start live voice.");
+    throwIfAborted();
     await peerConnection.setRemoteDescription({ type: "answer", sdp: data.sdp });
+    throwIfAborted();
     return { stop: () => stop() };
   } catch (cause) {
     stop();
