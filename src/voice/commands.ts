@@ -8,7 +8,7 @@ export function localIntent(command: string): { name: string; args: object } | n
     .trim()
     .toLowerCase()
     .replace(/[,.?!]/g, "")
-    .replace(/[“”"]/g, "");
+    .replace(/[â€œâ€"]/g, "");
   if (/^(no|cancel|never mind|nevermind)$/.test(text)) return { name: "cancel_action", args: {} };
   if (/^(chess|play chess|start chess|open chess)$/.test(text))
     return { name: "navigate_app", args: { destination: "chess" } };
@@ -18,6 +18,12 @@ export function localIntent(command: string): { name: string; args: object } | n
     )
   )
     return { name: "navigate_app", args: { destination: "loups-garous" } };
+  if (/^(ludo|play ludo|start ludo|open ludo)$/.test(text))
+    return { name: "navigate_app", args: { destination: "ludo" } };
+  if (/^(the intercept|intercept|play (?:the )?intercept|open (?:the )?intercept)$/.test(text))
+    return { name: "navigate_app", args: { destination: "intercept" } };
+  if (/^(tic tac toe|tic-tac-toe|play tic tac toe|open tic tac toe)$/.test(text))
+    return { name: "navigate_app", args: { destination: "tic-tac-toe" } };
   if (/^(home|go home|leave game|leave the game|game picker)$/.test(text))
     return { name: "navigate_app", args: { destination: "home" } };
   if (/^(settings|audio|audio settings|open settings)$/.test(text))
@@ -60,7 +66,7 @@ export function localIntent(command: string): { name: string; args: object } | n
   const square = text.match(/^(?:what(?: is|'s) on |inspect )([a-h][1-8])$/);
   if (square) return { name: "inspect_square", args: { square: square[1] } };
   const move = text.match(
-    /^(?:move )?([a-h][1-8])\s*(?:to|→|-)\s*([a-h][1-8])(?:\s+(queen|rook|bishop|knight))?$/,
+    /^(?:move )?([a-h][1-8])\s*(?:to|â†’|-)\s*([a-h][1-8])(?:\s+(queen|rook|bishop|knight))?$/,
   );
   if (move)
     return {
@@ -110,3 +116,4 @@ export function formatToolReply(raw: string): string {
   if ("status" in result && result.status === "cancelled") return "Cancelled. Nothing was changed.";
   return "Done.";
 }
+

@@ -1,8 +1,8 @@
 # Play by Voice
 
-Choose Chess or Loups-Garous from the game picker. Audio Settings and Help are available from the shared shell. Tic-Tac-Toe is not playable yet.
+Choose Chess, Loups-Garous, Ludo, The Intercept, or Tic-Tac-Toe from the shared game picker. Audio Settings and Help remain available from the Play by Voice shell.
 
-Chess runs in the browser with Stockfish and saves your position locally. Loups-Garous is a single-player social deduction game with NPC villagers. Use **Games** to return to the picker. Commands execute immediately without confirmation prompts. Leaving a Loups-Garous match returns directly to the picker; that match cannot be resumed.
+Chess runs in the browser with Stockfish and saves your position locally. Loups-Garous is a single-player social deduction game with NPC villagers. Ludo is a two-player race against the computer, The Intercept is an authored interactive mystery, and Tic-Tac-Toe is a three-by-three match against the computer. The three added games keep separate local saves and support live voice plus typed-command fallbacks. Direct player moves execute immediately; only companion-selected suggestions and destructive resets require confirmation. Use **Games** or **Game library** to return to the picker.
 
 The project uses the supplied React, Vite+, and Nitro application. Vite+ builds the browser app and Nitro API into `.output/` for a regular Node server.
 
@@ -25,7 +25,7 @@ bun run dev
 
 Open http://localhost:3000 for the landing page. The game picker and games are served at http://localhost:3000/dashboard/. Vite+ selects another port when 3000 is occupied; use the URL it prints. Games run without a provider key; the guide responds from local game rules and NPCs use deterministic bots. To enable model-driven guide and NPC replies, copy `.env.example` to `.env` and set `OPENAI_API_KEY`. The configured defaults are `OPENAI_VOICE_MODEL=gpt-live-1`, `OPENAI_DELEGATION_MODEL=gpt-6-luna`, and `OPENAI_NPC_MODEL=gpt-6-luna`. Provider credentials are read only by Nitro and are never sent to the browser.
 
-Chess live voice also requires this server-side key, provider model access, network connectivity, and microphone permission. Without credentials, use the board or typed commands; the quick guide uses browser speech synthesis. Loups-Garous can use browser speech recognition and browser narration without an API key, where supported; recognition may use the browser vendor's network service. Its guide and NPCs fall back to local behavior. Provider narration and the WebRTC fallback require credentials. Restart the server after editing `.env`.
+Chess, Ludo, The Intercept, and Tic-Tac-Toe live voice require this server-side key, provider model access, network connectivity, and microphone permission. Without credentials, all four remain playable through their visual controls and typed-command fallbacks. Loups-Garous can use browser speech recognition and browser narration without an API key, where supported; recognition may use the browser vendor's network service. Its guide and NPCs fall back to local behavior. Provider narration and the WebRTC fallback require credentials. Restart the server after editing `.env`.
 
 For a user-local Bun installation, run `npm install --global --prefix "$HOME/.bun" bun@1.4.4`, then add `$HOME/.bun/bin` to your shell's `PATH` (or use `~/.bun/bin/bun` directly).
 
@@ -56,7 +56,7 @@ Treat only `OPENAI_API_KEY` as a secret. `OPENAI_BASE_URL`, `OPENAI_*_MODEL`, an
 
 ## Rules
 
-The standard village size is 4–12 players. The game assigns a balanced default role mix with at least one Werewolf. A village contains one human and NPCs. Cupid chooses two lovers at the start when present; the surviving lover dies when their partner does. At night the pack hunts, the Seer investigates, and the Witch may use one healing and one poison potion over the full game. During the day, villagers discuss and vote. A tied vote follows the selected no-exile or random-among-tied rule. A Hunter eliminated from the game gets one final shot, including after a lover-chain death.
+The standard village size is 4â€“12 players. The game assigns a balanced default role mix with at least one Werewolf. A village contains one human and NPCs. Cupid chooses two lovers at the start when present; the surviving lover dies when their partner does. At night the pack hunts, the Seer investigates, and the Witch may use one healing and one poison potion over the full game. During the day, villagers discuss and vote. A tied vote follows the selected no-exile or random-among-tied rule. A Hunter eliminated from the game gets one final shot, including after a lover-chain death.
 
 The village wins when no Werewolves remain. Werewolves win when they equal or outnumber all other living players. Cross-faction lovers win if they are the only two living players. Roles remain private until the game ends. The server filters private findings, wolf teammates, and Witch night information for each authorized view.
 
@@ -66,7 +66,7 @@ Creating a game returns a cryptographically random session token once. Read and 
 
 The player-facing guide uses the Responses API with a player-scoped view of the game. It can explain rules, the current phase, and strategy, but has no action route and cannot alter a game. Missing credentials or a provider failure show a labeled local guide response. The browser can optionally speak those text responses with its local speech feature.
 
-The Voice Companion is always ready. On a first visit, the player taps anywhere once to approve the browser microphone, then can say “start the game” or “start a quick test” from the landing screen. After that, persistent browser transcription handles game commands, public morning conversation, and private guide questions. A spoken briefing begins every game before the public story line, covering the player's role, win condition, phase flow, and voice examples. The private guide also has a **Replay briefing** control and understands “repeat the guide.” Every narration line uses the same selected browser voice, so guide replies and game events begin without waiting for a remote audio file or switching voices. During the day, natural messages such as “Emma, why do you suspect Sofia?” and “tell the village I trust Lucas” become public village speech and prompt NPC replies. Say “voice help” for the complete phase-aware command list, including role actions, public conversation, voting, narration controls, game pause/resume, and voice-control pause/resume. Any night role can say “wait for dawn” to leave its ability unused; a human Werewolf can additionally say “let the pack decide,” “pass,” or “do nothing” to delegate the target. Commands still use the validated action route; guide questions use the player-scoped assistant route and are read by the same narrator voice. If browser transcription reports a network failure during a game, the app switches exclusively to the `gpt-live-1` WebRTC transcription path backed by `gpt-6-luna`; model audio is never attached, and its transcript fragments use the same command router after a short quiet interval, so game actions remain validated server-side.
+The Voice Companion is always ready. On a first visit, the player taps anywhere once to approve the browser microphone, then can say â€œstart the gameâ€ or â€œstart a quick testâ€ from the landing screen. After that, persistent browser transcription handles game commands, public morning conversation, and private guide questions. A spoken briefing begins every game before the public story line, covering the player's role, win condition, phase flow, and voice examples. The private guide also has a **Replay briefing** control and understands â€œrepeat the guide.â€ Every narration line uses the same selected browser voice, so guide replies and game events begin without waiting for a remote audio file or switching voices. During the day, natural messages such as â€œEmma, why do you suspect Sofia?â€ and â€œtell the village I trust Lucasâ€ become public village speech and prompt NPC replies. Say â€œvoice helpâ€ for the complete phase-aware command list, including role actions, public conversation, voting, narration controls, game pause/resume, and voice-control pause/resume. Any night role can say â€œwait for dawnâ€ to leave its ability unused; a human Werewolf can additionally say â€œlet the pack decide,â€ â€œpass,â€ or â€œdo nothingâ€ to delegate the target. Commands still use the validated action route; guide questions use the player-scoped assistant route and are read by the same narrator voice. If browser transcription reports a network failure during a game, the app switches exclusively to the `gpt-live-1` WebRTC transcription path backed by `gpt-6-luna`; model audio is never attached, and its transcript fragments use the same command router after a short quiet interval, so game actions remain validated server-side.
 
 NPC agents are separate from the guide and voice configuration. They use `OPENAI_NPC_MODEL` only when their controller is `agent`; local `bot` players never call a model. Every NPC target remains validated against the deterministic game rules. Missing credentials, timeout, provider errors, or malformed NPC output use the local fallback.
 
@@ -86,20 +86,22 @@ The API is shared by registered game modules. `GET /api/games` returns the game 
 
 To add a game, create a module under `server/game/modules/` that implements `GameModule<State, CreateInput, ActionInput, PublicView>`, then register it in `server/game/registry.ts`. Each module owns its state, validates its create/action inputs, applies its rules, and returns a player-safe view. The shared API handles game lookup, sessions, action locking, request IDs, and catalog discovery. Add a matching frontend renderer for that module's view shape. The werewolf frontend uses this API; Chess runs separately in the browser.
 
-Modules can advertise typed/voice-command and undo support. A module can implement `parseCommand` to translate typed text or a speech transcript into one of its validated actions; the shared action route accepts `{ "command": "..." }` and applies the resulting action transactionally. Loups-Garous supports commands such as “start the game”, “investigate Emma”, “wait for dawn”, “hear the villagers”, “I accuse Emma”, “vote Emma”, “pause game”, and “say …”. The always-on Voice Companion uses the same command path, while typed controls remain available. Undo remains unsupported in Loups-Garous; another module can expose an `undoAction` hook.
+Modules can advertise typed/voice-command and undo support. A module can implement `parseCommand` to translate typed text or a speech transcript into one of its validated actions; the shared action route accepts `{ "command": "..." }` and applies the resulting action transactionally. Loups-Garous supports commands such as â€œstart the gameâ€, â€œinvestigate Emmaâ€, â€œwait for dawnâ€, â€œhear the villagersâ€, â€œI accuse Emmaâ€, â€œvote Emmaâ€, â€œpause gameâ€, and â€œsay â€¦â€. The always-on Voice Companion uses the same command path, while typed controls remain available. Undo remains unsupported in Loups-Garous; another module can expose an `undoAction` hook.
 
 The default store is still in-memory and single-process: games and session tokens are cleared on server restart, and the store is not suitable for multi-instance deployment. `GameRepository` isolates that storage choice, so a durable database adapter can be added without rewriting game rules. The existing request lock and receipt cache also live in memory, so multi-instance deployments must move those into shared storage too.
 
 ## Project structure
 
-- `src/shell/` — exclusive game mounting and shared preferences
-- `src/app/` and `src/components/PlayByVoice/` — picker, Chess, Audio Settings, and Help
-- `src/chess/` — browser chess rules and engine integration
-- `src/werewolf/` — Loups-Garous interface
-- `server/api/` — Nitro game catalog, session, action, and health endpoints
-- `server/game/engine.ts` — deterministic game rules and player views
-- `server/game/module.ts` and `registry.ts` — typed module contract and game catalog
-- `server/game/modules/` — individual game implementations
-- `server/game/agents.ts` — LLM provider and fallback decisions
-- `server/game/prepare.ts` — NPC phase setup
-- `server/game/store.ts` — in-memory state, sessions, request receipts, and locks
+- `src/shell/` â€” exclusive game mounting and shared preferences
+- `src/app/` and `src/components/PlayByVoice/` â€” picker, Chess, Audio Settings, and Help
+- `src/chess/` â€” browser chess rules and engine integration
+- `src/werewolf/` â€” Loups-Garous interface
+- `server/api/` â€” Nitro game catalog, session, action, and health endpoints
+- `server/game/engine.ts` â€” deterministic game rules and player views
+- `server/game/module.ts` and `registry.ts` â€” typed module contract and game catalog
+- `server/game/modules/` â€” individual game implementations
+- `server/game/agents.ts` â€” LLM provider and fallback decisions
+- `server/game/prepare.ts` â€” NPC phase setup
+- `server/game/store.ts` â€” in-memory state, sessions, request receipts, and locks
+
+

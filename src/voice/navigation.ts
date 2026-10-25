@@ -1,4 +1,10 @@
-export const PLAYABLE_GAMES = ["chess", "loups-garous"] as const;
+export const PLAYABLE_GAMES = [
+  "chess",
+  "loups-garous",
+  "ludo",
+  "intercept",
+  "tic-tac-toe",
+] as const;
 
 export type PlayableGame = (typeof PLAYABLE_GAMES)[number];
 
@@ -6,9 +12,9 @@ export const AVAILABLE_DESTINATIONS = ["home", "audio", "help", ...PLAYABLE_GAME
 
 export type AvailableDestination = (typeof AVAILABLE_DESTINATIONS)[number];
 
-export type Destination = AvailableDestination | "tic-tac-toe";
+export type Destination = AvailableDestination;
 
-export const PLAYABLE_GAMES_LABEL = "Chess and Loups-Garous";
+export const PLAYABLE_GAMES_LABEL = "Chess, Loups-Garous, Ludo, The Intercept, and Tic-Tac-Toe";
 
 export function parseDestination(value: unknown): Destination | null {
   switch (value) {
@@ -17,6 +23,8 @@ export function parseDestination(value: unknown): Destination | null {
     case "audio":
     case "help":
     case "loups-garous":
+    case "ludo":
+    case "intercept":
     case "tic-tac-toe":
       return value;
     default:
@@ -41,3 +49,4 @@ export const navigationTool = {
   },
   strict: true,
 };
+
