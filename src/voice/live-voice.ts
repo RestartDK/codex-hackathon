@@ -132,7 +132,7 @@ export async function startLiveVoice({
       // queue. We still receive its microphone transcripts over the channel.
       audio.muted = true;
       void audio.play().catch(() => {
-        onStatus("Tap anywhere once to hear the guide.");
+        onStatus("Tap anywhere once to resume voice input.");
         resumeAudioOnGesture = () => {
           void audio?.play().catch(() => undefined);
         };

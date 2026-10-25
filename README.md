@@ -6,7 +6,15 @@ The project uses the supplied React, Vite+, and Nitro application. Vite+ builds 
 
 ## Run locally
 
-Use the Bun version in `package.json` (`bun@1.4.4`):
+On NixOS, enter the development shell before you install dependencies or start the server:
+
+```sh
+nix develop
+```
+
+The locked shell provides Nix-packaged Node 26.12.1, matching `.node-version`, and Bun 1.4.4, matching `package.json`. Keep `.node-version` and the Node package in `flake.lock` aligned when you update the toolchain.
+
+Without Nix, install a Node version allowed by `package.json` and the declared Bun version (`bun@1.4.4`). In either environment, run:
 
 ```sh
 bun install
