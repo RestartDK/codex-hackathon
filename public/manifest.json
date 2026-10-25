@@ -2,7 +2,7 @@
   "name": "Play by Voice",
   "short_name": "Play by Voice",
   "description": "Voice-first games for blind and low-vision players: Chess and Loups-Garous.",
-  "start_url": "/",
+  "start_url": "/dashboard/",
   "display": "standalone",
   "background_color": "#ffffff",
   "theme_color": "#ffffff",
