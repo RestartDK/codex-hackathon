@@ -2,6 +2,9 @@ import react from "@vitejs/plugin-react";
 import { defineConfig, lazyPlugins } from "vite-plus";
 
 export default defineConfig({
+  server: {
+    allowedHosts: ["srv-nana.tail33ee33.ts.net"],
+  },
   fmt: {},
   lint: {
     plugins: ["react", "typescript", "oxc"],
