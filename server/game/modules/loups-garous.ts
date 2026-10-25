@@ -33,10 +33,6 @@ const createSchema = z.object({
       >,
     )
     .optional(),
-  // NPCs are deterministic bots unless a host explicitly asks for an agent.
-  // This remains available for controlled demos without making normal games
-  // wait on one model request per NPC action.
-  controllers: z.record(z.string().regex(/^npc-\d+$/u), z.enum(["agent", "bot"])).optional(),
   start: z.boolean().default(true),
   testMode: z.boolean().default(false),
   skipIntro: z.boolean().default(false),
@@ -432,7 +428,6 @@ export const loupsGarous: GameModule<Game, CreateInput, ActionInput, GameView> =
       : createGame(input.name, input.count, {
           roleCounts: input.roleCounts ?? defaultRoleCounts(input.count),
           tieRule: input.tieRule,
-          controllers: input.controllers,
         });
     if (input.start) {
       if (input.testMode || input.skipIntro) {

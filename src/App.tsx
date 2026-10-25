@@ -43,7 +43,7 @@ const phaseNames = {
   over: "Game over",
 };
 
-function openingBriefing(game: GameView) {
+function openingBriefing(game: GameView, explainAsWePlay: boolean) {
   const { me } = game;
   const roleBriefing: Record<Role, string> = {
     seer: "You are the Seer. Each night, privately investigate one living player to learn whether they are a Werewolf.",
@@ -72,6 +72,18 @@ function openingBriefing(game: GameView) {
     cupid: "say ‘wait for dawn’ once the lovers are bound",
     villager: "say ‘wait for dawn’",
   };
+
+  const essentials = [
+    `Welcome to Valombre. ${roleBriefing[me.role]}`,
+    `Your voice companion is already listening after microphone permission. At night, ${nightVoiceExample[me.role]}, or simply say ‘choose Emma’.`,
+    nextStep,
+  ];
+
+  if (!explainAsWePlay)
+    return [
+      ...essentials,
+      "Guided explanations are off for this game. Say ‘voice help’ or ask a question whenever you want help.",
+    ].join(" ");
 
   return [
     `Welcome to Valombre. ${roleBriefing[me.role]}`,
@@ -332,6 +344,7 @@ export default function App() {
   const [name] = useState("You");
   const [count, setCount] = useState(6);
   const [tieRule] = useState("no-exile");
+  const [explainAsWePlay, setExplainAsWePlay] = useState(true);
   const [setupStep, setSetupStep] = useState<"mode" | "village">("mode");
   const [onboardingStep, setOnboardingStep] = useState<"village" | "role" | "details" | "moon">(
     "village",
@@ -405,6 +418,13 @@ export default function App() {
     // old day or night screen.
     presentedGameRef.current = game;
     setPresentedGame(game);
+    // The server can move the story forward while an onboarding card is still
+    // visible. Once it has left the prologue, the current game screen wins.
+    if (game.phase !== "prologue") {
+      if (onboardingTimerRef.current) window.clearTimeout(onboardingTimerRef.current);
+      onboardingTimerRef.current = undefined;
+      setOnboardingStep("village");
+    }
     if (!previous || previous.phase === game.phase) return;
     if (game.me.investigations.length > previous.me.investigations.length) {
       showCinematic("finding", 1800);
@@ -485,6 +505,7 @@ export default function App() {
           tieRule,
           start: true,
           testMode,
+          explainAsWePlay,
           // The narrated introduction is part of the hands-free game flow. Keep it
           // for every new village so a returning player never lands in the middle
           // of a night without the role and controls being introduced first.
@@ -494,7 +515,7 @@ export default function App() {
       const data = await response.json();
       if (!response.ok) throw new Error(data.error ?? "Could not create a game.");
       const game = data as GameView;
-      const briefing = openingBriefing(game);
+      const briefing = openingBriefing(game, explainAsWePlay);
       commitGame(game, data.session);
       setOnboardingStep("village");
       setCinematic(undefined);
@@ -586,9 +607,22 @@ export default function App() {
     return result;
   }
 
+  /** Stop a stale provider connection before clearing the game it belongs to. */
+  function teardownLiveVoice() {
+    inputModeRef.current = "idle";
+    const live = liveConnectionRef.current;
+    liveConnectionRef.current = null;
+    setLiveConnected(false);
+    setLiveConnecting(false);
+    live?.stop();
+  }
+
   /** Recover cleanly if a local/dev server has restarted and lost its in-memory match. */
   function recoverExpiredSession() {
     storyAudio.stop();
+    teardownLiveVoice();
+    if (onboardingTimerRef.current) window.clearTimeout(onboardingTimerRef.current);
+    onboardingTimerRef.current = undefined;
     latestGameRef.current = undefined;
     presentedGameRef.current = undefined;
     sessionRef.current = undefined;
@@ -597,14 +631,16 @@ export default function App() {
     setOnboardingStep("village");
     setCinematic(undefined);
     setSelected([]);
+    setHeal(false);
     setOpeningAudio(undefined);
     setGuideMessages([]);
+    setGuideText("");
     setError("");
   }
 
-  function returnToSetup() {
+  function returnToSetup(step: "mode" | "village" = "mode") {
     recoverExpiredSession();
-    setSetupStep("mode");
+    setSetupStep(step);
     setVoiceStatus("Listening — say “start the game”");
   }
 
@@ -884,7 +920,7 @@ export default function App() {
     }
     if (startsNewGameNaturally(command) || /\b(?:restart|start over|new round)\b/iu.test(command)) {
       queueAssistant("Starting a new village. I will introduce the characters first.");
-      setSession(undefined);
+      recoverExpiredSession();
       await create(undefined, /\b(quick|test)\b/iu.test(command));
       return;
     }
@@ -1113,12 +1149,26 @@ export default function App() {
           }
         },
       });
+      // A reset can happen while the provider is negotiating. Do not attach a
+      // late connection to the next village (or to the setup screen).
+      if (
+        sessionRef.current?.game.id !== activeSession.game.id ||
+        inputModeRef.current !== "connecting-live"
+      ) {
+        live.stop();
+        return;
+      }
       liveConnectionRef.current = live;
       established = true;
       inputModeRef.current = "live";
       setLiveConnected(true);
       setVoiceStatus("Voice companion is listening");
     } catch (cause) {
+      if (
+        sessionRef.current?.game.id !== activeSession.game.id ||
+        inputModeRef.current !== "connecting-live"
+      )
+        return;
       inputModeRef.current = "idle";
       resetVoiceGuide(
         cause instanceof Error ? cause.message : "Could not start the Live Voice Guide.",
@@ -1257,7 +1307,7 @@ export default function App() {
       className="reference-home"
       type="button"
       aria-label="Return to game setup"
-      onClick={returnToSetup}
+      onClick={() => returnToSetup()}
     >
       <svg viewBox="0 0 24 24" aria-hidden="true">
         <path d="m4.5 10.5 7.5-6 7.5 6v8.25a.75.75 0 0 1-.75.75H5.25a.75.75 0 0 1-.75-.75V10.5Z" />
@@ -1334,7 +1384,11 @@ export default function App() {
                 </section>
               </div>
               <label className="explain-toggle">
-                <input type="checkbox" defaultChecked />
+                <input
+                  type="checkbox"
+                  checked={explainAsWePlay}
+                  onChange={(event) => setExplainAsWePlay(event.target.checked)}
+                />
                 <span>Explain the game as we play</span>
               </label>
               <div className="setup-actions">
@@ -1485,6 +1539,27 @@ export default function App() {
         </div>
       );
     }
+    if (!me.alive && game.phase !== "over" && (game.phase !== "hunter" || !me.hunterActionPending)) {
+      const canContinue = game.phase === "day" || game.phase === "vote" || game.phase === "night";
+      return (
+        <div className="phase-stack pause-card scene-enter">
+          <div className="stage-copy">
+            <h1>You are watching</h1>
+            <p>The village continues without you.</p>
+          </div>
+          {canContinue && (
+            <button
+              className="primary-pill"
+              type="button"
+              disabled={interactionLocked}
+              onClick={() => void act("continue")}
+            >
+              Continue watching
+            </button>
+          )}
+        </div>
+      );
+    }
     if (game.phase === "prologue") {
       return (
         <div className="phase-stack meet-stage scene-enter">
@@ -1512,6 +1587,16 @@ export default function App() {
       );
     }
     if (game.phase === "cupid") {
+      if (me.role !== "cupid") {
+        return (
+          <div className="phase-stack night-turn scene-enter">
+            <div className="stage-copy">
+              <h1>The village is waiting</h1>
+              <p>Cupid is choosing the lovers.</p>
+            </div>
+          </div>
+        );
+      }
       return (
         <div className="phase-stack night-turn scene-enter">
           <div className="stage-copy">
@@ -1532,7 +1617,8 @@ export default function App() {
       );
     }
     if (game.phase === "night") {
-      const canTarget = me.role === "seer" || me.role === "werewolf" || me.role === "witch";
+      const canPoison = me.role === "witch" && me.witchPoisonAvailable;
+      const canTarget = me.role === "seer" || me.role === "werewolf" || canPoison;
       const prompt =
         me.role === "seer"
           ? "Who do you want to investigate?"
@@ -1547,7 +1633,9 @@ export default function App() {
               (player) =>
                 player.alive && player.id !== me.id && !me.werewolfTeam?.includes(player.name),
             )
-          : others;
+          : me.role === "witch"
+            ? others.filter((player) => !heal || player.name !== me.wolfVictim)
+            : others;
       return (
         <div className="phase-stack night-turn scene-enter">
           <div className="stage-copy">
@@ -1576,7 +1664,16 @@ export default function App() {
               <input
                 type="checkbox"
                 checked={heal}
-                onChange={(event) => setHeal(event.target.checked)}
+                disabled={interactionLocked}
+                onChange={(event) => {
+                  const shouldHeal = event.target.checked;
+                  setHeal(shouldHeal);
+                  if (
+                    shouldHeal &&
+                    game.players.find((player) => player.id === selected[0])?.name === me.wolfVictim
+                  )
+                    setSelected([]);
+                }}
               />{" "}
               Save {me.wolfVictim}
             </label>
@@ -1608,12 +1705,18 @@ export default function App() {
                 interactionLocked ||
                 ((me.role === "seer" || me.role === "werewolf") && !selected[0])
               }
-              onClick={() =>
-                void act("night", {
-                  ...(selected[0] ? { target: selected[0], poison: selected[0] } : {}),
-                  heal,
-                })
-              }
+              onClick={() => {
+                const values =
+                  me.role === "witch"
+                    ? {
+                        ...(canPoison && selected[0] ? { poison: selected[0] } : {}),
+                        ...(heal ? { heal: true } : {}),
+                      }
+                    : selected[0]
+                      ? { target: selected[0] }
+                      : {};
+                void act("night", values);
+              }}
             >
               {canTarget ? "Continue" : "Wait for dawn"}
             </button>
@@ -1677,6 +1780,16 @@ export default function App() {
       );
     }
     if (game.phase === "hunter") {
+      if (!me.hunterActionPending) {
+        return (
+          <div className="phase-stack night-turn scene-enter">
+            <div className="stage-copy">
+              <h1>The village is waiting</h1>
+              <p>The Hunter is making a final choice.</p>
+            </div>
+          </div>
+        );
+      }
       return (
         <div className="phase-stack night-turn scene-enter">
           <div className="stage-copy">
@@ -1726,20 +1839,14 @@ export default function App() {
             <button
               className="secondary-pill"
               type="button"
-              onClick={() => {
-                setSession(undefined);
-                setSetupStep("mode");
-              }}
+              onClick={() => returnToSetup()}
             >
               Home
             </button>
             <button
               className="gold-pill"
               type="button"
-              onClick={() => {
-                setSession(undefined);
-                setSetupStep("village");
-              }}
+              onClick={() => returnToSetup("village")}
             >
               Play again
             </button>
