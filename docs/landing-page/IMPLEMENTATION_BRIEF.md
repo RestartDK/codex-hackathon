@@ -65,7 +65,7 @@ Use local content structures if helpful; a CMS, backend, generic page builder, o
 | 4 | How it works | Open three-step ordered list | Wording matches actual setup and voice flow |
 | 5 | Voice experience | Labeled example transcript; audio only if real asset exists | Readable without JS/audio; no permission on page load |
 | 6 | Accessibility | Editorial explanation plus verified capability text | Each published capability has evidence |
-| 7 | FAQ | Working chat panel with suggested/typed questions and curated local answers | Keyboard operation, readable surfaces, no fake input |
+| 7 | FAQ | Question message bubbles with plus disclosures and white curated reply bubbles | Keyboard operation, readable surfaces, no fake input |
 | 8 | Final CTA/footer | Large centered headline, pill action, underlined links, oversized faded wordmark | Same launch target everywhere; no invented links |
 
 Use exact copy from DESIGN.md with the conditional alternatives it specifies. Preserve original app components and game behavior. Avoid copying reference branding, third-party app UI, logos, or typography embedded in images.
@@ -84,7 +84,7 @@ Use repository-required checks. Add tests only for meaningful new behavior, such
 
 - Navigate through every primary and game CTA; confirm the expected app flow opens.
 - Open and close mobile navigation by trigger, Escape, and selecting a link. Verify hidden links cannot receive focus.
-- Submit suggested and typed FAQ questions using keyboard alone; verify empty submission and unknown-question fallback.
+- Open and close FAQ message replies with pointer and keyboard; verify the active plus/close state and single expanded reply.
 - Confirm static preview does not start a session or microphone stream.
 - If audio exists, test play, pause, restart, unavailable asset/error, and transcript access.
 - If a real microphone demo is reused, test permission grant/denial, unavailable browser support, stop, and recovery using the application's supported environment.

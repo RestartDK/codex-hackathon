@@ -85,3 +85,5 @@ Reviewed the actual Figma home and audio-settings frames. Global green actions w
 Latest visual and interaction review: [DESIGN_AUDIT.md](DESIGN_AUDIT.md).
 
 Current design: [GLACIAL_DIRECTION.md](GLACIAL_DIRECTION.md), based on the user’s latest Glacia reference.
+
+Latest FAQ: question message bubbles with plus/close disclosures and white Play by Voice reply bubbles. The old typed chatbot was replaced. The footer wordmark is white. See GLACIAL_DIRECTION.md.

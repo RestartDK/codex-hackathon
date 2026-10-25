@@ -416,82 +416,291 @@
           <p class="eyebrow">Before your first move</p>
           <h2 id="faq-title">A few things<br />you might be wondering.</h2>
         </div>
-        <div class="faq-scene wide-container chat-scene">
-          <div class="faq-chat">
-            <div class="chat-header">
-              <span class="window-dots" aria-hidden="true"><i></i><i></i><i></i></span
-              ><span class="chat-title"
-                ><span class="brand-orb" aria-hidden="true"></span>Ask Play by Voice</span
-              ><span class="chat-guide-label">Product guide</span>
-            </div>
-            <div
-              class="chat-log"
-              id="faq-chat-log"
-              role="log"
-              aria-label="FAQ conversation"
-              aria-live="polite"
-              aria-relevant="additions"
-              tabindex="0"
+        <div class="faq-bubbles-scene wide-container">
+          <div class="faq-bubbles-header">
+            <span class="faq-guide-title"
+              ><span class="brand-orb" aria-hidden="true"></span> A conversation with Play by
+              Voice</span
             >
-              <div class="chat-message chat-question">
-                <span class="chat-sr-only">You: </span>
-                <p>Do I need to see the screen?</p>
-              </div>
-              <div class="chat-message chat-reply">
-                <span class="brand-orb" aria-hidden="true"></span>
-                <div>
-                  <span class="chat-speaker">Play by Voice</span>
+            <span class="faq-guide-hint">Choose a question. We’ll take it from here.</span>
+          </div>
+          <div class="faq-message-list">
+            <details class="bubble-faq" id="faq-about" open>
+              <summary id="faq-about-question" aria-controls="faq-about-reply">
+                <span class="faq-question-message">What is Play by Voice?</span>
+                <span class="faq-plus" aria-hidden="true"
+                  ><svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.6"
+                    stroke-linecap="round"
+                  >
+                    <path d="M12 5v14M5 12h14" /></svg
+                ></span>
+              </summary>
+              <div
+                class="faq-bubble-response"
+                id="faq-about-reply"
+                role="region"
+                aria-labelledby="faq-about-question"
+              >
+                <div class="faq-answer-message">
+                  <div class="faq-answer-author">
+                    <span class="brand-orb" aria-hidden="true"></span><span>Play by Voice</span>
+                  </div>
                   <p>
-                    The companion can describe the board, talk through moves, and help you navigate.
-                    Starting voice takes an initial action and microphone permission. Some settings
-                    still use on-screen or keyboard controls.
-                  </p>
-                  <p>
-                    We’re building toward more independent play. Testing with blind and low-vision
-                    players is still ahead.
+                    Play by Voice is a hackathon project exploring games through speaking and
+                    listening. A conversational companion helps you navigate, understand a game, and
+                    make your next move, with blind and low-vision players in mind.
                   </p>
                 </div>
               </div>
-            </div>
-            <div class="chat-bottom">
-              <div class="chat-suggestions" aria-label="Suggested questions" hidden>
-                <button type="button" data-faq="games">Which games can I try?</button
-                ><button type="button" data-faq="start">How do I start?</button
-                ><button type="button" data-faq="typing">Can I type instead?</button
-                ><button type="button" data-faq="privacy">Voice &amp; privacy</button>
-              </div>
-              <form class="chat-form" id="faq-chat-form" hidden>
-                <label class="chat-sr-only" for="faq-question"
-                  >Ask a question about Play by Voice</label
-                ><input
-                  id="faq-question"
-                  name="question"
-                  type="text"
-                  maxlength="300"
-                  placeholder="Ask another question…"
-                  autocomplete="off"
-                  aria-describedby="chat-note"
-                /><button class="chat-send" type="submit" aria-label="Send question" disabled>
-                  <span aria-hidden="true"
-                    ><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-                      <use href="./assets/icons.svg#arrow-up"></use></svg
-                  ></span>
-                </button>
-              </form>
-              <p class="chat-note" id="chat-note">
-                Answers from our product FAQ. No microphone needed.
-              </p>
-              <noscript
-                ><p class="chat-note">
-                  Enable JavaScript to ask questions, or
-                  <a href="https://github.com/RestartDK/codex-hackathon#readme"
-                    >read the project guide</a
-                  >.
-                </p></noscript
+            </details>
+            <details class="bubble-faq" id="faq-games">
+              <summary id="faq-games-question" aria-controls="faq-games-reply">
+                <span class="faq-question-message">Which games can I try?</span>
+                <span class="faq-plus" aria-hidden="true"
+                  ><svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.6"
+                    stroke-linecap="round"
+                  >
+                    <path d="M12 5v14M5 12h14" /></svg
+                ></span>
+              </summary>
+              <div
+                class="faq-bubble-response"
+                id="faq-games-reply"
+                role="region"
+                aria-labelledby="faq-games-question"
               >
-            </div>
+                <div class="faq-answer-message">
+                  <div class="faq-answer-author">
+                    <span class="brand-orb" aria-hidden="true"></span><span>Play by Voice</span>
+                  </div>
+                  <p>
+                    Chess is playable now, against the computer or in local two-player mode.
+                    Loups-Garous and Tic-Tac-Toe are in the making. The collection is intended to
+                    grow, so these are our starting point, rather than the whole world of Play by
+                    Voice.
+                  </p>
+                </div>
+              </div>
+            </details>
+            <details class="bubble-faq" id="faq-access">
+              <summary id="faq-access-question" aria-controls="faq-access-reply">
+                <span class="faq-question-message">Do I need to see the screen?</span>
+                <span class="faq-plus" aria-hidden="true"
+                  ><svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.6"
+                    stroke-linecap="round"
+                  >
+                    <path d="M12 5v14M5 12h14" /></svg
+                ></span>
+              </summary>
+              <div
+                class="faq-bubble-response"
+                id="faq-access-reply"
+                role="region"
+                aria-labelledby="faq-access-question"
+              >
+                <div class="faq-answer-message">
+                  <div class="faq-answer-author">
+                    <span class="brand-orb" aria-hidden="true"></span><span>Play by Voice</span>
+                  </div>
+                  <p>
+                    The companion supports spoken navigation, board descriptions, and moves.
+                    Starting voice requires an initial action and microphone permission.
+                  </p>
+                  <p>
+                    Some settings still use on-screen or keyboard controls. Testing with blind and
+                    low-vision players and across assistive technologies is still ahead.
+                  </p>
+                </div>
+              </div>
+            </details>
+            <details class="bubble-faq" id="faq-start">
+              <summary id="faq-start-question" aria-controls="faq-start-reply">
+                <span class="faq-question-message">How do I start?</span>
+                <span class="faq-plus" aria-hidden="true"
+                  ><svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.6"
+                    stroke-linecap="round"
+                  >
+                    <path d="M12 5v14M5 12h14" /></svg
+                ></span>
+              </summary>
+              <div
+                class="faq-bubble-response"
+                id="faq-start-reply"
+                role="region"
+                aria-labelledby="faq-start-question"
+              >
+                <div class="faq-answer-message">
+                  <div class="faq-answer-author">
+                    <span class="brand-orb" aria-hidden="true"></span><span>Play by Voice</span>
+                  </div>
+                  <p>
+                    Choose Start playing to open the game picker, then select Chess. To use live
+                    voice, select the companion orb and allow microphone access.
+                  </p>
+                  <p>
+                    You can ask for a quick guide, describe the board, or propose a move. Voice
+                    needs the game server to be configured; keyboard and typed commands work without
+                    it.
+                  </p>
+                </div>
+              </div>
+            </details>
+            <details class="bubble-faq" id="faq-typing">
+              <summary id="faq-typing-question" aria-controls="faq-typing-reply">
+                <span class="faq-question-message">Can I type instead?</span>
+                <span class="faq-plus" aria-hidden="true"
+                  ><svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.6"
+                    stroke-linecap="round"
+                  >
+                    <path d="M12 5v14M5 12h14" /></svg
+                ></span>
+              </summary>
+              <div
+                class="faq-bubble-response"
+                id="faq-typing-reply"
+                role="region"
+                aria-labelledby="faq-typing-question"
+              >
+                <div class="faq-answer-message">
+                  <div class="faq-answer-author">
+                    <span class="brand-orb" aria-hidden="true"></span><span>Play by Voice</span>
+                  </div>
+                  <p>Yes. Open the keyboard button beside the companion orb in the game.</p>
+                  <p>
+                    Try “e2 to e4”, “describe the board”, “hint”, or “help”. Say or type “yes” to
+                    confirm a proposed move. You can also explore the board with arrow keys and
+                    select with Enter or Space.
+                  </p>
+                </div>
+              </div>
+            </details>
+            <details class="bubble-faq" id="faq-help">
+              <summary id="faq-help-question" aria-controls="faq-help-reply">
+                <span class="faq-question-message">Can I ask for help with a move?</span>
+                <span class="faq-plus" aria-hidden="true"
+                  ><svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.6"
+                    stroke-linecap="round"
+                  >
+                    <path d="M12 5v14M5 12h14" /></svg
+                ></span>
+              </summary>
+              <div
+                class="faq-bubble-response"
+                id="faq-help-reply"
+                role="region"
+                aria-labelledby="faq-help-question"
+              >
+                <div class="faq-answer-message">
+                  <div class="faq-answer-author">
+                    <span class="brand-orb" aria-hidden="true"></span><span>Play by Voice</span>
+                  </div>
+                  <p>Yes. Ask for a hint, a description of the board, or a suggested move.</p>
+                  <p>
+                    A suggested move is a proposal and needs confirmation before it is played. You
+                    can also ask for a quick guide, review move history, pause, or resume.
+                  </p>
+                </div>
+              </div>
+            </details>
+            <details class="bubble-faq" id="faq-microphone">
+              <summary id="faq-microphone-question" aria-controls="faq-microphone-reply">
+                <span class="faq-question-message">Do I need a microphone or API key?</span>
+                <span class="faq-plus" aria-hidden="true"
+                  ><svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.6"
+                    stroke-linecap="round"
+                  >
+                    <path d="M12 5v14M5 12h14" /></svg
+                ></span>
+              </summary>
+              <div
+                class="faq-bubble-response"
+                id="faq-microphone-reply"
+                role="region"
+                aria-labelledby="faq-microphone-question"
+              >
+                <div class="faq-answer-message">
+                  <div class="faq-answer-author">
+                    <span class="brand-orb" aria-hidden="true"></span><span>Play by Voice</span>
+                  </div>
+                  <p>
+                    Live voice needs a microphone, your permission, and a server configured with an
+                    OpenAI API key. Players do not enter a key on this page.
+                  </p>
+                  <p>
+                    Keyboard controls and typed commands work without live voice. This FAQ never
+                    asks for microphone access.
+                  </p>
+                </div>
+              </div>
+            </details>
+            <details class="bubble-faq" id="faq-privacy">
+              <summary id="faq-privacy-question" aria-controls="faq-privacy-reply">
+                <span class="faq-question-message">What happens to my voice?</span>
+                <span class="faq-plus" aria-hidden="true"
+                  ><svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.6"
+                    stroke-linecap="round"
+                  >
+                    <path d="M12 5v14M5 12h14" /></svg
+                ></span>
+              </summary>
+              <div
+                class="faq-bubble-response"
+                id="faq-privacy-reply"
+                role="region"
+                aria-labelledby="faq-privacy-question"
+              >
+                <div class="faq-answer-message">
+                  <div class="faq-answer-author">
+                    <span class="brand-orb" aria-hidden="true"></span><span>Play by Voice</span>
+                  </div>
+                  <p>
+                    This landing page does not record audio or send your questions anywhere. When
+                    you explicitly start live voice in the game, microphone audio is sent to OpenAI
+                    for the conversation.
+                  </p>
+                  <p>
+                    The app saves game position and preferences on your device, but does not store
+                    raw audio or transcripts in local storage. Use End voice to close the session.
+                    Provider retention is separate from device storage; check the project
+                    documentation before enabling voice.
+                  </p>
+                </div>
+              </div>
+            </details>
           </div>
-          <p class="faq-scene-note">A little clarity before your next adventure.</p>
+          <p class="faq-bubbles-note">A little clarity before you play. No microphone needed.</p>
         </div>
       </section>
     </main>

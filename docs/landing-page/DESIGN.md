@@ -201,19 +201,17 @@ The landing page itself must satisfy the requirements in section 11 regardless o
 
 H2: **A few things you might be wondering.**
 
-Follow the original AI-chat reference literally in its interaction pattern: a large scenic blue/gray environment, a white conversation panel, right-aligned pale neutral question bubbles, left-aligned assistant responses with the orb, suggested questions, and a working pill-shaped text composer with send action. Do not use accordion rows.
+Use message-shaped native disclosure controls, following the user's latest bubble FAQ reference. Questions align right with a circular plus. The active question is dark ice blue with white text, its plus rotates into a close mark, and a white Play by Voice reply bubble expands on the left below it. The first introductory answer starts open. Keep only one answer expanded when enhanced; native details remain usable without JavaScript.
 
-The current implementation is a local product FAQ guide, visibly identified as **Product guide** / **Answers from our product FAQ**. It uses curated factual answers, with no API, recording, or persistence. Support typed questions and suggested-question buttons. Unknown topics receive an honest scope explanation and a route to the project documentation. Never pretend this is an unrestricted AI assistant.
+The old text composer and chatbot transcript have been removed. All eight verified answers live in semantic HTML: about the project, games, screen access, setup, typed commands, move guidance, microphone requirements, and privacy. No API, recording, or question storage is involved. Preserve the distinctions between available/planned games and local storage/provider retention.
 
-Provide verified answers about available games, getting started, typed/keyboard controls, accessibility limitations, move guidance, microphone requirements, and voice privacy. Say that only Chess is playable now; do not imply planned games work. Distinguish local storage behavior from the voice provider's retention.
+Use summaries with keyboard activation, aria-controls, expanded state, and visible focus. Reply regions are labelled by their questions. Animate measured reply heights and opacity, handle rapid retoggling, and collapse immediately with reduced motion. Do not use fixed-height answer panels. Mobile bubbles must wrap cleanly at 320px.
 
-The composer has an accessible label, Enter submission, disabled empty submission, and 300-character limit. Render all messages using text nodes. Keep a bounded in-memory transcript and an accessible, keyboard-scrollable log with polite announcements. Reveal controls only after enhancement so the initial conversation and documentation link remain useful without JavaScript. No decorative microphone control unless it really works.
-
-Exact colors: scene uses pale sky `#DFE9F0`, lavender-gray `#E9E8EF`, and white; panel and composer white; question bubbles `#F3F4F6`; text `#111111`; muted text `#6B7280`; send control `#DFEDEF`. The composer border is `#87939D`. Use opaque readable surfaces and fine, restrained grain. These current values supersede earlier dark FAQ specifications.
+Colors: inactive question `#E2F0F9`, active question `#315F78`, reply white, reply text `#31596E`, supporting text `#4E6B79`. Use the current frosted blue scene and rounded speech-bubble corners. See GLACIAL_DIRECTION.md for current visual authority.
 
 ### 8.8 Final invitation and footer
 
-Use a single spacious editorial footer matching the user's supplied reference: warm off-white canvas, very large centered **Reconnect with play.** headline, one dark softly beveled pill **Start playing** action, an open row of underlined links, then an oversized pale **PLAY BY VOICE** wordmark that fades toward the bottom. Remove the previous orb-led CTA scene and compact footer bar.
+Use a single spacious editorial footer matching the user's supplied reference: warm off-white canvas, very large centered **Reconnect with play.** headline, one dark softly beveled pill **Start playing** action, an open row of underlined links, then an oversized white **PLAY BY VOICE** wordmark that fades toward the bottom. Remove the previous orb-led CTA scene and compact footer bar.
 
 Only use real links: Games, How it works, GitHub, and Back to top. Do not invent social accounts, email addresses, or an App Store listing. Keep the oversized wordmark decorative and hidden from assistive technology. Contain its crop in its own wrapper; it must not create document overflow. Wrap the link row naturally on small screens and retain 44px targets.
 
