@@ -2,7 +2,7 @@
 
 Choose Chess or Loups-Garous from the game picker. Audio Settings and Help are available from the shared shell. Tic-Tac-Toe is not playable yet.
 
-Chess runs in the browser with Stockfish and saves your position locally. Loups-Garous is a single-player social deduction game with NPC villagers. Use **Games** to return to the picker. Leaving a Loups-Garous match asks for confirmation because it cannot be resumed from the picker.
+Chess runs in the browser with Stockfish and saves your position locally. Loups-Garous is a single-player social deduction game with NPC villagers. Use **Games** to return to the picker. Commands execute immediately without confirmation prompts. Leaving a Loups-Garous match returns directly to the picker; that match cannot be resumed.
 
 The project uses the supplied React, Vite+, and Nitro application. Vite+ builds the browser app and Nitro API into `.output/` for a regular Node server.
 

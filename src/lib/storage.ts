@@ -1,4 +1,5 @@
-import type { AppSettings } from "../types";
+import { z } from "zod";
+import { appSettingsSchema, preferenceNames, type AppSettings } from "./preferences";
 
 const GAME_STORAGE_KEY = "chess-by-sparsh-save";
 const SETTINGS_STORAGE_KEY = "chess-by-sparsh-settings";
@@ -56,7 +57,6 @@ const DEFAULT_SETTINGS: AppSettings = {
   boardTheme: "classic",
   pieceSet: "merida",
   soundEnabled: true,
-  confirmMoves: true,
   screenReaderMode: false,
   voiceVolume: 80,
 };
@@ -65,41 +65,21 @@ export function loadSettings(): AppSettings {
   try {
     const raw = localStorage.getItem(SETTINGS_STORAGE_KEY);
     if (!raw) return { ...DEFAULT_SETTINGS };
-    const parsed = JSON.parse(raw);
-    const difficulties = ["beginner", "casual", "club", "expert", "nightmare"];
-    const orientations = ["white-bottom", "flip-turn"];
-    const themes = ["classic", "marine", "ember", "forest", "midnight"];
-    const pieceSets = ["merida", "unicode", "symbols", "outlined"];
-    return {
-      gameMode: parsed.gameMode === "local" ? "local" : "computer",
-      playerColor: parsed.playerColor === "b" ? "b" : "w",
-      difficulty: difficulties.includes(parsed.difficulty)
-        ? parsed.difficulty
-        : DEFAULT_SETTINGS.difficulty,
-      boardOrientation: orientations.includes(parsed.boardOrientation)
-        ? parsed.boardOrientation
-        : DEFAULT_SETTINGS.boardOrientation,
-      boardTheme: themes.includes(parsed.boardTheme)
-        ? parsed.boardTheme
-        : DEFAULT_SETTINGS.boardTheme,
-      pieceSet: pieceSets.includes(parsed.pieceSet) ? parsed.pieceSet : DEFAULT_SETTINGS.pieceSet,
-      soundEnabled:
-        typeof parsed.soundEnabled === "boolean"
-          ? parsed.soundEnabled
-          : DEFAULT_SETTINGS.soundEnabled,
-      confirmMoves:
-        typeof parsed.confirmMoves === "boolean"
-          ? parsed.confirmMoves
-          : DEFAULT_SETTINGS.confirmMoves,
-      screenReaderMode:
-        typeof parsed.screenReaderMode === "boolean"
-          ? parsed.screenReaderMode
-          : DEFAULT_SETTINGS.screenReaderMode,
-      voiceVolume:
-        typeof parsed.voiceVolume === "number" && Number.isFinite(parsed.voiceVolume)
-          ? Math.min(100, Math.max(0, parsed.voiceVolume))
-          : DEFAULT_SETTINGS.voiceVolume,
-    };
+    const data: unknown = JSON.parse(raw);
+    const stored = z.record(z.string(), z.unknown()).safeParse(data);
+    const settings = { ...DEFAULT_SETTINGS };
+    if (!stored.success) return settings;
+    for (const name of preferenceNames) {
+      if (!Object.hasOwn(stored.data, name)) continue;
+      const value = stored.data[name];
+      const normalized =
+        name === "voiceVolume" && typeof value === "number" && Number.isFinite(value)
+          ? Math.min(100, Math.max(0, value))
+          : value;
+      const parsed = appSettingsSchema.partial().safeParse({ [name]: normalized });
+      if (parsed.success) Object.assign(settings, parsed.data);
+    }
+    return settings;
   } catch {
     return { ...DEFAULT_SETTINGS };
   }

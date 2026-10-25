@@ -1,4 +1,5 @@
 import { navigationTool, PLAYABLE_GAMES_LABEL } from "../../src/voice/navigation.js";
+import { preferenceNames } from "../../src/lib/preferences.js";
 
 const DEFAULT_ALLOWED_ORIGINS =
   "http://localhost:3000,http://127.0.0.1:3000,http://localhost:5173,http://127.0.0.1:5173";
@@ -8,17 +9,17 @@ const SESSION_WINDOW_MS = 60_000;
 const MAX_SESSION_CLIENTS = 1_000;
 
 const TOOL_INSTRUCTIONS = `
-You are the reasoning layer for a voice-first game companion. The browser owns the
-authoritative chess state. Always use a chess function before stating current board
-facts or attempting a game action. Never invent a legal move, square, piece, capture,
-check, result, or evaluation. Move requests create proposals; the application requires
-a later spoken confirmation before committing them. Never confirm your own proposal;
-return the pending action and wait for a separate user affirmation. Use navigate_app
-for page and game selection. ${PLAYABLE_GAMES_LABEL} are playable; never fabricate other
-gameplay. Follow saved-game resume and new-game choices from the tool result.
-Keep spoken answers concise and say coordinates as a letter followed by a number.
-After a move tool reports completion, acknowledge it briefly without repeating the
-full move because the application supplies an authoritative move narration.
+You are the reasoning layer for a voice-first game companion for blind players.
+The browser owns authoritative chess state. Use its tools for board facts and all actions.
+Execute valid, unambiguous commands immediately. Never ask for confirmation or require buttons.
+make_move plays the move now; play_best_move chooses and plays a legal engine move.
+get_hint only describes a suggestion. New game, undo, resign and navigation execute immediately.
+Only ask a clarification when the requested move is ambiguous or its promotion piece is missing.
+Never invent a move, board fact or successful outcome. Report tool errors without claiming success.
+Use get_preferences/set_preference for every audio and chess preference, review_move for history,
+and game_control for pause, resume, new_game, undo, resign, return_live, flip_board or retry_engine.
+Use navigate_app for page/game selection. ${PLAYABLE_GAMES_LABEL} are playable.
+Keep answers brief; say coordinates as a letter then number. The app narrates committed moves.
 `.trim();
 
 const tools = [
@@ -108,9 +109,8 @@ const tools = [
   },
   {
     type: "function",
-    name: "propose_move",
-    description:
-      "Resolve a move and either request confirmation or commit it when move confirmations are disabled.",
+    name: "make_move",
+    description: "Play a legal, unambiguous move immediately and update the board.",
     parameters: {
       type: "object",
       properties: {
@@ -136,37 +136,76 @@ const tools = [
   },
   {
     type: "function",
-    name: "propose_best_move",
-    description:
-      "Ask the local engine for one move and put it through the normal confirmation flow.",
-    parameters: { type: "object", properties: {}, additionalProperties: false },
-    strict: true,
-  },
-  {
-    type: "function",
-    name: "confirm_action",
-    description: "Confirm the currently pending action after a separate user affirmation.",
+    name: "play_best_move",
+    description: "Choose a legal move using the local engine and play it immediately.",
     parameters: { type: "object", properties: {}, additionalProperties: false },
     strict: true,
   },
   {
     type: "function",
     name: "cancel_action",
-    description: "Cancel the currently pending action.",
+    description: "Cancel an unfinished hint or move-selection request.",
     parameters: { type: "object", properties: {}, additionalProperties: false },
     strict: true,
   },
   {
     type: "function",
-    name: "propose_game_control",
-    description:
-      "Handle resume or propose a consequential game control. New game, undo, and resign require confirmation; resume does not.",
+    name: "game_control",
+    description: "Execute a chess control immediately. Never ask for confirmation.",
     parameters: {
       type: "object",
       properties: {
-        action: { type: "string", enum: ["pause", "resume", "new_game", "undo", "resign"] },
+        action: {
+          type: "string",
+          enum: [
+            "pause",
+            "resume",
+            "new_game",
+            "undo",
+            "resign",
+            "return_live",
+            "flip_board",
+            "retry_engine",
+          ],
+        },
       },
       required: ["action"],
+      additionalProperties: false,
+    },
+    strict: true,
+  },
+  {
+    type: "function",
+    name: "review_move",
+    description:
+      "Display a historical chess position. Use 0 for the starting position; other numbers are one-based.",
+    parameters: {
+      type: "object",
+      properties: { move: { type: "integer", minimum: 0 } },
+      required: ["move"],
+      additionalProperties: false,
+    },
+    strict: true,
+  },
+  {
+    type: "function",
+    name: "get_preferences",
+    description: "Read current audio and chess preferences.",
+    parameters: { type: "object", properties: {}, additionalProperties: false },
+    strict: true,
+  },
+  {
+    type: "function",
+    name: "set_preference",
+    description:
+      "Change a preference immediately. voiceVolume is 0-100; soundEnabled/screenReaderMode are booleans; playerColor is w/b; gameMode is computer/local; difficulty is beginner/casual/club/expert/nightmare; boardOrientation is white-bottom/flip-turn; boardTheme is classic/marine/ember/forest/midnight; pieceSet is unicode/symbols/outlined/merida. Side or opponent changes start a new chess game.",
+    parameters: {
+      type: "object",
+      properties: {
+        preference: { type: "string", enum: preferenceNames },
+        value: { anyOf: [{ type: "string" }, { type: "number" }, { type: "boolean" }] },
+      },
+      required: ["preference", "value"],
       additionalProperties: false,
     },
     strict: true,
@@ -176,42 +215,24 @@ const tools = [
 const GREETINGS = {
   home: `Welcome to Play by Voice. ${PLAYABLE_GAMES_LABEL} are ready to play. Ask whether the player would like to play chess or Loups-Garous, then pause and listen.`,
   chess:
-    "Welcome to Chess. The application will provide the current game context. Offer the quick guide or follow the saved-game choice, then pause and listen.",
+    "Welcome to Chess. The application will provide the current game context. Tell the player they can say a move to play immediately or ask for a quick guide, then listen.",
   loading: "Welcome to Chess. The board is getting ready. Pause and listen.",
   audio:
     "You are in Audio Settings. Mention narrator volume and ask how you can help, then pause and listen.",
   help: "You are in Help. Offer chess rules or voice-command help, then pause and listen.",
 } as const;
 
-const INSTRUCTIONS = `You are the calm English-speaking companion in Play by Voice, a voice-first gaming app for blind and low-vision players. Be brief, accept interruptions, and delegate every current board fact and game action. Never claim an action succeeded until its tool result says so.
+const INSTRUCTIONS = `You are the calm English-speaking companion in Play by Voice for blind and low-vision players. Be brief, accept interruptions and stop speaking when interrupted. Use brief backchannels without competing with the player.
 
-Backchannel policy:
-Use moderate, brief backchannels without competing with the player.
+Generate <|SpawnThinking|> before answering anything that needs current game state, navigation, preferences or an action. Delegate every board fact and action. Never merely promise a change: wait for its successful tool result before reporting success. Never invent outcomes.
 
-Interruption policy:
-Stop speaking when the player interrupts and listen to the correction.
+Execute the player's clear commands immediately, without confirmation prompts or required clicks. Moves, engine-chosen moves, new game, undo, resign, pause, resume, navigation and preferences all work by voice. Use make_move, play_best_move, game_control, navigate_app, review_move and the preference tools. Ask only for missing information such as an ambiguous origin or promotion piece. Illegal moves do not change the game.
 
-Delegation policy:
-Backend tools:
-- App navigation: open chess, Loups-Garous, the game picker, audio settings, and help.
-- Chess state: inspect squares and pieces, describe the position, list legal moves and recent moves.
-- Chess actions: propose moves, request engine hints or delegated moves, confirm or cancel pending actions, pause, resume, undo, restart, and resign.
-Generate <|SpawnThinking|> when:
-- The player selects a game or asks to navigate, including saying play chess.
-- A reply needs current board facts, legal moves, history, hints, or an evaluation.
-- The player requests, confirms, cancels, or corrects a game action. A short yes or no about a pending action needs backend work too.
-Do not generate <|SpawnThinking|> when:
-- Greeting, giving general rules, offering the guide, or repeating a still-current verified result.
-- A brief clarification is needed to understand the player.
-Generate <|SpawnThinking|> before answering anything that depends on backend work. Never merely promise a page change or game action; wait for the backend result.
+The application provides the open page. Welcome the player briefly there and listen. On the picker, say they can play chess or Loups-Garous. Tic-Tac-Toe is unavailable. Opening Chess resumes its saved position automatically. Do not make a tutorial or yes/no question a prerequisite for playing. Give the quick guide only when requested.
 
-The application tells you which page is open. Start by welcoming the player on that page. On the game picker, ask whether they want to play chess or Loups-Garous. Tic-Tac-Toe is coming soon; never pretend it can be played. Use navigate_app to open Chess, Loups-Garous, the game picker, Audio Settings, or Help. After opening Chess, follow the tool result. If a saved game is waiting, ask whether to resume it or start a new game. Call propose_game_control with resume or new_game. New games need confirmation. Leaving an active game also needs confirmation, and saves and pauses the position.
+The guide covers checkmate, files a-h, ranks 1-8, piece movement and voice commands. Explain that requested actions execute immediately and are announced afterward. get_hint suggests without moving; play_best_move plays for the player.
 
-After the game choice, ask whether the player wants a quick spoken guide or already knows how to play. Wait for their answer. Treat yes, please, or teach me as choosing the guide only when no game action is pending. If they decline, acknowledge it briefly and consult a game-state tool before saying whose turn it is.
-
-For the guide, explain checkmate, file letters a through h and ranks one through eight, how each piece moves, and voice commands for moves, squares, pieces, legal moves, history and hints. Explain that moves are read back for confirmation unless the player disables confirmations. They can ask for a hint without moving, or ask you to choose a move, which still needs confirmation. Keep the initial guide under ninety seconds and offer more detail on request.
-
-A pending action always takes priority over tutorial questions. Never confirm your own proposal. Wait for a separate user affirmation before confirm_action. Honor requests to repeat, shorten answers, add detail, slow down or stop speaking. Delegate what did I miss to get_history, and pause or resume to propose_game_control. The application supplies authoritative move and game-over narration. Do not repeat it or invent an outcome.`;
+Honor requests to repeat, shorten, slow down or stop speaking. Use get_history for what did I miss. Use review_move and return_live to inspect history, and get_preferences/set_preference for audio and chess settings. The application supplies authoritative move/game-over narration; do not duplicate it.`;
 
 export type ChessVoiceSettings = {
   apiKey: string | undefined;

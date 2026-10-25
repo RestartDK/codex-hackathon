@@ -23,16 +23,16 @@ export default function Help({
         <section>
           <h2>Start with your voice</h2>
           <p>
-            Select the orb, allow microphone access, and say "Play chess." You only need one voice
-            connection as you move around the app. Select the orb again to mute your microphone. Use
-            the stop button to end voice.
+            Select the orb, allow microphone access, and say "Play chess." Voice stays connected
+            between Chess, Audio Settings, and Help. Select the orb again to mute your microphone.
+            Use the stop button to end voice.
           </p>
         </section>
         <section>
           <h2>Make your first move</h2>
           <p>
-            Try "Move my pawn from e2 to e4." Your companion reads it back. Say "yes" to play it, or
-            "cancel" to leave the board unchanged. The computer then takes its turn.
+            Try "Move my pawn from e2 to e4." Your companion plays a legal move immediately and
+            announces the result. The computer then takes its turn.
           </p>
         </section>
         <section>
@@ -50,17 +50,17 @@ export default function Help({
         <section>
           <h2>No microphone? No problem.</h2>
           <p>
-            Open the keyboard button beside the orb to type commands. Try "e2 to e4", then "yes".
-            You can also play directly on the board. Tab into it, use the arrow keys to explore, and
-            press Enter or Space to select a piece and destination.
+            Open the keyboard button beside the orb to type commands. Try "e2 to e4" to play
+            immediately. You can also play directly on the board. Tab into it, use the arrow keys to
+            explore, and press Enter or Space to select a piece and destination.
           </p>
         </section>
         <section>
           <h2>Pick up later</h2>
           <p>
             Your chess position and preferences stay on this device. Leaving a game saves and pauses
-            it. Return to Chess and select Resume. Loups-Garous and Tic-Tac-Toe are previews, not
-            playable games yet.
+            it. Say "play chess" to return and resume automatically. Chess and Loups-Garous are
+            playable. Tic-Tac-Toe is coming soon.
           </p>
         </section>
       </div>

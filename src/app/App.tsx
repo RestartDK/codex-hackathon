@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
-import type { Color } from "chess.js";
-import type { GameMode } from "../types";
+import { Chess } from "chess.js";
 import { useChessGame, type GameResult } from "../hooks/useChessGame";
 import type { Preferences } from "../hooks/useSettings";
 import { useChessCompanion } from "../voice/useChessCompanion";
@@ -10,7 +9,6 @@ import ChessView from "../components/PlayByVoice/ChessView";
 import AudioSettings from "../components/PlayByVoice/AudioSettings";
 import Help from "../components/PlayByVoice/Help";
 import CompanionDock from "../components/PlayByVoice/CompanionDock";
-import ConfirmDialog from "../components/ConfirmDialog/ConfirmDialog";
 import PromotionDialog from "../components/PromotionDialog/PromotionDialog";
 import GameEndModal from "../components/GameEndModal/GameEndModal";
 import "./main.css";
@@ -21,7 +19,6 @@ type View =
   | { kind: "loading" }
   | { kind: "chess" }
   | { kind: "audio" | "help"; returnTo: "home" | "chess" };
-type PreferenceChange = { kind: "color"; value: Color } | { kind: "mode"; value: GameMode };
 
 export default function PlayByVoiceApp({
   preferences,
@@ -33,7 +30,7 @@ export default function PlayByVoiceApp({
   const { settings } = preferences;
   const session = useChessGame({ settings });
   const [view, setView] = useState<View>({ kind: "home" });
-  const [preferenceChange, setPreferenceChange] = useState<PreferenceChange | null>(null);
+  const [flipped, setFlipped] = useState(false);
   const [dismissedResult, setDismissedResult] = useState<GameResult>(null);
   const result = session.gameResult;
   const resultMessage = result
@@ -43,17 +40,18 @@ export default function PlayByVoiceApp({
     : null;
 
   function navigate(destination: AvailableDestination): string {
-    setPreferenceChange(null);
     switch (destination) {
       case "chess":
         if (view.kind !== "chess") setView({ kind: "loading" });
-        if (session.awaitingStartChoice)
-          return `Chess is open. A saved game with ${session.history.length} moves is waiting. Would you like to resume or start a new game?`;
-        if (session.isPaused)
-          return "Chess is open. Your position is saved. Say resume to continue.";
+        if ((session.awaitingStartChoice || session.isPaused) && !resultMessage) {
+          const resumed = session.resumeGame();
+          return resumed.ok
+            ? `Chess is resumed. ${session.game.turn() === "w" ? "White" : "Black"} to move. Say your move to play it.`
+            : resumed.message;
+        }
         if (resultMessage)
           return `Chess is open. ${resultMessage} You can review the moves or request a new game.`;
-        return `Chess is ready. ${settings.gameMode === "local" ? "This is a local two-player game." : `You play ${settings.playerColor === "w" ? "White" : "Black"}.`} ${session.history.length > 0 ? "Ask about the current board or request your next move." : "Would you like a quick spoken guide, or do you already know the rules?"}`;
+        return `Chess is ready. ${settings.gameMode === "local" ? "This is a local two-player game." : `You play ${settings.playerColor === "w" ? "White" : "Black"}.`} ${session.history.length > 0 ? "Ask about the current board or request your next move." : "Say a move to play it immediately, or say quick guide to hear the rules."}`;
       case "loups-garous":
         onPlayLoupsGarous();
         return "Loups-Garous is open. Say start the game. Use Games to return to the game picker.";
@@ -86,7 +84,29 @@ export default function PlayByVoiceApp({
       awaitingStartChoice: session.awaitingStartChoice,
       isTerminated: Boolean(result),
       isPaused: session.isPaused,
-      confirmMoves: settings.confirmMoves,
+      settings,
+      updateSettings: preferences.updateSettings,
+      review: session.displayFen
+        ? { game: new Chess(session.displayFen), move: session.reviewIndex + 1 }
+        : null,
+      reviewMove: (move) => {
+        if (move > session.history.length)
+          return { ok: false, message: "That move has not been played." };
+        if (session.history.length === 0)
+          return { ok: false, message: "No moves have been played yet." };
+        session.enterReviewMode();
+        session.goToMove(move - 1);
+        return {
+          ok: true,
+          message:
+            move === 0
+              ? "Reviewing the starting position."
+              : `Reviewing move ${move}: ${session.history[move - 1]}.`,
+        };
+      },
+      returnToLive: session.exitReviewMode,
+      flipBoard: () => setFlipped((value) => !value),
+      retryEngine: session.retryStockfish,
       makeMove: session.makeMove,
       getHint: session.getHint,
       newGame: () => {
@@ -119,21 +139,9 @@ export default function PlayByVoiceApp({
     document.getElementById("page-heading")?.focus({ preventScroll: true });
   }, [view.kind]);
 
-  const pendingDialog =
-    companion.pending && companion.pending.kind !== "move" ? companion.pending : null;
   const showResult =
-    view.kind === "chess" &&
-    result &&
-    result !== dismissedResult &&
-    !session.reviewMode &&
-    !pendingDialog &&
-    !preferenceChange;
-  const hasDialog = Boolean(
-    pendingDialog ||
-    preferenceChange ||
-    (view.kind === "chess" && session.pendingPromotion) ||
-    showResult,
-  );
+    view.kind === "chess" && result && result !== dismissedResult && !session.reviewMode;
+  const hasDialog = Boolean((view.kind === "chess" && session.pendingPromotion) || showResult);
   const chessVisible = view.kind === "chess";
 
   useEffect(() => {
@@ -210,7 +218,12 @@ export default function PlayByVoiceApp({
             </section>
           )}
           {view.kind === "chess" && (
-            <ChessView session={session} settings={settings} companion={companion} />
+            <ChessView
+              session={session}
+              settings={settings}
+              companion={companion}
+              flipped={flipped}
+            />
           )}
           {view.kind === "audio" && (
             <AudioSettings
@@ -218,11 +231,13 @@ export default function PlayByVoiceApp({
               onBack={() => {
                 void companion.navigate(view.returnTo);
               }}
-              onColorChange={(value) => {
-                if (value !== settings.playerColor) setPreferenceChange({ kind: "color", value });
+              onColorChange={(color) => {
+                companion.cancelRequests();
+                preferences.setPlayerColor(color);
               }}
-              onModeChange={(value) => {
-                if (value !== settings.gameMode) setPreferenceChange({ kind: "mode", value });
+              onModeChange={(mode) => {
+                companion.cancelRequests();
+                preferences.setGameMode(mode);
               }}
             />
           )}
@@ -241,39 +256,6 @@ export default function PlayByVoiceApp({
           screenReaderMode={settings.screenReaderMode}
         />
       </div>
-      {pendingDialog && (
-        <ConfirmDialog
-          title={pendingDialog.kind === "navigation" ? "Leave the game?" : "Confirm your action"}
-          message={
-            pendingDialog.kind === "navigation"
-              ? "Your current game will be saved. You can resume it when you return."
-              : pendingDialog.description + "."
-          }
-          confirmLabel={pendingDialog.kind === "navigation" ? "Leave game" : "Confirm"}
-          cancelLabel={pendingDialog.kind === "navigation" ? "Stay in game" : "Cancel"}
-          onConfirm={() => {
-            void companion.runCommand("yes");
-          }}
-          onCancel={() => {
-            void companion.runCommand("cancel");
-          }}
-        />
-      )}
-      {preferenceChange && (
-        <ConfirmDialog
-          title="Start a new game?"
-          message={`Changing ${preferenceChange.kind === "color" ? "your side" : "your opponent"} clears the current position. Your other preferences will stay the same.`}
-          confirmLabel="Change and start again"
-          onConfirm={() => {
-            companion.cancelPending();
-            if (preferenceChange.kind === "color")
-              preferences.setPlayerColor(preferenceChange.value);
-            else preferences.setGameMode(preferenceChange.value);
-            setPreferenceChange(null);
-          }}
-          onCancel={() => setPreferenceChange(null)}
-        />
-      )}
       {view.kind === "chess" && session.pendingPromotion && (
         <PromotionDialog
           color={session.game.turn()}
@@ -285,7 +267,7 @@ export default function PlayByVoiceApp({
         <GameEndModal
           result={result}
           onNewGame={() => {
-            companion.cancelPending();
+            companion.cancelRequests();
             session.newGame();
           }}
           onEnterReview={() => {
