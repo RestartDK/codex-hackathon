@@ -96,6 +96,65 @@ function normalizeVoiceCommand(value: string) {
     .replace(/\s+/gu, " ");
 }
 
+/** Accept a player's intent, not one exact incantation, before routing it. */
+function startsNewGameNaturally(text: string) {
+  const command = normalizeVoiceCommand(text);
+  if (/^how\b/u.test(command)) return false;
+  return (
+    /\b(?:start|begin|create|make|launch)\b.*\b(?:game|match|village|round|session|demo|test)\b/u.test(
+      command,
+    ) ||
+    /\b(?:let s|i want to|can we|shall we|ready to|time to) (?:start|begin|play)\b/u.test(
+      command,
+    ) ||
+    /\b(?:another round|one more game|run it back|get started|play a game)\b/u.test(command)
+  );
+}
+
+/**
+ * Questions can still be actions. Keep target-and-phase language on the
+ * validated command route instead of accidentally sending it to the guide.
+ */
+function looksLikeGameAction(text: string, game?: GameView) {
+  if (!game) return startsNewGameNaturally(text);
+  const command = normalizeVoiceCommand(text);
+  const hasPlayerName = game.players.some((candidate) => {
+    if (!candidate.alive || candidate.id === game.me.id) return false;
+    const archetypeNoun = normalizeVoiceCommand(candidate.profile.archetype).split(" ").at(-1);
+    return (
+      command.includes(normalizeVoiceCommand(candidate.name)) ||
+      Boolean(archetypeNoun && archetypeNoun.length > 3 && command.includes(archetypeNoun))
+    );
+  });
+  const movesOn =
+    /\b(?:pass|wait|skip|rest|dawn|morning|daybreak|continue|next|go on|move on|(?:i m|we re|all) done|that s it|end (?:my )?turn|wrap (?:this|it) up|finish (?:the )?night|go ahead|wake (?:everyone|everybody|the village)?|go to (?:the )?(?:morning|day|dawn)|ready (?:for|to) (?:morning|daylight|dawn))\b/u.test(
+      command,
+    );
+  const choosesForMe =
+    /\b(?:you decide|you pick|your choice|surprise me|whatever you think|anyone is fine|whoever you want)\b/u.test(
+      command,
+    );
+  const selection =
+    /\b(?:choose|pick|select|target|go with|hunt|attack|kill|go after|get rid of|take out|investigate|check|inspect|look at|look into|check on|save|heal|rescue|protect|poison|vote|eliminate|exile|remove|kick out|send home|banish|nominate|shoot|fire|take .* with me)\b/u.test(
+      command,
+    );
+  const voteIntent =
+    /\b(?:should (?:leave|go)|needs? to go|must go|goes home|time to vote|begin (?:the )?vote|start (?:the )?vote|make (?:a )?decision)\b/u.test(
+      command,
+    );
+
+  if (/\b(?:pause|hold|freeze|resume|unpause)\b.*\b(?:game|match|village|play)\b/u.test(command))
+    return true;
+  if (game.phase === "prologue")
+    return movesOn || /\b(?:ready|begin|start|night|let s go|get started)\b/u.test(command);
+  if (game.phase === "cupid") return choosesForMe || (hasPlayerName && selection);
+  if (game.phase === "night") return movesOn || choosesForMe || (hasPlayerName && selection);
+  if (game.phase === "day") return (hasPlayerName && (selection || voteIntent)) || voteIntent;
+  if (game.phase === "vote") return choosesForMe || (hasPlayerName && (selection || voteIntent));
+  if (game.phase === "hunter") return choosesForMe || (hasPlayerName && selection);
+  return false;
+}
+
 function readableFeedEntry(entry: FeedEntry) {
   const speaker = entry.kind === "private" ? "Private guide" : entry.speaker;
   return `Day ${entry.day}. ${speaker}: ${entry.text}`;
@@ -652,21 +711,18 @@ export default function App() {
     }
     if (voiceCommandsPaused) return;
     if (!session) {
-      const startsGame =
-        /\b(start|new|begin|play)\b.*\b(game|match|village|loups)\b/iu.test(command) ||
-        /\b(start|begin|play)\b.*\b(quick|test|demo)\b/iu.test(command);
-      if (startsGame) {
+      if (startsNewGameNaturally(command)) {
         queueAssistant("Starting a new village. I will introduce the characters first.");
         await create(undefined, /\b(quick|test)\b/iu.test(command));
         return;
       }
       if (isGuideQuestion(command)) {
         queueAssistant(
-          "Say ‘start a new game’ to begin. Once the village is open, I can explain your role, the rules, and every phase.",
+          "Tell me you are ready to play, and I will open the village. Once it is open, I can explain your role, the rules, and every phase.",
         );
         return;
       }
-      queueAssistant("I can start a new game when you say ‘start a new game’.");
+      queueAssistant("Tell me when you want to play, and I will start a new village.");
       return;
     }
 
@@ -678,8 +734,10 @@ export default function App() {
       // its timer has opened the first night rather than bypassing the slide.
       if (onboardingStep === "moon") return;
       const wantsToAdvance =
-        /\b(continue|ready|begin|start|next|go on|let(?:'s| us) go)\b/iu.test(command) ||
-        /\b(show|read|tell me about|explain)\b.*\b(role|card|details?|instructions?)\b/iu.test(
+        /\b(continue|ready|begin|start|next|go on|move on|i(?:'m| am) done|let(?:'s| us) go|get started)\b/iu.test(
+          command,
+        ) ||
+        /\b(show|read|hear|tell me about|explain)\b.*\b(role|card|details?|instructions?)\b/iu.test(
           command,
         );
       if (wantsToAdvance) {
@@ -824,7 +882,7 @@ export default function App() {
       storyAudio.resume();
       return;
     }
-    if (/\b(start|new)\b.*\b(game|match|village)\b/iu.test(command)) {
+    if (startsNewGameNaturally(command) || /\b(?:restart|start over|new round)\b/iu.test(command)) {
       queueAssistant("Starting a new village. I will introduce the characters first.");
       setSession(undefined);
       await create(undefined, /\b(quick|test)\b/iu.test(command));
@@ -846,7 +904,7 @@ export default function App() {
       await perform({ command }, true);
       return;
     }
-    if (isGuideQuestion(command)) {
+    if (isGuideQuestion(command) && !looksLikeGameAction(command, session.game)) {
       // Use the server guide for every answer. It receives the current game
       // state, while a long-running Live session only has its opening context.
       await askGuide(command);
@@ -1084,7 +1142,7 @@ export default function App() {
       lastVoiceCommandRef.current = { text: normalized, at: now };
       // A slow open-ended guide answer must not make an immediate game command
       // wait in line. Actions still share their ordered command lane.
-      if (isGuideQuestion(text)) {
+      if (isGuideQuestion(text) && !looksLikeGameAction(text, latestGameRef.current)) {
         void handleVoiceCommand(text);
         return;
       }
