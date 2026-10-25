@@ -107,6 +107,12 @@ export async function startLiveVoice({
         autoGainControl: true,
       },
     });
+    if (closed || signal?.aborted) {
+      stream.getTracks().forEach((track) => track.stop());
+      stream = undefined;
+      throwIfAborted();
+      throw new DOMException("The operation was aborted.", "AbortError");
+    }
     throwIfAborted();
     peerConnection = new RTCPeerConnection();
     dataChannel = peerConnection.createDataChannel("oai-events");

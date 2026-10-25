@@ -5,7 +5,7 @@ export const INTERCEPT_SAVE_KEY = "voice-game-companion-intercept-save";
 export const INTERCEPT_SOURCE_REVISION = "2a816b56e61ce4bf02bec1c638074645bdd871e3";
 export const INTERCEPT_SAVE_VERSION = 1;
 export const INTERCEPT_INTRODUCTION =
-  "The Intercept is a choice-based mystery set at Bletchley Park in 1942. You play a cryptographer held for questioning after a component from the Bombe code-breaking machine disappears. Listen to each scene, then decide what your character says or does. Your goal is to navigate the investigation and shape your characterÃ¢â‚¬â„¢s fate. There is no score or single official victory: the story has multiple endings, and some outcomes are safer or more favorable for your character than others. Reaching any ending completes a playthrough, and you can replay to discover a different outcome.";
+  "The Intercept is a choice-based mystery set at Bletchley Park in 1942. You play a cryptographer held for questioning after a component from the Bombe code-breaking machine disappears. Listen to each scene, then decide what your character says or does. Your goal is to navigate the investigation and shape your character’s fate. There is no score or single official victory: the story has multiple endings, and some outcomes are safer or more favorable for your character than others. Reaching any ending completes a playthrough, and you can replay to discover a different outcome.";
 
 interface InkChoice {
   index: number;
@@ -453,4 +453,3 @@ export function matchInterceptChoice(
   );
   return exact.length === 1 ? exact[0] : null;
 }
-

@@ -393,12 +393,70 @@ export function serializeLudo(state: LudoState): string {
 
 export function deserializeLudo(raw: string): LudoState | null {
   try {
+    if (raw.length > 2_000_000) return null;
     const parsed = JSON.parse(raw) as { version?: number; state?: LudoState };
     if (parsed.version !== 1 || !parsed.state || parsed.state.version !== 1) return null;
     const state = parsed.state;
     if (!["human", "computer"].includes(state.activePlayer) || !Array.isArray(state.history))
       return null;
-    if (state.tokens.human.length !== 4 || state.tokens.computer.length !== 4) return null;
+    const validTokens = (candidate: LudoState) =>
+      (["human", "computer"] as const).every(
+        (player) =>
+          Array.isArray(candidate.tokens?.[player]) &&
+          candidate.tokens[player].length === 4 &&
+          candidate.tokens[player].every(
+            (token, index) =>
+              token?.id === index + 1 &&
+              Number.isInteger(token.progress) &&
+              token.progress >= -1 &&
+              token.progress <= FINAL_PROGRESS,
+          ),
+      );
+    if (
+      !validTokens(state) ||
+      ![
+        "awaiting-roll",
+        "awaiting-token",
+        "awaiting-confirmation",
+        "awaiting-continue",
+        "computer-turn",
+        "finished",
+      ].includes(state.phase)
+    )
+      return null;
+    if (
+      !Number.isInteger(state.revision) ||
+      state.revision < 0 ||
+      !Number.isInteger(state.sixStreak) ||
+      state.sixStreak < 0 ||
+      state.sixStreak > 2
+    )
+      return null;
+    if (
+      state.currentRoll !== null &&
+      (!Number.isInteger(state.currentRoll) || state.currentRoll < 1 || state.currentRoll > 6)
+    )
+      return null;
+    if (state.result !== null && state.result !== "human" && state.result !== "computer")
+      return null;
+    if (
+      state.phase === "awaiting-token" &&
+      (state.currentRoll == null || legalTokenIds(state).length === 0)
+    )
+      return null;
+    if (state.correction && !validTokens(state.correction.state)) return null;
+    if (
+      !state.history.every(
+        (move) =>
+          move &&
+          ["human", "computer"].includes(move.player) &&
+          Number.isInteger(move.tokenId) &&
+          move.tokenId >= 1 &&
+          move.tokenId <= 4 &&
+          Array.isArray(move.captured),
+      )
+    )
+      return null;
     state.lastRoll ??= null;
     return cloneLudoState(state);
   } catch {
@@ -408,4 +466,3 @@ export function deserializeLudo(raw: string): LudoState | null {
 
 export const LUDO_RULES_VERSION = "classic-two-player-v1";
 export const ludoConstants = { FINAL_PROGRESS, SAFE_SQUARES } as const;
-

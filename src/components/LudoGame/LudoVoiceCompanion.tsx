@@ -3,7 +3,7 @@ import { Mic, MicOff, Square, Volume2 } from "lucide-react";
 import { Button } from "../ui/Button";
 import { Card } from "../ui/Card";
 import { createLudoToolExecutor, type LudoToolBridge } from "../../games/ludo/ludoTools";
-import { useVoiceCompanion } from "../../voice/useVoiceCompanion";
+import { useLibraryVoice } from "../../voice/useLibraryVoice";
 
 interface Props extends LudoToolBridge {
   screenReaderMode: boolean;
@@ -20,6 +20,8 @@ function localIntent(command: string): { name: string; args: object } | null {
     return { name: "get_position", args: {} };
   if (/^(resume|resume game|resume saved game)$/.test(value))
     return { name: "propose_game_control", args: { action: "resume" } };
+  if (/^(pause|pause game)$/.test(value))
+    return { name: "propose_game_control", args: { action: "pause" } };
   if (/^(new game|start a new game)$/.test(value))
     return { name: "propose_game_control", args: { action: "new_game" } };
   if (/^(yes|confirm|play it|do it)$/.test(value)) return { name: "confirm_action", args: {} };
@@ -38,6 +40,12 @@ function localIntent(command: string): { name: string; args: object } | null {
     return { name: "propose_best_token_move", args: {} };
   if (/^(where are my tokens|my tokens|tokens)$/.test(value))
     return { name: "get_tokens", args: { owner: "human" } };
+  if (
+    /^(where are (?:the )?(?:computer|opponent)(?:s|'s)? tokens|computer tokens|opponent tokens)$/.test(
+      value,
+    )
+  )
+    return { name: "get_tokens", args: { owner: "computer" } };
   const token = value.match(/(?:move|choose|select) (?:my )?token (one|two|three|four|[1-4])/);
   if (token) {
     const id =
@@ -62,7 +70,7 @@ export default function LudoVoiceCompanion(props: Props) {
       () => refreshPending((v) => v + 1),
     );
   const executor = executorRef.current;
-  const voice = useVoiceCompanion(executor, props.screenReaderMode, "ludo");
+  const { voice, runGlobalCommand } = useLibraryVoice(executor, "ludo");
   useEffect(() => {
     props.onNarrationBusyChange(voice.status === "connected" && voice.isSpeaking);
   }, [props.onNarrationBusyChange, voice.isSpeaking, voice.status]);
@@ -91,7 +99,13 @@ export default function LudoVoiceCompanion(props: Props) {
 
   async function runCommand() {
     const value = typedCommand.trim().toLowerCase();
-    if (/^(guide|tutorial|how to play|quick guide)$/.test(value)) {
+    const global = await runGlobalCommand(value);
+    if (global !== null) {
+      setResponse(global);
+      setTypedCommand("");
+      return;
+    }
+    if (/^(guide|tutorial|how to play|quick guide|help|rules)$/.test(value)) {
       setResponse(GUIDE);
       if (voice.status === "connected") voice.announce(GUIDE);
       setTypedCommand("");
@@ -100,7 +114,7 @@ export default function LudoVoiceCompanion(props: Props) {
     const intent = localIntent(typedCommand);
     if (!intent) {
       setResponse(
-        "Try Ã¢â‚¬Å“rollÃ¢â‚¬Â, Ã¢â‚¬Å“move token 2Ã¢â‚¬Â, Ã¢â‚¬Å“statusÃ¢â‚¬Â, Ã¢â‚¬Å“where are my tokensÃ¢â‚¬Â, Ã¢â‚¬Å“continueÃ¢â‚¬Â, or Ã¢â‚¬Å“correctÃ¢â‚¬Â.",
+        "Try “roll”, “move token 2”, “status”, “where are my tokens”, “continue”, or “correct”.",
       );
       return;
     }
@@ -135,7 +149,7 @@ export default function LudoVoiceCompanion(props: Props) {
             {voice.status === "connected"
               ? "Listening"
               : voice.status === "connecting"
-                ? "ConnectingÃ¢â‚¬Â¦"
+                ? "Connecting…"
                 : voice.status === "error"
                   ? "Voice unavailable"
                   : "Voice is off"}
@@ -162,8 +176,7 @@ export default function LudoVoiceCompanion(props: Props) {
         )}
       </div>
       <p className="voice-help">
-        Try: Ã¢â‚¬Å“rollÃ¢â‚¬Â, Ã¢â‚¬Å“move token 2Ã¢â‚¬Â, Ã¢â‚¬Å“where are my tokens?Ã¢â‚¬Â, Ã¢â‚¬Å“continueÃ¢â‚¬Â, or
-        Ã¢â‚¬Å“correct my last moveÃ¢â‚¬Â.
+        Try: “roll”, “move token 2”, “where are my tokens?”, “continue”, or “correct my last move”.
       </p>
       <p id="ludo-dashboard-overview" className="dashboard-overview">
         The dashboard has voice controls, a typed command fallback, the Ludo board, numbered tokens,
@@ -289,4 +302,3 @@ export default function LudoVoiceCompanion(props: Props) {
     </Card>
   );
 }
-

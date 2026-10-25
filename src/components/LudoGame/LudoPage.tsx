@@ -150,7 +150,7 @@ function LudoBoard({ state }: { state: LudoHook["state"] }) {
               className={`classic-ludo-cell ${cellKind(row, column)}`}
             >
               {trackSquare != null && isSafeSquare(trackSquare) && (
-                <span className="safe-mark">Ã¢Ëœâ€¦</span>
+                <span className="safe-mark">★</span>
               )}
               {pieces.get(key)?.map((piece) => (
                 <span
@@ -306,7 +306,7 @@ export default function LudoPage({
                   <p className="ludo-roll-number">
                     Last roll: <strong>{game.lastRoll?.value ?? "none"}</strong>
                     {game.lastRoll && (
-                      <span> Ã¢â‚¬â€ {game.lastRoll.player === "human" ? "you" : "computer"}</span>
+                      <span> — {game.lastRoll.player === "human" ? "you" : "computer"}</span>
                     )}
                   </p>
                   <p>
@@ -399,4 +399,3 @@ export default function LudoPage({
     </div>
   );
 }
-

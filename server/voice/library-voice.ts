@@ -1,3 +1,5 @@
+import { navigationTool } from "../../src/voice/navigation.js";
+
 const TOOL_INSTRUCTIONS = `
 You are the reasoning layer for a voice-first chess companion. The browser owns the
 authoritative chess state. Always use a chess function before stating current board
@@ -539,7 +541,13 @@ export async function handleLibraryVoiceSession(request: Request): Promise<Respo
   } catch {
     body = {};
   }
-  if (typeof body.sdp !== "string" || !body.sdp.trim() || body.sdp.length > 64_000) {
+  if (
+    !body ||
+    typeof body !== "object" ||
+    typeof body.sdp !== "string" ||
+    !body.sdp.trim() ||
+    body.sdp.length > 64_000
+  ) {
     return new Response(JSON.stringify({ error: "A valid SDP offer is required" }), {
       status: 400,
       headers: { "content-type": "application/json" },
@@ -592,7 +600,10 @@ export async function handleLibraryVoiceSession(request: Request): Promise<Respo
       body: JSON.stringify({
         session: {
           model: process.env.OPENAI_VOICE_MODEL ?? "gpt-live-1",
+          audio: { output: { voice: process.env.OPENAI_VOICE ?? "marin" } },
           instructions: `You are a calm English voice companion for a blind ${gameId} player. Be brief, accept interruptions, and delegate every current game fact and game action. Never claim an action succeeded until its tool result says so.
+
+Generate <|SpawnThinking|> before responding to every game action, navigation request, preference change, or question about current state. Short commands such as roll, token two, choice one, center, pause, or continue are actions to execute, not backchannels to ignore. Stop speaking immediately if the player interrupts. Wait for tool results before reporting success.
 
 At the beginning, use the application's brief welcome. Offer help in one short phrase; explain rules or the dashboard only when asked. ${experienceInstructions}
 
@@ -603,8 +614,35 @@ Honor requests to repeat, add detail, speak more slowly, pause, or stop speaking
             type: "responses",
             responses: {
               model: process.env.OPENAI_DELEGATION_MODEL ?? "gpt-6-luna",
-              instructions: activeInstructions,
-              tools: activeTools,
+              reasoning: { effort: "low" },
+              instructions: `${activeInstructions} Use navigate_app to open the game library, another game, audio settings or help. Use get_preferences and set_preference for narrator volume or screen-reader mode.`,
+              tools: [
+                ...activeTools,
+                navigationTool,
+                {
+                  type: "function",
+                  name: "get_preferences",
+                  description: "Read shared audio preferences.",
+                  parameters: { type: "object", properties: {}, additionalProperties: false },
+                  strict: true,
+                },
+                {
+                  type: "function",
+                  name: "set_preference",
+                  description:
+                    "Change shared narrator volume (0 to 100) or screen-reader mode (boolean).",
+                  parameters: {
+                    type: "object",
+                    properties: {
+                      preference: { type: "string", enum: ["voiceVolume", "screenReaderMode"] },
+                      value: { anyOf: [{ type: "number" }, { type: "boolean" }] },
+                    },
+                    required: ["preference", "value"],
+                    additionalProperties: false,
+                  },
+                  strict: true,
+                },
+              ],
               tool_choice: "auto",
               parallel_tool_calls: false,
             },
@@ -625,10 +663,29 @@ Honor requests to repeat, add detail, speak more slowly, pause, or stop speaking
     );
   }
 
-  const responseBody = await upstream.text();
-  return new Response(responseBody, {
-    status: upstream.status,
-    headers: { "content-type": upstream.headers.get("content-type") ?? "application/json" },
-  });
+  if (!upstream.ok)
+    return Response.json(
+      { error: `The voice provider rejected the session (${upstream.status}). Please retry.` },
+      { status: 502 },
+    );
+  let result: unknown;
+  try {
+    result = await upstream.json();
+  } catch {
+    result = null;
+  }
+  if (
+    !result ||
+    typeof result !== "object" ||
+    !("transport" in result) ||
+    !result.transport ||
+    typeof result.transport !== "object" ||
+    !("sdp" in result.transport) ||
+    typeof result.transport.sdp !== "string"
+  )
+    return Response.json(
+      { error: "The voice provider returned an invalid session. Please retry." },
+      { status: 502 },
+    );
+  return Response.json({ transport: { sdp: result.transport.sdp } });
 }
-
