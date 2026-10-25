@@ -23,7 +23,17 @@ export default function AppShell() {
   const preferences = useSettings();
   const [experience, setExperience] = useState<Experience>("play-by-voice");
   const [initialDestination, setInitialDestination] = useState<AvailableDestination>("home");
-  const [autoVoice, setAutoVoice] = useState(false);
+  const [autoVoice, setAutoVoice] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return new URLSearchParams(window.location.search).get("voice") === "1";
+  });
+  useEffect(() => {
+    // The landing handoff is consumed once, so it never becomes a standing microphone opt-in.
+    const url = new URL(window.location.href);
+    if (url.searchParams.get("voice") !== "1") return;
+    url.searchParams.delete("voice");
+    window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
+  }, []);
   const navigateLibrary = useCallback((destination: AvailableDestination, startVoice = false) => {
     setAutoVoice(startVoice);
     if (

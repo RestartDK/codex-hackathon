@@ -124,6 +124,79 @@ describe("Loups-Garous voice-command actions", () => {
     expect(game.phase).not.toBe("night");
   });
 
+  it("resolves a spoken Witch save and poison as one validated night action", async () => {
+    vi.stubEnv("OPENAI_API_KEY", "");
+    const game = createGame("Ada", 5, {
+      fixedRoles: ["witch", "werewolf", "villager", "seer", "villager"],
+      roleCounts: { werewolf: 1, villager: 2, seer: 1, witch: 1, hunter: 0, cupid: 0 },
+      controllers: { "npc-1": "bot", "npc-2": "bot", "npc-3": "bot", "npc-4": "bot" },
+    });
+    startGame(game);
+    await prepareGame(game);
+    const victim = game.players.find((candidate) => candidate.id === "npc-2")!;
+    const poisonTarget = game.players.find((candidate) => candidate.id === "npc-4")!;
+    for (const wolf of game.players.filter((candidate) => candidate.role === "werewolf"))
+      wolf.nightAction = { kind: "wolf", targetId: victim.id };
+    game.wolfVictimId = victim.id;
+
+    const command = `save ${victim.name} and poison ${poisonTarget.name}`;
+    expect(await loupsGarous.parseCommand!(command, game, "human")).toEqual({
+      type: "night",
+      save: victim.id,
+      poison: poisonTarget.id,
+    });
+
+    await loupsGarous.applyAction(game, "human", {
+      type: "night",
+      save: victim.id,
+      poison: poisonTarget.id,
+    });
+
+    expect(victim.alive).toBe(true);
+    expect(poisonTarget.alive).toBe(false);
+    expect(game.witchHealAvailable).toBe(false);
+    expect(game.witchPoisonAvailable).toBe(false);
+    expect(game.phase).not.toBe("night");
+    expect(
+      game.feed.some(
+        (entry) => entry.kind === "event" && entry.text.includes(poisonTarget.name),
+      ),
+    ).toBe(true);
+    expect(
+      game.feed.some((entry) => entry.kind === "event" && entry.text.includes(victim.name)),
+    ).toBe(false);
+  });
+
+  it("rejects an illegal combined potion action without spending either potion", async () => {
+    vi.stubEnv("OPENAI_API_KEY", "");
+    const game = createGame("Ada", 5, {
+      fixedRoles: ["witch", "werewolf", "villager", "seer", "villager"],
+      roleCounts: { werewolf: 1, villager: 2, seer: 1, witch: 1, hunter: 0, cupid: 0 },
+      controllers: { "npc-1": "bot", "npc-2": "bot", "npc-3": "bot", "npc-4": "bot" },
+    });
+    startGame(game);
+    await prepareGame(game);
+    const victim = game.players.find((candidate) => candidate.id === "npc-2")!;
+    for (const wolf of game.players.filter((candidate) => candidate.role === "werewolf"))
+      wolf.nightAction = { kind: "wolf", targetId: victim.id };
+    game.wolfVictimId = victim.id;
+
+    await expect(
+      loupsGarous.applyAction(game, "human", {
+        type: "night",
+        save: victim.id,
+        poison: victim.id,
+      }),
+    ).rejects.toThrow(/valid poison target/u);
+    expect(game.witchHealAvailable).toBe(true);
+    expect(game.witchPoisonAvailable).toBe(true);
+    expect(game.phase).toBe("night");
+    expect(victim.alive).toBe(true);
+    expect(() => loupsGarous.parseCommand!("use both potions", game, "human")).toThrow(
+      /player to save/u,
+    );
+  });
+
   it("shows current-round votes received during voting and resets them each round", async () => {
     vi.stubEnv("OPENAI_API_KEY", "");
     const game = createGame("Ada", 6, {

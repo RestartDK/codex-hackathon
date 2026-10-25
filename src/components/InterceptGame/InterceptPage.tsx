@@ -122,6 +122,16 @@ export default function InterceptPage({
     }
     if (/^(recap|story recap|what happened)$/.test(normalized))
       return void execute("get_story_recap");
+    const transcriptPage = normalized.match(
+      /^(?:read|hear|show)?\s*(?:the\s+)?(?:story\s+)?transcript(?:\s+page\s+(\d{1,2}))?$/,
+    );
+    if (transcriptPage)
+      return void execute("read_story_transcript", {
+        page: transcriptPage[1] ? Number(transcriptPage[1]) : 1,
+        pageSize: 10,
+      });
+    if (/^(read all messages|read all|read everything)$/.test(normalized))
+      return void execute("read_story_transcript", { page: 1, pageSize: 20 });
     if (/^(undo|undo choice|go back)$/.test(normalized)) return void execute("undo_story_choice");
     if (/^(pause|pause story)$/.test(normalized))
       return void execute("propose_story_control", { action: "pause" });
@@ -167,8 +177,10 @@ export default function InterceptPage({
               <p className="voice-eyebrow">Conversational story controls</p>
               <h2 id="intercept-voice-heading">Voice companion</h2>
               <p className="voice-status">
-                {voice.status === "connected"
-                  ? "Listening"
+                {voice.status === "connected" && voice.commandsPaused
+                  ? "Listening, commands paused"
+                  : voice.status === "connected"
+                    ? "Listening"
                   : voice.status === "connecting"
                     ? "Connecting…"
                     : voice.status === "closing"

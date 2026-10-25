@@ -100,8 +100,7 @@ function stubBrowser(
 }
 
 const baseOptions = {
-  gameId: "game-1",
-  sessionToken: "session-token",
+  target: { kind: "game", gameId: "game-1", sessionToken: "session-token" } as const,
 };
 
 afterEach(() => {
@@ -191,5 +190,28 @@ describe("live voice startup ownership", () => {
     expect(stubs.stream.tracks[0].stopped).toBe(true);
     expect(stubs.calls.closed).toBe(1);
     expect(stubs.closed).toHaveLength(1);
+  });
+
+  it("opens the public lobby session without game credentials", async () => {
+    const requests: { url: string; init: RequestInit | undefined }[] = [];
+    const stubs = stubBrowser(async (input, init) => {
+      requests.push({ url: input, init });
+      return Response.json({ transport: { sdp: "lobby-answer" } });
+    });
+
+    await startLiveVoice({ target: { kind: "lobby" }, ...stubs.callbacks });
+
+    expect(requests[0]?.url).toBe("/api/voice/session");
+    expect(requests[0]?.init?.headers).toEqual({ "Content-Type": "application/json" });
+    expect(requests[0]?.init?.body).toBe(JSON.stringify({ sdp: "offer-sdp", mode: "lobby" }));
+    expect(JSON.stringify(requests[0]?.init)).not.toContain("session-token");
+  });
+
+  it("rejects a session response without an SDP answer", async () => {
+    const stubs = stubBrowser(async () => Response.json({ transport: {} }));
+    await expect(
+      startLiveVoice({ target: { kind: "lobby" }, ...stubs.callbacks }),
+    ).rejects.toThrow(/invalid session/iu);
+    expect(stubs.stream.tracks[0].stopped).toBe(true);
   });
 });

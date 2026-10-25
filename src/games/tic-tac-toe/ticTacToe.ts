@@ -335,3 +335,11 @@ export function deserializeTicTacToe(raw: string): TicTacToeState | null {
   }
 }
 
+export const TIC_TAC_TOE_INTRODUCTION =
+  "Tic-Tac-Toe is a three by three strategy game. You are X and move first. Make three X marks in a row, column, or diagonal before the computer makes three O marks. If all nine squares fill without a line, the round is a draw. Name squares by position, from top left to bottom right, or as square one through nine.";
+
+export const TIC_TAC_TOE_GUIDE =
+  "Say play center, top left, or square nine. You can also ask describe the board, available squares, what is in a square, move history, whose turn, suggest a move, undo, pause, or new round. Direct moves play immediately. A move selected by the companion asks for confirmation.";
+
+export const TIC_TAC_TOE_DASHBOARD =
+  "The dashboard has voice controls and a typed-command fallback, a three by three board, turn and difficulty status, the wins, losses, and draws scoreboard, move history, and undo, pause, new round, and reset match controls.";

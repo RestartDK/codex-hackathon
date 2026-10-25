@@ -1,70 +1,37 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import { ArrowLeft, House, Monitor, Users } from "lucide-react";
-import type { Difficulty } from "../../chess/difficulty";
-import type { GameMode } from "../../types";
+import {
+  CHESS_SETUP_DIFFICULTIES,
+  CHESS_SETUP_STEPS,
+  difficultyLabel,
+  type ChessSetupCommand,
+  type ChessSetupState,
+} from "./chessSetup";
 
-export type ChessSetupSelection = {
-  gameMode: GameMode;
-  difficulty: Difficulty;
-  playerColor: "w" | "b";
-  timerMinutes: 5 | 10 | null;
-  explainRules: boolean;
-};
-
-type ColorChoice = "w" | "b" | "random";
-type SetupStep = "opponent" | "difficulty" | "color" | "timer" | "rules";
-
-const STEPS: SetupStep[] = ["opponent", "difficulty", "color", "timer", "rules"];
+export type { ChessSetupSelection } from "./chessSetup";
+export type { ChessSetupCommand, ChessSetupState } from "./chessSetup";
 
 export default function ChessSetup({
-  onCancel,
-  onStart,
+  state,
+  onCommand,
 }: {
-  onCancel: () => void;
-  onStart: (selection: ChessSetupSelection) => void;
+  state: ChessSetupState;
+  onCommand: (command: ChessSetupCommand) => void;
 }) {
-  const [stepIndex, setStepIndex] = useState(0);
-  const [difficulty, setDifficulty] = useState<Difficulty>("beginner");
-  const [color, setColor] = useState<ColorChoice>("w");
-  const [timerMinutes, setTimerMinutes] = useState<5 | 10 | null>(null);
-  const [explainRules, setExplainRules] = useState(false);
-  const [ready, setReady] = useState(false);
-  const startingRef = useRef(false);
   const headingRef = useRef<HTMLHeadingElement>(null);
-  const step = STEPS[stepIndex];
+  const { draft, step, ready } = state;
+  const stepIndex = CHESS_SETUP_STEPS.indexOf(step);
 
   useEffect(() => {
     headingRef.current?.focus({ preventScroll: true });
   }, [step, ready]);
 
-  function advance() {
-    if (stepIndex < STEPS.length - 1) setStepIndex((value) => value + 1);
-    else setReady(true);
-  }
-
-  function goBack() {
-    if (ready) setReady(false);
-    else if (stepIndex > 0) setStepIndex((value) => value - 1);
-    else onCancel();
-  }
-
-  function start() {
-    if (startingRef.current) return;
-    startingRef.current = true;
-    const playerColor = color === "random" ? (Math.random() < 0.5 ? "w" : "b") : color;
-    onStart({
-      gameMode: "computer",
-      difficulty,
-      playerColor,
-      timerMinutes,
-      explainRules,
-    });
-  }
+  const goBack = () => onCommand({ kind: "back" });
 
   return (
     <section className="chess-setup-page" aria-labelledby="page-heading">
       <nav className="setup-rail" aria-label="Setup navigation">
-        <button className="round-control" type="button" onClick={onCancel}>
+        <button className="round-control" type="button" onClick={() => onCommand({ kind: "cancel" })}>
           <House size={22} aria-hidden="true" />
           <span className="sr-only">Return to game picker</span>
         </button>
@@ -84,15 +51,7 @@ export default function ChessSetup({
         <button
           type="button"
           className="pill-button primary"
-          onClick={() =>
-            onStart({
-              gameMode: "computer",
-              difficulty: "beginner",
-              playerColor: "w",
-              timerMinutes: null,
-              explainRules: false,
-            })
-          }
+          onClick={() => onCommand({ kind: "defaults" })}
         >
           Play now with defaults
         </button>
@@ -105,7 +64,14 @@ export default function ChessSetup({
               Choose your opponent
             </h2>
             <div className="setup-option-grid setup-opponents">
-              <button className="setup-option is-selected is-dark" type="button" onClick={advance}>
+              <button
+                className={`setup-option is-dark${draft.gameMode === "computer" ? " is-selected" : ""}`}
+                type="button"
+                aria-pressed={draft.gameMode === "computer"}
+                onClick={() => {
+                  onCommand({ kind: "choose-opponent", gameMode: "computer" });
+                }}
+              >
                 <Monitor size={26} aria-hidden="true" />
                 <span>Computer</span>
               </button>
@@ -124,22 +90,18 @@ export default function ChessSetup({
               Choose your difficulty
             </h2>
             <div className="setup-option-list">
-              {[
-                ["beginner", "Beginner", "A gentle pace while you learn the board."],
-                ["casual", "Intermediate", "A balanced opponent with tactical awareness."],
-                ["club", "Advanced", "A stronger opponent with more thinking time."],
-              ].map(([value, label, description], index) => (
+              {CHESS_SETUP_DIFFICULTIES.map((option, index) => (
                 <button
-                  className={`setup-option difficulty-option tone-${index}${difficulty === value ? " is-selected" : ""}`}
+                  className={`setup-option difficulty-option tone-${index}${draft.difficulty === option.difficulty ? " is-selected" : ""}`}
                   type="button"
-                  key={value}
+                  key={option.difficulty}
+                  aria-pressed={draft.difficulty === option.difficulty}
                   onClick={() => {
-                    setDifficulty(value as Difficulty);
-                    advance();
+                    onCommand({ kind: "choose-difficulty", difficulty: option.difficulty });
                   }}
                 >
-                  <span>{label}</span>
-                  <small>{description}</small>
+                  <span>{option.label}</span>
+                  <small>{option.description}</small>
                 </button>
               ))}
             </div>
@@ -153,31 +115,31 @@ export default function ChessSetup({
             </h2>
             <div className="setup-option-grid">
               <button
-                className={`setup-option color-option white${color === "w" ? " is-selected is-dark" : ""}`}
+                className={`setup-option color-option white${draft.color === "w" ? " is-selected is-dark" : ""}`}
                 type="button"
+                aria-pressed={draft.color === "w"}
                 onClick={() => {
-                  setColor("w");
-                  advance();
+                  onCommand({ kind: "choose-color", color: "w" });
                 }}
               >
                 White
               </button>
               <button
-                className={`setup-option color-option black${color === "b" ? " is-selected is-dark" : ""}`}
+                className={`setup-option color-option black${draft.color === "b" ? " is-selected is-dark" : ""}`}
                 type="button"
+                aria-pressed={draft.color === "b"}
                 onClick={() => {
-                  setColor("b");
-                  advance();
+                  onCommand({ kind: "choose-color", color: "b" });
                 }}
               >
                 Black
               </button>
               <button
-                className={`setup-option setup-option-wide${color === "random" ? " is-selected" : ""}`}
+                className={`setup-option setup-option-wide${draft.color === "random" ? " is-selected" : ""}`}
                 type="button"
+                aria-pressed={draft.color === "random"}
                 onClick={() => {
-                  setColor("random");
-                  advance();
+                  onCommand({ kind: "choose-color", color: "random" });
                 }}
               >
                 Random
@@ -201,11 +163,11 @@ export default function ChessSetup({
                 <small>Coming soon</small>
               </button>
               <button
-                className={`setup-option setup-option-wide timer-off${timerMinutes === null ? " is-selected" : ""}`}
+                className={`setup-option setup-option-wide timer-off${draft.timerMinutes === null ? " is-selected" : ""}`}
                 type="button"
+                aria-pressed={draft.timerMinutes === null}
                 onClick={() => {
-                  setTimerMinutes(null);
-                  advance();
+                  onCommand({ kind: "choose-timer", minutes: null });
                 }}
               >
                 Turn Off
@@ -226,23 +188,21 @@ export default function ChessSetup({
             </p>
             <div className="setup-option-grid rules-options">
               <button
-                className={`setup-option rules-off${!explainRules ? " is-selected" : ""}`}
+                className={`setup-option rules-off${!draft.explainRules ? " is-selected" : ""}`}
                 type="button"
-                aria-pressed={!explainRules}
+                aria-pressed={!draft.explainRules}
                 onClick={() => {
-                  setExplainRules(false);
-                  setReady(true);
+                  onCommand({ kind: "choose-rules", explainRules: false });
                 }}
               >
                 Off
               </button>
               <button
-                className={`setup-option rules-on${explainRules ? " is-selected" : ""}`}
+                className={`setup-option rules-on${draft.explainRules ? " is-selected" : ""}`}
                 type="button"
-                aria-pressed={explainRules}
+                aria-pressed={draft.explainRules}
                 onClick={() => {
-                  setExplainRules(true);
-                  setReady(true);
+                  onCommand({ kind: "choose-rules", explainRules: true });
                 }}
               >
                 On
@@ -250,15 +210,31 @@ export default function ChessSetup({
             </div>
           </>
         )}
+
+        {ready && (
+          <p className="setup-description">
+            {difficultyLabel(draft.difficulty)} ·{" "}
+            {draft.color === "random" ? "Random pieces" : draft.color === "w" ? "White" : "Black"} ·
+            rules {draft.explainRules ? "on" : "off"}
+          </p>
+        )}
       </div>
 
       <div className="setup-actions">
         {ready && (
           <>
-            <button type="button" className="setup-cancel" onClick={onCancel}>
+            <button
+              type="button"
+              className="setup-cancel"
+              onClick={() => onCommand({ kind: "cancel" })}
+            >
               Cancel
             </button>
-            <button type="button" className="setup-start" onClick={start}>
+            <button
+              type="button"
+              className="setup-start"
+              onClick={() => onCommand({ kind: "start" })}
+            >
               Start game
             </button>
           </>

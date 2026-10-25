@@ -1,6 +1,13 @@
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { Chess } from "chess.js";
 import { createChessToolExecutor, type ChessToolBridge } from "./chessTools";
+import {
+  chessSetupSelection,
+  defaultChessSetup,
+  describeChessSetup,
+  reduceChessSetup,
+  type ChessSetupSelection,
+} from "../components/PlayByVoice/chessSetup";
 import { localIntent } from "./commands";
 import { DEFAULT_SETTINGS, loadSettings } from "../lib/storage";
 
@@ -61,6 +68,34 @@ function setup() {
     getHint: async () => ({ ok: true, from: "e2", to: "e4", san: "e4" }),
   };
   return { bridge, game, controls, executor: createChessToolExecutor(() => bridge) };
+}
+
+function setupBridge() {
+  const started: ChessSetupSelection[] = [];
+  const controls: string[] = [];
+  const bridge: ChessToolBridge = {
+    ...setup().bridge,
+    updateSettings: (changes) => {
+      bridge.settings = { ...bridge.settings, ...changes };
+    },
+    view: "chess-setup",
+    setup: defaultChessSetup(),
+    setupCommand: (command) => {
+      const outcome = reduceChessSetup(bridge.setup!, command);
+      bridge.setup = outcome.state;
+      if (outcome.effect === "start")
+        started.push(chessSetupSelection(outcome.state));
+      if (outcome.effect === "cancel") controls.push("cancel");
+      return outcome.effect === "start"
+        ? `Starting ${outcome.state.draft.difficulty}.`
+        : describeChessSetup(outcome.state);
+    },
+    appControl: (action) => {
+      controls.push(action);
+      return { ok: true, message: `Ran ${action}.` };
+    },
+  };
+  return { bridge, started, controls, executor: createChessToolExecutor(() => bridge) };
 }
 
 afterEach(() => vi.unstubAllGlobals());
@@ -266,6 +301,117 @@ describe("immediate chess commands", () => {
     expect(result.description).toContain("Back at the live board.");
     expect(bridge.review).toBeNull();
     expect(game.history()).toEqual(["e4", "e5"]);
+  });
+
+  it("forwards setup preferences into the shared draft and advances the wizard", async () => {
+    const { bridge, executor } = setupBridge();
+    const difficulty = JSON.parse(
+      await executor.execute(
+        "set_preference",
+        JSON.stringify({ preference: "difficulty", value: "club" }),
+      ),
+    );
+    expect(difficulty.status).toBe("completed");
+    expect(difficulty.message).toContain("Choose your pieces");
+    expect(bridge.setup?.step).toBe("color");
+    expect(bridge.setup?.draft.difficulty).toBe("club");
+    expect(bridge.settings.difficulty).toBe("club");
+
+    const color = JSON.parse(
+      await executor.execute(
+        "set_preference",
+        JSON.stringify({ preference: "playerColor", value: "b" }),
+      ),
+    );
+    expect(color.message).toContain("Current timer: off");
+    expect(bridge.setup?.draft.color).toBe("b");
+  });
+
+  it("starts the game with the draft the wizard currently holds", async () => {
+    const { started, executor } = setupBridge();
+    await executor.execute(
+      "set_preference",
+      JSON.stringify({ preference: "difficulty", value: "club" }),
+    );
+    const result = JSON.parse(await executor.execute("game_control", '{"action":"start_game"}'));
+    expect(result.status).toBe("completed");
+    expect(started).toHaveLength(1);
+    expect(started[0]).toMatchObject({ difficulty: "club", playerColor: "w" });
+  });
+
+  it("completes the confirmed reproduction: club and Black reach the started game", async () => {
+    const { bridge, started, executor } = setupBridge();
+    await executor.execute(
+      "set_preference",
+      JSON.stringify({ preference: "difficulty", value: "club" }),
+    );
+    expect(bridge.setup?.step).toBe("color");
+    await executor.execute(
+      "set_preference",
+      JSON.stringify({ preference: "playerColor", value: "b" }),
+    );
+    const start = JSON.parse(await executor.execute("game_control", '{"action":"start_game"}'));
+    expect(start.status).toBe("completed");
+    expect(started[0]).toEqual({
+      gameMode: "computer",
+      difficulty: "club",
+      playerColor: "b",
+      timerMinutes: null,
+      explainRules: false,
+    });
+    expect(bridge.settings.difficulty).toBe("club");
+    expect(bridge.settings.playerColor).toBe("b");
+  });
+
+  it("reads the setup step and answers the defaults command with real defaults", async () => {
+    const { started, bridge, executor } = setupBridge();
+    await executor.execute("set_preference", JSON.stringify({ preference: "difficulty", value: "club" }));
+    const read = JSON.parse(await executor.execute("chess_setup", '{"action":"read","value":null}'));
+    expect(read.status).toBe("ok");
+    expect(read.step).toBe("color");
+    expect(read.message).toContain("Choose your pieces");
+    const defaults = JSON.parse(
+      await executor.execute("chess_setup", '{"action":"defaults","value":null}'),
+    );
+    expect(defaults.status).toBe("completed");
+    expect(bridge.setup?.draft.difficulty).toBe("beginner");
+    expect(started[0]).toMatchObject({ difficulty: "beginner", playerColor: "w" });
+  });
+
+  it("maps typed setup and navigation phrases onto the shared tools", () => {
+    expect(localIntent("next step")).toEqual({
+      name: "chess_setup",
+      args: { action: "next", value: null },
+    });
+    expect(localIntent("timer off")).toEqual({
+      name: "chess_setup",
+      args: { action: "choose_timer", value: "off" },
+    });
+    expect(localIntent("choose difficulty intermediate")).toEqual({
+      name: "chess_setup",
+      args: { action: "choose_difficulty", value: "intermediate" },
+    });
+    expect(localIntent("cancel setup")).toEqual({
+      name: "chess_setup",
+      args: { action: "cancel", value: null },
+    });
+    expect(localIntent("back")).toEqual({ name: "app_control", args: { action: "back" } });
+    expect(localIntent("pause voice commands")).toEqual({
+      name: "voice_control",
+      args: { action: "pause_commands" },
+    });
+  });
+
+  it("routes back, close, and review through the shared app control", async () => {
+    const { controls, executor } = setupBridge();
+    expect(
+      JSON.parse(await executor.execute("app_control", '{"action":"back"}')).status,
+    ).toBe("completed");
+    await executor.execute("app_control", '{"action":"review_result"}');
+    expect(controls).toEqual(["back", "review_result"]);
+    expect(
+      JSON.parse(await executor.execute("app_control", '{"action":"teleport"}')).status,
+    ).toBe("error");
   });
 
   it("does not silently enter history review when the board is not open", async () => {

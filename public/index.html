@@ -18,6 +18,7 @@
     <link rel="preload" href="/landing/assets/liquid-glass-preset.json" as="fetch" crossorigin />
     <script src="/landing/orb-bootstrap.js"></script>
     <script src="/landing/script.js" defer></script>
+    <script src="/landing/voice.js" defer></script>
   </head>
   <body>
     <a class="skip-link" href="#main">Skip to content</a>
@@ -71,8 +72,24 @@
               <span aria-hidden="true"
                 ><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
                   <use href="/landing/assets/icons.svg#arrow-down"></use></svg></span
-            ></a>
+            ></a
+            ><button
+              class="button button-secondary"
+              id="voice-navigation-toggle"
+              type="button"
+              aria-pressed="false"
+              aria-describedby="voice-navigation-captions"
+            >
+              Start voice navigation
+            </button>
           </div>
+          <p
+            class="lead voice-navigation-captions"
+            id="voice-navigation-captions"
+            role="status"
+            aria-live="polite"
+            hidden
+          ></p>
         </div>
         <div class="hero-art" aria-hidden="true">
           <span class="hero-stage-label">Your companion, at your pace.</span>

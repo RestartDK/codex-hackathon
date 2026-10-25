@@ -3,7 +3,7 @@ import { appSettingsSchema, describePreferences } from "../lib/preferences";
 export const QUICK_GUIDE =
   "Your goal is to checkmate the opposing king. Files are letters a through h, and ranks are numbers one through eight. Pawns move forward and capture diagonally. Knights move in an L shape. Bishops move diagonally. Rooks move straight. Queens move straight or diagonally, and kings move one square. Say a move like e two to e four, ask about a square, ask for legal moves, or request a hint. Legal moves and game controls run immediately. I announce what happened after it is done. You can also ask me to choose a move for you. Say help for more commands.";
 
-export function localIntent(command: string): { name: string; args: object } | null {
+export function localIntent(command: string): { name: string; args: Record<string, unknown> } | null {
   const numberWords: Record<string, string> = {
     one: "1",
     two: "2",
@@ -26,10 +26,56 @@ export function localIntent(command: string): { name: string; args: object } | n
     .replace(/\b([a-h])\s+([1-8])\b/g, "$1$2")
     .replace(/\s+/g, " ");
   if (/^(no|cancel|never mind|nevermind)$/.test(text)) return { name: "cancel_action", args: {} };
+  if (/^(cancel setup|cancel the setup|exit setup|leave setup)$/.test(text))
+    return { name: "chess_setup", args: { action: "cancel", value: null } };
   const promotion = text.match(/^(?:promote(?: pawn)?(?: to)? )?(queen|rook|bishop|knight)$/);
   if (promotion) return { name: "promote_pawn", args: { piece: promotion[1] } };
-  if (/^(start game|start with (?:the )?defaults?|start defaults?)$/.test(text))
-    return { name: "game_control", args: { action: "start_game" } };
+  if (/^(start with (?:the )?defaults?|start defaults?)$/.test(text))
+    return { name: "chess_setup", args: { action: "defaults", value: null } };
+  if (/^(start game)$/.test(text)) return { name: "game_control", args: { action: "start_game" } };
+  if (/^(pause voice commands|pause commands|pause voice control)$/.test(text))
+    return { name: "voice_control", args: { action: "pause_commands" } };
+  if (/^(resume voice commands|resume commands|resume voice control)$/.test(text))
+    return { name: "voice_control", args: { action: "resume_commands" } };
+  if (/^(mute microphone|mute the microphone)$/.test(text))
+    return { name: "voice_control", args: { action: "mute_microphone" } };
+  if (/^(unmute microphone|unmute the microphone)$/.test(text))
+    return { name: "voice_control", args: { action: "unmute_microphone" } };
+  if (/^(end voice|stop voice|end the voice session)$/.test(text))
+    return { name: "voice_control", args: { action: "end_voice" } };
+  if (/^(voice status|read voice state|is voice listening)$/.test(text))
+    return { name: "voice_control", args: { action: "read_state" } };
+  if (/^(back|go back|previous step|back a step)$/.test(text))
+    return { name: "app_control", args: { action: "back" } };
+  if (/^(close|dismiss|close dialog|close dialogue)$/.test(text))
+    return { name: "app_control", args: { action: "close" } };
+  if (/^(review result|review the result|review the game|review moves)$/.test(text))
+    return { name: "app_control", args: { action: "review_result" } };
+  if (/^(next step|next setup step)$/.test(text))
+    return { name: "chess_setup", args: { action: "next", value: null } };
+  if (/^(read setup|read the setup|setup options|setup status)$/.test(text))
+    return { name: "chess_setup", args: { action: "read", value: null } };
+  if (/^(random|random color|random pieces)$/.test(text))
+    return { name: "chess_setup", args: { action: "choose_color", value: "random" } };
+  if (/^(timer off|no timer)$/.test(text))
+    return { name: "chess_setup", args: { action: "choose_timer", value: "off" } };
+  const rules = text.match(/^(?:explain )?rules (on|off)$/);
+  if (rules)
+    return { name: "chess_setup", args: { action: "choose_rules", value: rules[1] } };
+  const setupDifficulty = text.match(
+    /^(?:choose|set) difficulty (beginner|intermediate|advanced)$/,
+  );
+  if (setupDifficulty)
+    return { name: "chess_setup", args: { action: "choose_difficulty", value: setupDifficulty[1] } };
+  const setupColor = text.match(/^(?:choose|set) (white|black|random) pieces$/);
+  if (setupColor)
+    return { name: "chess_setup", args: { action: "choose_color", value: setupColor[1] } };
+  const setupOpponent = text.match(/^(?:choose|set) opponent (computer|local|two player)$/);
+  if (setupOpponent)
+    return {
+      name: "chess_setup",
+      args: { action: "choose_opponent", value: setupOpponent[1] },
+    };
   if (/^(board|board configuration|describe board|give me the board configuration)$/.test(text))
     return { name: "read_board", args: { scope: "all", value: null } };
   const locate = text.match(

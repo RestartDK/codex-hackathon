@@ -91,8 +91,13 @@ export function useLibraryVoice(executor: VoiceToolExecutor, gameId: string) {
   async function runGlobalCommand(command: string): Promise<string | null> {
     if (/^help$/i.test(command.trim())) return null;
     const intent = localIntent(command);
-    if (!intent || !["navigate_app", "get_preferences", "set_preference"].includes(intent.name))
-      return null;
+    if (!intent) return null;
+    if (intent.name === "voice_control") {
+      const message = voice.runVoiceControl(intent.args.action);
+      if (voice.status === "connected") voice.announce(message);
+      return message;
+    }
+    if (!["navigate_app", "get_preferences", "set_preference"].includes(intent.name)) return null;
     const result = JSON.parse(await shared.execute(intent.name, JSON.stringify(intent.args))) as {
       message: string;
     };

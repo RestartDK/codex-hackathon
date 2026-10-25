@@ -9,12 +9,51 @@ export type LiveVoiceCallbacks = {
   onClosed: () => void;
 };
 
+/** A game session is authenticated; the public lobby session carries no game credentials. */
+export type LiveVoiceTarget =
+  | { kind: "game"; gameId: string; sessionToken: string }
+  | { kind: "lobby" };
+
 export type StartLiveVoiceOptions = LiveVoiceCallbacks & {
-  gameId: string;
-  sessionToken: string;
+  target: LiveVoiceTarget;
   /** Lets an owning screen cancel startup before a microphone or connection leaks. */
   signal?: AbortSignal;
 };
+
+type LiveSessionRequest = {
+  url: string;
+  headers: Record<string, string>;
+  body: Record<string, unknown>;
+};
+
+function sessionRequest(target: LiveVoiceTarget, sdp: string | undefined): LiveSessionRequest {
+  return target.kind === "game"
+    ? {
+        url: `/api/games/${target.gameId}/voice`,
+        headers: { "Content-Type": "application/json", "X-Game-Session": target.sessionToken },
+        body: { sdp },
+      }
+    : {
+        url: "/api/voice/session",
+        headers: { "Content-Type": "application/json" },
+        body: { sdp, mode: "lobby" },
+      };
+}
+
+function answerSdp(value: unknown): string | null {
+  if (!value || typeof value !== "object") return null;
+  const record = value as { sdp?: unknown; transport?: unknown };
+  if (typeof record.sdp === "string") return record.sdp;
+  if (!record.transport || typeof record.transport !== "object") return null;
+  const sdp = (record.transport as { sdp?: unknown }).sdp;
+  return typeof sdp === "string" ? sdp : null;
+}
+
+function errorMessage(value: unknown): string | null {
+  if (!value || typeof value !== "object") return null;
+  const error = (value as { error?: unknown }).error;
+  return typeof error === "string" ? error : null;
+}
 
 type LiveTransportEvent = {
   type?: string;
@@ -27,8 +66,7 @@ type LiveTransportEvent = {
  * use this path: it stays in the ordered story-audio queue.
  */
 export async function startLiveVoice({
-  gameId,
-  sessionToken,
+  target,
   onStatus,
   onInputTranscript,
   onInputTranscriptComplete,
@@ -157,16 +195,19 @@ export async function startLiveVoice({
     stream.getTracks().forEach((track) => peerConnection!.addTrack(track, stream!));
     const offer = await peerConnection.createOffer();
     await peerConnection.setLocalDescription(offer);
-    const response = await fetch(`/api/games/${gameId}/voice`, {
+    const request = sessionRequest(target, offer.sdp);
+    const response = await fetch(request.url, {
       method: "POST",
-      headers: { "Content-Type": "application/json", "X-Game-Session": sessionToken },
-      body: JSON.stringify({ sdp: offer.sdp }),
+      headers: request.headers,
+      body: JSON.stringify(request.body),
       signal,
     });
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.error ?? "Could not start live voice.");
+    const data: unknown = await response.json();
+    if (!response.ok) throw new Error(errorMessage(data) ?? "Could not start live voice.");
+    const sdp = answerSdp(data);
+    if (!sdp) throw new Error("Live voice returned an invalid session.");
     throwIfAborted();
-    await peerConnection.setRemoteDescription({ type: "answer", sdp: data.sdp });
+    await peerConnection.setRemoteDescription({ type: "answer", sdp });
     throwIfAborted();
     return { stop: () => stop() };
   } catch (cause) {

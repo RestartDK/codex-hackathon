@@ -119,6 +119,33 @@ function mentionedPlayers(game: Game, text: string, actorId: string) {
     .map(({ candidate }) => candidate);
 }
 
+/**
+ * The Witch may spend both potions in one night, so a spoken sentence that names
+ * a save and a poison is resolved as one validated night action.
+ */
+function witchPotionPair(
+  game: Game,
+  actorId: string,
+  command: string,
+): { save?: string; poison?: string } {
+  const segments = command.split(/\b(?:and|then|also|plus)\b/u);
+  if (segments.length < 2) return {};
+  let save: string | undefined;
+  let poison: string | undefined;
+  for (const segment of segments) {
+    const [named] = mentionedPlayers(game, segment, actorId);
+    const self = /\b(me|myself|my own)\b/u.test(segment) ? actorId : undefined;
+    if (!save && /\b(save|heal|rescue|protect|keep .* alive)\b/u.test(segment))
+      save = named?.id ?? self;
+    else if (
+      !poison &&
+      /\b(poison|dose|kill|go after|get rid of|take out|finish off)\b/u.test(segment)
+    )
+      poison = named?.id;
+  }
+  return { save, poison };
+}
+
 function parseGameCommand(text: string, game: Game, actorId: string): ActionInput {
   const command = normalize(text);
   const actor = player(game, actorId);
@@ -232,6 +259,16 @@ function parseGameCommand(text: string, game: Game, actorId: string): ActionInpu
     }
     if (actor.role === "witch") {
       const victimId = game.witchHealAvailable ? game.wolfVictimId : undefined;
+      const pair = witchPotionPair(game, actorId, command);
+      if (pair.save && pair.poison) {
+        if (pair.save === pair.poison)
+          throw new Error("Choose different players to save and to poison.");
+        return { type: "night", save: pair.save, poison: pair.poison };
+      }
+      if (/\bboth potions?\b|\b(?:save|heal)\b.*\b(?:and|then)\b.*\b(?:poison|kill)\b/u.test(command))
+        throw new Error(
+          "Name the player to save, the player to poison, and say use both potions.",
+        );
       // Naming tonight's victim, including “me” when the Witch is the victim, uses the heal,
       // matching the victim's card on screen.
       const savesSelf =

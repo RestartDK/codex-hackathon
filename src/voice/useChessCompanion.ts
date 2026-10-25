@@ -108,9 +108,15 @@ export function useChessCompanion(
     previousResult.current = resultMessage;
   }, [resultMessage, voice.status, voice.announce]);
 
-  async function runTool(name: string, args: object) {
+  async function runTool(name: string, args: Record<string, unknown>) {
     setBusy(true);
     try {
+      if (name === "voice_control") {
+        const message = voice.runVoiceControl(args.action);
+        setMessage(message);
+        if (voice.status === "connected") voice.announce(message);
+        return;
+      }
       const raw = await executor.execute(name, JSON.stringify(args));
       const result = JSON.parse(raw) as { status?: string };
       // The history effect announces the complete move, including captures.
@@ -153,7 +159,7 @@ export function useChessCompanion(
         announce("Open Chess setup first, then say start with the defaults.");
         return;
       }
-      await runTool("game_control", { action: "start_game" });
+      await runTool("chess_setup", { action: "defaults", value: null });
       return;
     }
     if (/^(tutorial|guide|quick guide|how to play)$/i.test(command.trim())) {
