@@ -19,7 +19,7 @@ export const guideConfig = () => ({
 
 const timedFetch = async (url: string, init: RequestInit) => {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 12_000);
+  const timer = setTimeout(() => controller.abort(), 8_000);
   try {
     return await fetch(url, { ...init, signal: controller.signal });
   } finally {
@@ -139,6 +139,17 @@ function localGuide(game: Game, actorId: string, question: string) {
   return `It is day ${context.day}, during ${context.phase}. I can explain your role, the rules, or a useful next step.`;
 }
 
+/**
+ * These questions have deterministic, player-scoped answers. Serving them from
+ * the game state avoids making a hands-free player wait on a remote model for
+ * basic controls, rules, or a phase reminder.
+ */
+function isImmediateGuideQuestion(message: string) {
+  return /\b(voice|command|microphone|hands.free|what can i say|how do i control|role|power|ability|rule|how.*win|win condition|summary|situation|what happened|catch me up|recap|what.*next|next step|option|help)\b/iu.test(
+    message,
+  );
+}
+
 function outputText(value: unknown) {
   const response = z
     .object({
@@ -172,7 +183,8 @@ export async function answerGuide(
 ): Promise<GuideReply> {
   const context = guideContext(game, actorId);
   const { key, delegationModel } = guideConfig();
-  if (!key) return { reply: localGuide(game, actorId, message), mode: "local" };
+  if (!key || isImmediateGuideQuestion(message))
+    return { reply: localGuide(game, actorId, message), mode: "local" };
   try {
     const response = await timedFetch(GUIDE_URL, {
       method: "POST",
@@ -180,7 +192,7 @@ export async function answerGuide(
       body: JSON.stringify({
         model: delegationModel,
         reasoning: { effort: "low" },
-        max_output_tokens: 220,
+        max_output_tokens: 160,
         instructions: guideInstructions(context),
         input: [...history.slice(-8), { role: "user", text: message }].map((entry) => ({
           role: entry.role,

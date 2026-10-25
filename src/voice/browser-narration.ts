@@ -93,6 +93,24 @@ export function selectBrowserVoice(voiceKey: string | undefined, voices: SpeechS
 /** Default local fallback. Replace this factory to use recorded or server-generated audio. */
 export function createBrowserNarrationBackend(): NarrationBackend {
   const isSupported = () => typeof window !== "undefined" && "speechSynthesis" in window;
+  // Resolve the assistant voice once for this game. If the browser exposes an
+  // empty voice list at first, retain its default choice for the whole session
+  // rather than switching identity when that list later loads.
+  const selectedVoices = new Map<string, SpeechSynthesisVoice | null>();
+
+  const voiceFor = (voiceKey: string | undefined) => {
+    const key = voiceKey ?? "default";
+    const installed = window.speechSynthesis.getVoices();
+    if (selectedVoices.has(key)) {
+      const cached = selectedVoices.get(key) ?? null;
+      if (!cached || installed.includes(cached)) return cached;
+    }
+    const selected = selectBrowserVoice(key, installed);
+    const voice = selected ?? null;
+    selectedVoices.set(key, voice);
+    return voice;
+  };
+
   return {
     isSupported,
     speak({ line, voice, volume, onFinished }) {
@@ -101,14 +119,23 @@ export function createBrowserNarrationBackend(): NarrationBackend {
         return;
       }
       const utterance = new SpeechSynthesisUtterance(line.text);
+      let finished = false;
+      const finish = () => {
+        if (finished) return;
+        finished = true;
+        onFinished();
+      };
       utterance.volume = volume;
       utterance.rate = voice.rate;
       utterance.pitch = voice.pitch;
-      utterance.voice =
-        selectBrowserVoice(line.voiceKey, window.speechSynthesis.getVoices()) ?? null;
-      utterance.onend = onFinished;
-      utterance.onerror = onFinished;
-      window.speechSynthesis.speak(utterance);
+      utterance.voice = voiceFor(line.voiceKey);
+      utterance.onend = finish;
+      utterance.onerror = finish;
+      try {
+        window.speechSynthesis.speak(utterance);
+      } catch {
+        finish();
+      }
     },
     cancel() {
       if (isSupported()) window.speechSynthesis.cancel();
@@ -159,14 +186,18 @@ export function createOpenAINarrationBackend(
         return;
       }
       const current = ++generation;
+      let finished = false;
+      let fallbackStarted = false;
       const finish = () => {
-        if (current !== generation) return;
+        if (current !== generation || finished) return;
+        finished = true;
         controller = undefined;
         clearPlayback();
         request.onFinished();
       };
       const useBrowserFallback = () => {
-        if (current !== generation) return;
+        if (current !== generation || finished || fallbackStarted) return;
+        fallbackStarted = true;
         clearPlayback();
         browserFallback.speak({ ...request, onFinished: finish });
       };
@@ -226,6 +257,8 @@ export function createOpenAINarrationBackend(
   };
 }
 
+let browserNarrationPrimed = false;
+
 /**
  * Some browsers only allow their first speech-synthesis call from a direct click.
  * Prime a silent utterance while the player presses Start so the opening guide can
@@ -233,6 +266,8 @@ export function createOpenAINarrationBackend(
  */
 export function primeBrowserNarration() {
   if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
+  if (browserNarrationPrimed) return;
+  browserNarrationPrimed = true;
   const primer = new SpeechSynthesisUtterance(" ");
   primer.volume = 0;
   window.speechSynthesis.resume();
@@ -353,7 +388,9 @@ export function useStoryAudio({
         speakingRef.current = false;
         setActiveSpeaker(undefined);
         if (next.phaseBoundary) setPhaseTransitioning(false);
-        window.setTimeout(playNext, 80);
+        // Leave just enough room for the browser to release the old utterance
+        // before starting the next short response.
+        window.setTimeout(playNext, 30);
       },
     });
   }, []);

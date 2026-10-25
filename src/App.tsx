@@ -3,7 +3,7 @@ import type { FormEvent, ReactNode } from "react";
 import type { FeedEntry, GameView, Role } from "../server/game/types.js";
 import { defaultRoleCounts } from "../server/game/rules.js";
 import {
-  createOpenAINarrationBackend,
+  createBrowserNarrationBackend,
   primeBrowserNarration,
   useStoryAudio,
 } from "./voice/browser-narration.js";
@@ -15,6 +15,7 @@ import {
 
 type Session = { game: GameView; token: string };
 type GuideMessage = { role: "user" | "assistant"; text: string; mode?: "model" | "local" };
+type VoiceInputMode = "idle" | "browser" | "connecting-live" | "live";
 const roleNames: Record<Role, string> = {
   werewolf: "Werewolf",
   villager: "Villager",
@@ -86,6 +87,13 @@ function normalizeVoiceText(value: string) {
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/gu, "")
     .toLocaleLowerCase();
+}
+
+function normalizeVoiceCommand(value: string) {
+  return normalizeVoiceText(value)
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .trim()
+    .replace(/\s+/gu, " ");
 }
 
 function readableFeedEntry(entry: FeedEntry) {
@@ -283,7 +291,6 @@ export default function App() {
   const [voiceCommandsPaused, setVoiceCommandsPaused] = useState(false);
   const [guideMessages, setGuideMessages] = useState<GuideMessage[]>([]);
   const [guideText, setGuideText] = useState("");
-  const [guideBusy, setGuideBusy] = useState(false);
   const [liveConnected, setLiveConnected] = useState(false);
   const [liveConnecting, setLiveConnecting] = useState(false);
   const [openingAudio, setOpeningAudio] = useState<{ gameId: string; text: string }>();
@@ -296,15 +303,17 @@ export default function App() {
   const voiceCommandHandlerRef = useRef<(transcript: string) => void>(() => undefined);
   const startVoiceRef = useRef<() => void>(() => undefined);
   const liveConnectionRef = useRef<LiveVoiceSession | null>(null);
-  const useLiveFallbackRef = useRef(false);
+  const inputModeRef = useRef<VoiceInputMode>("idle");
   const cinematicTimerRef = useRef<number | undefined>(undefined);
   const onboardingTimerRef = useRef<number | undefined>(undefined);
   const commandQueueRef = useRef(Promise.resolve());
   const lastVoiceCommandRef = useRef({ text: "", at: 0 });
-  const narrationBackend = useMemo(
-    () => createOpenAINarrationBackend(session?.game.id, session?.token),
-    [session?.game.id, session?.token],
-  );
+  const actionInFlightRef = useRef(false);
+  const guideRequestIdRef = useRef(0);
+  const guideAbortRef = useRef<AbortController | undefined>(undefined);
+  // One browser narrator is deliberately used for every line. It starts without
+  // a network round trip and never changes identity if a remote TTS request fails.
+  const narrationBackend = useMemo(() => createBrowserNarrationBackend(), []);
   const revealNarratedPhase = useCallback(() => {
     const latestGame = latestGameRef.current;
     if (!latestGame) return;
@@ -376,6 +385,13 @@ export default function App() {
     }, 2_100);
   }
 
+  /** A new move makes an older guide answer stale, so never let it speak late. */
+  function cancelPendingGuide() {
+    guideRequestIdRef.current += 1;
+    guideAbortRef.current?.abort();
+    guideAbortRef.current = undefined;
+  }
+
   /** Keep the reference moon and nightfall slides distinct for clicks and voice commands. */
   function beginFirstNight() {
     if (onboardingTimerRef.current) return;
@@ -390,6 +406,7 @@ export default function App() {
 
   async function create(event?: FormEvent, testMode = false) {
     event?.preventDefault();
+    cancelPendingGuide();
     if (onboardingTimerRef.current) window.clearTimeout(onboardingTimerRef.current);
     onboardingTimerRef.current = undefined;
     primeBrowserNarration();
@@ -444,15 +461,15 @@ export default function App() {
   async function perform(input: Record<string, unknown>, announceFailure = false) {
     const activeSession = sessionRef.current;
     if (!activeSession) return undefined;
-    if (storyAudio.phaseTransitioning) {
-      // The player has spoken or acted. Stop the now-stale announcement and move
-      // directly to the updated phase so the narration and screen cannot diverge.
-      storyAudio.stop();
-    }
-    if (busy) {
+    if (actionInFlightRef.current || busy) {
       if (announceFailure) queueAssistant("One moment. I am still resolving the previous command.");
       return undefined;
     }
+    cancelPendingGuide();
+    // A player action wins over any older scene. This keeps commands such as
+    // “wait for dawn” from being trapped behind a long narration queue.
+    storyAudio.stop();
+    actionInFlightRef.current = true;
     setBusy(true);
     setVoiceStatus("The guide is resolving your move…");
     setError("");
@@ -496,6 +513,7 @@ export default function App() {
       } else setError(message);
       return undefined;
     } finally {
+      actionInFlightRef.current = false;
       setBusy(false);
       if (!voiceCommandsPaused)
         setVoiceStatus(
@@ -842,7 +860,8 @@ export default function App() {
    * Browser recognition restarts itself after ordinary phrase boundaries.
    */
   function startAlwaysOnVoice() {
-    if (recognitionRef.current || liveConnectionRef.current || liveConnecting) return;
+    if (inputModeRef.current !== "idle" || recognitionRef.current || liveConnectionRef.current)
+      return;
     voiceFailureRef.current = undefined;
     try {
       const recognition = startPersistentSpeechRecognition({
@@ -862,8 +881,10 @@ export default function App() {
           }
           if (reason === "network") {
             if (sessionRef.current) {
-              useLiveFallbackRef.current = true;
               setVoiceStatus("Switching to the live voice companion…");
+              // Change modes before the browser callback ends. This keeps its
+              // delayed onStopped handler from reviving a second listener.
+              void connectLiveVoice();
             } else {
               setVoiceStatus("Voice companion will reconnect when the game opens.");
             }
@@ -877,17 +898,18 @@ export default function App() {
         },
         onStopped: () => {
           recognitionRef.current = null;
+          // `connectLiveVoice` already owns the handoff. A stale browser
+          // callback must never restart itself while Live is opening or active.
+          if (inputModeRef.current === "connecting-live" || inputModeRef.current === "live") return;
+          inputModeRef.current = "idle";
           const failure = voiceFailureRef.current;
-          if (useLiveFallbackRef.current && sessionRef.current) {
-            useLiveFallbackRef.current = false;
-            void connectLiveVoice();
-            return;
-          }
           if (
             autoVoiceRequestedRef.current &&
             !["not-allowed", "service-not-allowed", "audio-capture"].includes(failure ?? "")
           ) {
-            window.setTimeout(startAlwaysOnVoice, 700);
+            window.setTimeout(() => {
+              if (inputModeRef.current === "idle") startAlwaysOnVoice();
+            }, 700);
             return;
           }
           resetVoiceGuide(
@@ -900,12 +922,15 @@ export default function App() {
         },
       });
       if (!recognition) {
+        inputModeRef.current = "idle";
         setVoiceStatus(
           "Hands-free voice is unavailable in this browser. Use a browser with voice recognition.",
         );
+        if (sessionRef.current) void connectLiveVoice();
         return;
       }
       recognitionRef.current = recognition;
+      inputModeRef.current = "browser";
       setListening(true);
       setVoiceCommandsPaused(false);
       setVoiceStatus(
@@ -913,6 +938,7 @@ export default function App() {
       );
     } catch {
       recognitionRef.current = null;
+      inputModeRef.current = "idle";
       setListening(false);
       setVoiceStatus("Tap anywhere once to allow the microphone, then say “start the game”.");
     }
@@ -926,15 +952,28 @@ export default function App() {
 
   async function askGuide(text = guideText) {
     const activeSession = sessionRef.current;
-    if (!activeSession || guideBusy || !text.trim()) return;
+    if (!activeSession || !text.trim()) return;
+    if (actionInFlightRef.current) {
+      queueAssistant("I am finishing your move. Ask me again in a moment.", "local", {
+        instant: true,
+      });
+      return;
+    }
     const message = text.trim();
+    const requestId = guideRequestIdRef.current + 1;
+    guideRequestIdRef.current = requestId;
+    guideAbortRef.current?.abort();
+    const controller = new AbortController();
+    guideAbortRef.current = controller;
     const history = guideMessages.slice(-8).map(({ role, text: historyText }) => ({
       role,
       text: historyText,
     }));
+    // A guide question is a deliberate interruption. Drop an older scene so the
+    // answer can begin as soon as it arrives instead of waiting behind it.
+    storyAudio.stop();
     setGuideMessages((current) => [...current, { role: "user", text: message }]);
     setGuideText("");
-    setGuideBusy(true);
     setError("");
     try {
       const response = await fetch(`/api/games/${activeSession.game.id}/assistant`, {
@@ -945,9 +984,11 @@ export default function App() {
           "X-Request-Id": crypto.randomUUID(),
         },
         body: JSON.stringify({ message, history }),
+        signal: controller.signal,
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error ?? "The guide is unavailable.");
+      if (requestId !== guideRequestIdRef.current) return;
       setGuideMessages((current) => [
         ...current,
         { role: "assistant", text: data.reply, mode: data.mode },
@@ -959,25 +1000,36 @@ export default function App() {
         voiceKey: "assistant",
       });
     } catch (cause) {
+      if (requestId !== guideRequestIdRef.current || controller.signal.aborted) return;
       const message = cause instanceof Error ? cause.message : "The guide is unavailable.";
       if (message === "Game not found.") {
         recoverExpiredSession();
         queueAssistant("That village is no longer open. Say ‘start the game’ to begin a new one.");
       } else setError(message);
     } finally {
-      setGuideBusy(false);
+      if (requestId === guideRequestIdRef.current) {
+        guideAbortRef.current = undefined;
+      }
     }
   }
 
   async function connectLiveVoice() {
     const activeSession = sessionRef.current;
-    if (!activeSession || liveConnecting || liveConnectionRef.current) return;
-    recognitionRef.current?.stop();
+    if (
+      !activeSession ||
+      liveConnectionRef.current ||
+      inputModeRef.current === "connecting-live" ||
+      inputModeRef.current === "live"
+    )
+      return;
+    inputModeRef.current = "connecting-live";
+    const browserRecognition = recognitionRef.current;
     recognitionRef.current = null;
+    browserRecognition?.stop();
     resetVoiceGuide("Starting live voice companion…");
     setLiveConnecting(true);
-    storyAudio.stop();
     setError("");
+    let established = false;
     try {
       const live = await startLiveVoice({
         gameId: activeSession.game.id,
@@ -987,19 +1039,29 @@ export default function App() {
         onInputTranscriptComplete: (text) => {
           voiceCommandHandlerRef.current(text);
         },
-        // Live is used for microphone transcription when browser recognition
-        // is unavailable. Spoken answers always come from the one local queue.
-        onGuideReply: () => undefined,
         onClosed: () => {
           liveConnectionRef.current = null;
           setLiveConnected(false);
           setLiveConnecting(false);
+          if (inputModeRef.current === "connecting-live" || inputModeRef.current === "live") {
+            inputModeRef.current = "idle";
+          }
+          // Only retry an established connection. A rejected setup should not
+          // loop against the provider when its credentials or transport are bad.
+          if (established && autoVoiceRequestedRef.current) {
+            window.setTimeout(() => {
+              if (inputModeRef.current === "idle") startVoiceRef.current();
+            }, 700);
+          }
         },
       });
       liveConnectionRef.current = live;
+      established = true;
+      inputModeRef.current = "live";
       setLiveConnected(true);
       setVoiceStatus("Voice companion is listening");
     } catch (cause) {
+      inputModeRef.current = "idle";
       resetVoiceGuide(
         cause instanceof Error ? cause.message : "Could not start the Live Voice Guide.",
       );
@@ -1012,14 +1074,20 @@ export default function App() {
     voiceCommandHandlerRef.current = (transcript) => {
       const text = transcript.trim();
       if (!text) return;
-      const normalized = normalizeVoiceText(text);
+      const normalized = normalizeVoiceCommand(text);
       const now = Date.now();
       if (
         lastVoiceCommandRef.current.text === normalized &&
-        now - lastVoiceCommandRef.current.at < 1_500
+        now - lastVoiceCommandRef.current.at < 2_200
       )
         return;
       lastVoiceCommandRef.current = { text: normalized, at: now };
+      // A slow open-ended guide answer must not make an immediate game command
+      // wait in line. Actions still share their ordered command lane.
+      if (isGuideQuestion(text)) {
+        void handleVoiceCommand(text);
+        return;
+      }
       commandQueueRef.current = commandQueueRef.current
         .catch(() => undefined)
         .then(() => handleVoiceCommand(text));
@@ -1041,7 +1109,7 @@ export default function App() {
         .catch(() => undefined);
     }
     const enableVoice = () => {
-      if (recognitionRef.current || liveConnectionRef.current) return;
+      if (inputModeRef.current !== "idle") return;
       primeBrowserNarration();
       startVoiceRef.current();
     };
@@ -1051,9 +1119,12 @@ export default function App() {
       autoVoiceRequestedRef.current = false;
       if (cinematicTimerRef.current) window.clearTimeout(cinematicTimerRef.current);
       if (onboardingTimerRef.current) window.clearTimeout(onboardingTimerRef.current);
+      guideAbortRef.current?.abort();
+      guideAbortRef.current = undefined;
       recognitionRef.current?.stop();
       const live = liveConnectionRef.current;
       liveConnectionRef.current = null;
+      inputModeRef.current = "idle";
       live?.stop();
     };
   }, []);
