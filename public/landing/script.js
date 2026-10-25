@@ -457,7 +457,9 @@ function runLiquidFrame(timestamp) {
 function syncLiquidMotion() {
   if (liquidMotionAllowed() && !orbFrame) orbFrame = requestAnimationFrame(runLiquidFrame);
 }
-document.querySelectorAll(".orb").forEach(prepareLiquidOrb);
+if (!document.documentElement.classList.contains("liquid-orbs-loading")) {
+  document.querySelectorAll(".orb").forEach(prepareLiquidOrb);
+}
 const heroSky = document.querySelector(".hero-sky");
 prepareLiquidOrb(heroSky);
 registerAnimatedOrb(heroSky);
@@ -486,6 +488,11 @@ import("./liquid-orb.js")
   )
   .catch(() => {
     /* Existing WebGL/SVG orbs remain available. */
+  })
+  .finally(() => {
+    window.finishOrbStartup?.();
+    document.querySelectorAll(".orb:not(.liquid-glass-ready)").forEach(prepareLiquidOrb);
+    syncLiquidMotion();
   });
 
 // Short entrance choreography preserves readable content if enhancement is unavailable.

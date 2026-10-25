@@ -179,7 +179,9 @@ export async function enhanceLiquidOrbs(onReady) {
       };
       instances.set(host, instance);
       draw(instance);
-      // The old renderer remains intact until the replacement has rendered.
+      // Reveal only after the GPU has finished its first frame.
+      await device.queue.onSubmittedWorkDone();
+      if (disposed) return;
       onReady(host);
       host.classList.add("liquid-glass-ready");
       visibility.observe(host);
