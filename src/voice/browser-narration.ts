@@ -93,6 +93,24 @@ export function selectBrowserVoice(voiceKey: string | undefined, voices: SpeechS
 /** Default local fallback. Replace this factory to use recorded or server-generated audio. */
 export function createBrowserNarrationBackend(): NarrationBackend {
   const isSupported = () => typeof window !== "undefined" && "speechSynthesis" in window;
+  // Resolve the assistant voice once for this game. If the browser exposes an
+  // empty voice list at first, retain its default choice for the whole session
+  // rather than switching identity when that list later loads.
+  const selectedVoices = new Map<string, SpeechSynthesisVoice | null>();
+
+  const voiceFor = (voiceKey: string | undefined) => {
+    const key = voiceKey ?? "default";
+    const installed = window.speechSynthesis.getVoices();
+    if (selectedVoices.has(key)) {
+      const cached = selectedVoices.get(key) ?? null;
+      if (!cached || installed.includes(cached)) return cached;
+    }
+    const selected = selectBrowserVoice(key, installed);
+    const voice = selected ?? null;
+    selectedVoices.set(key, voice);
+    return voice;
+  };
+
   return {
     isSupported,
     speak({ line, voice, volume, onFinished }) {
@@ -101,14 +119,23 @@ export function createBrowserNarrationBackend(): NarrationBackend {
         return;
       }
       const utterance = new SpeechSynthesisUtterance(line.text);
+      let finished = false;
+      const finish = () => {
+        if (finished) return;
+        finished = true;
+        onFinished();
+      };
       utterance.volume = volume;
       utterance.rate = voice.rate;
       utterance.pitch = voice.pitch;
-      utterance.voice =
-        selectBrowserVoice(line.voiceKey, window.speechSynthesis.getVoices()) ?? null;
-      utterance.onend = onFinished;
-      utterance.onerror = onFinished;
-      window.speechSynthesis.speak(utterance);
+      utterance.voice = voiceFor(line.voiceKey);
+      utterance.onend = finish;
+      utterance.onerror = finish;
+      try {
+        window.speechSynthesis.speak(utterance);
+      } catch {
+        finish();
+      }
     },
     cancel() {
       if (isSupported()) window.speechSynthesis.cancel();
@@ -159,14 +186,18 @@ export function createOpenAINarrationBackend(
         return;
       }
       const current = ++generation;
+      let finished = false;
+      let fallbackStarted = false;
       const finish = () => {
-        if (current !== generation) return;
+        if (current !== generation || finished) return;
+        finished = true;
         controller = undefined;
         clearPlayback();
         request.onFinished();
       };
       const useBrowserFallback = () => {
-        if (current !== generation) return;
+        if (current !== generation || finished || fallbackStarted) return;
+        fallbackStarted = true;
         clearPlayback();
         browserFallback.speak({ ...request, onFinished: finish });
       };
@@ -226,6 +257,8 @@ export function createOpenAINarrationBackend(
   };
 }
 
+let browserNarrationPrimed = false;
+
 /**
  * Some browsers only allow their first speech-synthesis call from a direct click.
  * Prime a silent utterance while the player presses Start so the opening guide can
@@ -233,6 +266,8 @@ export function createOpenAINarrationBackend(
  */
 export function primeBrowserNarration() {
   if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
+  if (browserNarrationPrimed) return;
+  browserNarrationPrimed = true;
   const primer = new SpeechSynthesisUtterance(" ");
   primer.volume = 0;
   window.speechSynthesis.resume();
@@ -243,7 +278,6 @@ export type StoryAudioOptions = {
   feed: FeedEntry[] | undefined;
   gameId: string | undefined;
   phase: string | undefined;
-  liveVoiceActive: boolean;
   /** Reveals the new phase exactly when its spoken transition begins. */
   onPhaseBoundaryStart?: () => void;
   /** A private guide line that needs to play before the first public story line. */
@@ -259,7 +293,6 @@ export function useStoryAudio({
   feed,
   gameId,
   phase,
-  liveVoiceActive,
   onPhaseBoundaryStart,
   openingLine,
   backend,
@@ -277,6 +310,11 @@ export function useStoryAudio({
   const phaseRef = useRef<string | undefined>(undefined);
   const onPhaseBoundaryStartRef = useRef(onPhaseBoundaryStart);
   const speakingRef = useRef(false);
+  // Browser speech can call an old completion handler just after cancel(). Keep
+  // one generation and one active playback ID so a stale handler cannot advance
+  // a newly-started narration queue.
+  const playbackGenerationRef = useRef(0);
+  const activePlaybackRef = useRef<string | undefined>(undefined);
   const autoReadRef = useRef(autoRead);
   const mutedRef = useRef(muted);
   const pausedRef = useRef(paused);
@@ -288,6 +326,8 @@ export function useStoryAudio({
 
   useEffect(() => {
     if (!backend || backendRef.current === backend) return;
+    playbackGenerationRef.current += 1;
+    activePlaybackRef.current = undefined;
     backendRef.current.cancel();
     backendRef.current = backend;
     speakingRef.current = false;
@@ -300,6 +340,8 @@ export function useStoryAudio({
   function stop() {
     queueRef.current = [];
     speakingRef.current = false;
+    playbackGenerationRef.current += 1;
+    activePlaybackRef.current = undefined;
     backendRef.current.cancel();
     pausedRef.current = false;
     setPaused(false);
@@ -325,7 +367,10 @@ export function useStoryAudio({
     }
     const profile = browserVoiceProfiles.assistant;
     const voice = { ...profile, rate: profile.rate * speechRateRef.current };
+    const generation = playbackGenerationRef.current;
+    const playbackId = crypto.randomUUID();
     speakingRef.current = true;
+    activePlaybackRef.current = playbackId;
     setActiveSpeaker(next.speaker);
     lastLineRef.current = next;
     if (next.phaseBoundary) onPhaseBoundaryStartRef.current?.();
@@ -334,16 +379,24 @@ export function useStoryAudio({
       voice,
       volume: volumeRef.current,
       onFinished: () => {
+        if (
+          generation !== playbackGenerationRef.current ||
+          activePlaybackRef.current !== playbackId
+        )
+          return;
+        activePlaybackRef.current = undefined;
         speakingRef.current = false;
         setActiveSpeaker(undefined);
         if (next.phaseBoundary) setPhaseTransitioning(false);
-        window.setTimeout(playNext, 80);
+        // Leave just enough room for the browser to release the old utterance
+        // before starting the next short response.
+        window.setTimeout(playNext, 30);
       },
     });
   }, []);
 
   function enqueue(line: SpokenLine) {
-    if (!line.text.trim() || (liveVoiceActive && !line.duringLive)) return;
+    if (!line.text.trim()) return;
     queueRef.current.push(line);
     playNext();
   }
@@ -427,6 +480,8 @@ export function useStoryAudio({
       queueRef.current = [];
       publicLinesRef.current = [];
       speakingRef.current = false;
+      playbackGenerationRef.current += 1;
+      activePlaybackRef.current = undefined;
       setPhaseTransitioning(false);
       backendRef.current.cancel();
       window.queueMicrotask(() => setActiveSpeaker(undefined));
@@ -438,6 +493,8 @@ export function useStoryAudio({
       // old scene so the first thing heard always describes the phase now on screen.
       queueRef.current = [];
       speakingRef.current = false;
+      playbackGenerationRef.current += 1;
+      activePlaybackRef.current = undefined;
       backendRef.current.cancel();
       window.queueMicrotask(() => setActiveSpeaker(undefined));
     }
@@ -496,9 +553,12 @@ export function useStoryAudio({
     }
     playNext();
   }, [feed, gameId, openingLine, phase, playNext]);
-  useEffect(() => () => {
-    backendRef.current.cancel();
-  });
+  useEffect(
+    () => () => {
+      backendRef.current.cancel();
+    },
+    [],
+  );
 
   return {
     activeSpeaker,
