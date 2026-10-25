@@ -213,7 +213,7 @@ const tools = [
 ];
 
 const GREETINGS = {
-  home: `Welcome to Play by Voice. Say play chess or play Loups-Garous.`,
+  home: `Welcome to Playora. Say play chess or play Loups-Garous.`,
   chess:
     "Welcome to Chess. The application will provide the current game context. Tell the player they can say a move to play immediately or ask for a quick guide, then listen.",
   loading: "Welcome to Chess. The board is getting ready. Pause and listen.",
@@ -222,7 +222,7 @@ const GREETINGS = {
   help: "You are in Help. Offer chess rules or voice-command help, then pause and listen.",
 } as const;
 
-const INSTRUCTIONS = `You are the calm English-speaking companion in Play by Voice for blind and low-vision players.
+const INSTRUCTIONS = `You are the calm English-speaking companion in Playora for blind and low-vision players.
 
 Backchannel policy:
 Use sparse, brief backchannels. A short command such as play chess, undo, pause, or help is an action, never a backchannel to ignore.

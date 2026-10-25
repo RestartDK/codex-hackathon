@@ -1666,7 +1666,7 @@ export default function WerewolfApp({
     <header className={`ww-header${onArtwork ? " is-on-art" : ""}`}>
       <div className="ww-brand-group">
         <button className="ww-brand" type="button" onClick={requestHome}>
-          Play by Voice
+          Playora
           <span className="sr-only">, return to the game picker</span>
         </button>
         <img
