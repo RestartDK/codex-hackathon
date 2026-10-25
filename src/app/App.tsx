@@ -6,7 +6,17 @@ import { useChessCompanion } from "../voice/useChessCompanion";
 import { PLAYABLE_GAMES_LABEL, type AvailableDestination } from "../voice/navigation";
 import GamePicker from "../components/PlayByVoice/GamePicker";
 import ChessView from "../components/PlayByVoice/ChessView";
-import ChessSetup, { type ChessSetupSelection } from "../components/PlayByVoice/ChessSetup";
+import ChessSetup from "../components/PlayByVoice/ChessSetup";
+import {
+  chessSetupSelection,
+  defaultChessSetup,
+  describeChessSetup,
+  reduceChessSetup,
+  type ChessSetupCommand,
+  type ChessSetupSelection,
+  type ChessSetupState,
+} from "../components/PlayByVoice/chessSetup";
+import type { AppControlAction } from "../voice/chessCommands";
 import AudioSettings from "../components/PlayByVoice/AudioSettings";
 import Help from "../components/PlayByVoice/Help";
 import CompanionDock from "../components/PlayByVoice/CompanionDock";
@@ -22,16 +32,6 @@ type View =
   | { kind: "chess" }
   | { kind: "audio" | "help"; returnTo: "home" | "loading" | "chess-setup" | "chess" };
 
-function defaultChessSetup(): ChessSetupSelection {
-  return {
-    gameMode: "computer",
-    difficulty: "beginner",
-    playerColor: "w",
-    timerMinutes: null,
-    explainRules: false,
-  };
-}
-
 export default function PlayByVoiceApp({
   preferences,
   initialDestination = "home",
@@ -44,7 +44,7 @@ export default function PlayByVoiceApp({
   preferences: Preferences;
   initialDestination?: AvailableDestination;
   autoVoice?: boolean;
-  onPlayLoupsGarous: () => void;
+  onPlayLoupsGarous: (autoVoice?: boolean) => void;
   onPlayLudo: (autoVoice?: boolean) => void;
   onPlayIntercept: (autoVoice?: boolean) => void;
   onPlayTicTacToe: (autoVoice?: boolean) => void;
@@ -57,6 +57,9 @@ export default function PlayByVoiceApp({
         ? { kind: initialDestination, returnTo: "home" }
         : { kind: "home" },
   );
+  const [setup, setSetup] = useState<ChessSetupState>(defaultChessSetup);
+  const setupRef = useRef(setup);
+  setupRef.current = setup;
   const session = useChessGame({ settings, active: view.kind === "chess" });
   const [flipped, setFlipped] = useState(settings.playerColor === "b");
   const [dismissedResult, setDismissedResult] = useState<GameResult>(null);
@@ -83,7 +86,7 @@ export default function PlayByVoiceApp({
           return `Chess is open. ${resultMessage} You can review the moves or request a new game.`;
         return `Chess is ready. ${settings.gameMode === "local" ? "This is a local two-player game." : `You play ${settings.playerColor === "w" ? "White" : "Black"}.`} ${session.history.length > 0 ? "Ask about the current board or request your next move." : "Say a move to play it immediately, or say quick guide to hear the rules."}`;
       case "loups-garous":
-        onPlayLoupsGarous();
+        onPlayLoupsGarous(companion.voice.status === "connected");
         return "Loups-Garous is open. Say start the game. Use Games to return to the game picker.";
       case "ludo":
         onPlayLudo(companion.voice.status === "connected");
@@ -151,9 +154,9 @@ export default function PlayByVoiceApp({
         session.pauseGame();
         setView({ kind: "chess-setup" });
       },
-      startDefaultGame: () => {
-        if (view.kind === "chess-setup") startChess({ ...defaultChessSetup(), ...settings });
-      },
+      setup,
+      setupCommand: applySetupCommand,
+      appControl,
       resumeGame: () => {
         if (view.kind !== "chess") {
           setView({ kind: "loading" });
@@ -170,7 +173,7 @@ export default function PlayByVoiceApp({
     resultMessage,
   );
 
-  function startChess(selection: ChessSetupSelection) {
+  function startChess(selection: ChessSetupSelection): string {
     const applied = {
       gameMode: selection.gameMode,
       difficulty: selection.difficulty,
@@ -185,9 +188,95 @@ export default function PlayByVoiceApp({
     setView({ kind: "chess" });
     const color = selection.playerColor === "w" ? "White" : "Black";
     const turn = selection.playerColor === "b" ? "White" : color;
-    companion.announce(
-      `You play ${color}. ${turn} to move.${selection.explainRules ? " Use the board or say a move such as e2 to e4. You can ask for a hint, board description, undo, pause, or help." : ""}`,
-    );
+    const announcement = `You play ${color}. ${turn} to move.${selection.explainRules ? " Use the board or say a move such as e2 to e4. You can ask for a hint, board description, undo, pause, or help." : ""}`;
+    companion.announce(announcement);
+    return `Chess has started. ${announcement}`;
+  }
+
+  function applySetupCommand(command: ChessSetupCommand): string {
+    const outcome = reduceChessSetup(setupRef.current, command);
+    setupRef.current = outcome.state;
+    setSetup(outcome.state);
+    if (outcome.effect === "cancel") {
+      companion.cancelRequests();
+      setView({ kind: "home" });
+      return "Chess setup is closed. You are back at the game picker.";
+    }
+    if (outcome.effect === "start") return startChess(chessSetupSelection(outcome.state));
+    return describeChessSetup(outcome.state);
+  }
+
+  function closeResult(): string {
+    setDismissedResult(result);
+    return "The game result is closed. You can review the moves or start a new game.";
+  }
+
+  function goBack(): { ok: boolean; message: string } {
+    if (view.kind === "chess-setup")
+      return { ok: true, message: applySetupCommand({ kind: "back" }) };
+    if (view.kind === "audio" || view.kind === "help") {
+      setView({ kind: view.returnTo });
+      return {
+        ok: true,
+        message:
+          view.returnTo === "chess-setup"
+            ? `Closed ${view.kind === "audio" ? "audio settings" : "help"}. ${describeChessSetup(setupRef.current)}`
+            : `Closed ${view.kind === "audio" ? "audio settings" : "help"}.`,
+      };
+    }
+    if (view.kind === "loading") {
+      session.cancelStockfishPreparation();
+      companion.cancelRequests();
+      setView({ kind: "home" });
+      return { ok: true, message: "Chess loading stopped. You are back at the game picker." };
+    }
+    if (view.kind === "chess") {
+      if (session.pendingPromotion) {
+        session.cancelPromotion();
+        return { ok: true, message: "Promotion cancelled. Choose a move or name the piece." };
+      }
+      if (result && result !== dismissedResult) return { ok: true, message: closeResult() };
+      if (session.reviewMode) {
+        session.exitReviewMode();
+        return { ok: true, message: "Back at the live board." };
+      }
+      session.pauseGame();
+      companion.cancelRequests();
+      setView({ kind: "home" });
+      return {
+        ok: true,
+        message:
+          "You are back at the game picker. Your chess position is saved. Say play chess to return.",
+      };
+    }
+    return { ok: false, message: "You are already at the game picker." };
+  }
+
+  function appControl(action: AppControlAction): { ok: boolean; message: string } {
+    switch (action) {
+      case "back":
+        return goBack();
+      case "close":
+        if (view.kind === "audio" || view.kind === "help") return goBack();
+        if (view.kind === "chess" && session.pendingPromotion) {
+          session.cancelPromotion();
+          return { ok: true, message: "Promotion cancelled. Choose a move or name the piece." };
+        }
+        if (view.kind === "chess" && result && result !== dismissedResult)
+          return { ok: true, message: closeResult() };
+        return { ok: false, message: "There is no dialog to close." };
+      case "dismiss_result":
+        if (!result) return { ok: false, message: "No finished game result is open." };
+        return { ok: true, message: closeResult() };
+      case "review_result":
+        if (!result) return { ok: false, message: "No finished game result is open." };
+        setDismissedResult(result);
+        session.enterReviewMode();
+        return {
+          ok: true,
+          message: "Reviewing the finished game. Say live board when you want to return.",
+        };
+    }
   }
 
   const startVoice = useRef(companion.voice.start);
@@ -238,16 +327,23 @@ export default function PlayByVoiceApp({
     };
   }, [hasDialog]);
 
+  const commandControls = (
+    <CompanionDock
+      companion={companion}
+      green={view.kind === "chess-setup" || chessVisible}
+      screenReaderMode={settings.screenReaderMode}
+    />
+  );
+
   return (
     <>
       <div
         className={`pbv-shell page-${view.kind}${view.kind === "chess-setup" || chessVisible ? " theme-green" : ""}`}
-        inert={hasDialog || undefined}
       >
         <a href="#main-content" className="skip-link">
           Skip to main content
         </a>
-        <header className="site-header">
+        <header className="site-header" inert={hasDialog || undefined}>
           {chessContextVisible && <span className="header-game">Chess</span>}
           <nav aria-label="Main navigation">
             <button
@@ -260,7 +356,7 @@ export default function PlayByVoiceApp({
             </button>
           </nav>
         </header>
-        <main id="main-content" className="main-content">
+        <main id="main-content" className="main-content" inert={hasDialog || undefined}>
           {view.kind === "home" && <GamePicker companion={companion} />}
           {view.kind === "loading" && (
             <section className="loading-page" aria-labelledby="page-heading">
@@ -312,13 +408,7 @@ export default function PlayByVoiceApp({
             </section>
           )}
           {view.kind === "chess-setup" && (
-            <ChessSetup
-              onCancel={() => {
-                companion.cancelRequests();
-                setView({ kind: "home" });
-              }}
-              onStart={startChess}
-            />
+            <ChessSetup state={setup} onCommand={applySetupCommand} />
           )}
           {view.kind === "chess" && (
             <ChessView
@@ -353,21 +443,19 @@ export default function PlayByVoiceApp({
             />
           )}
         </main>
-        <CompanionDock
-          companion={companion}
-          green={view.kind === "chess-setup" || chessVisible}
-          screenReaderMode={settings.screenReaderMode}
-        />
+        {!hasDialog && commandControls}
       </div>
       {view.kind === "chess" && session.pendingPromotion && (
         <PromotionDialog
           color={session.game.turn()}
           onPromote={session.promote}
           onCancel={session.cancelPromotion}
+          commandControls={commandControls}
         />
       )}
       {showResult && (
         <GameEndModal
+          commandControls={commandControls}
           result={result}
           onNewGame={() => {
             companion.cancelRequests();

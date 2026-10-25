@@ -610,3 +610,12 @@ if ("IntersectionObserver" in window && !reducedOrbMotion.matches) {
     headlines.observe(heading);
   });
 }
+
+window.landingControls = {
+  setMenu,
+  closeMenu,
+  faqItems,
+  setFaqExpanded,
+  toggleMotion: () => motionControl.click(),
+  motionPaused: () => document.documentElement.classList.contains("motion-paused"),
+};

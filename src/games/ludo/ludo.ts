@@ -464,5 +464,8 @@ export function deserializeLudo(raw: string): LudoState | null {
   }
 }
 
+export const LUDO_GUIDE =
+  "Say roll, then move token one, two, three, or four. Your choice plays immediately. A six brings a token out of base. Safe squares prevent captures. Reach home exactly with all four tokens to win. A six, capture, or finishing gives another roll; three sixes end your turn. The computer plays automatically. Say correct before the next roll to change your choice, board configuration to hear positions, or pause to take your time.";
+
 export const LUDO_RULES_VERSION = "classic-two-player-v1";
 export const ludoConstants = { FINAL_PROGRESS, SAFE_SQUARES } as const;

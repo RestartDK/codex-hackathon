@@ -23,6 +23,7 @@ export function useInterceptGame() {
     repeat: () => game.currentNarration(),
     recap: () => game.recap(),
     choices: () => game.choiceList(),
+    transcriptPage: (page: number, pageSize: number) => game.transcriptPage(page, pageSize),
   };
 }
 

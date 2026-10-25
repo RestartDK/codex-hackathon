@@ -17,6 +17,7 @@ export interface InterceptToolBridge {
   repeat: () => string;
   recap: () => string;
   choices: () => string;
+  transcriptPage: (page: number, pageSize: number) => string;
 }
 
 type PendingAction = {
@@ -85,6 +86,17 @@ export function createInterceptToolExecutor(
       return json({ status: "ok", message: INTERCEPT_INTRODUCTION });
     if (name === "repeat_story_passage") return json({ status: "ok", message: bridge.repeat() });
     if (name === "get_story_recap") return json({ status: "ok", message: bridge.recap() });
+    if (name === "read_story_transcript") {
+      const page = Number.isInteger(args.page) ? Number(args.page) : 1;
+      const pageSize = Number.isInteger(args.pageSize) ? Number(args.pageSize) : 10;
+      return json({
+        status: "ok",
+        page,
+        pageSize,
+        totalEntries: bridge.state.transcript.length,
+        message: bridge.transcriptPage(page, pageSize),
+      });
+    }
     if (name === "undo_story_choice") return json(bridge.undo());
 
     if (name === "choose_story_option") {

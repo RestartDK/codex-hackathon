@@ -1,4 +1,5 @@
 import { navigationTool } from "../../src/voice/navigation.js";
+import { voiceControlTool } from "../../src/voice/voiceControl.js";
 
 const TOOL_INSTRUCTIONS = `
 You are the reasoning layer for a voice-first chess companion. The browser owns the
@@ -176,6 +177,14 @@ const tools = [
 const ludoTools = [
   {
     type: "function",
+    name: "get_game_guide",
+    description:
+      "Read the authored Ludo guide: rolling, token choice, sixes, safe squares, capture, and winning.",
+    parameters: { type: "object", properties: {}, additionalProperties: false },
+    strict: true,
+  },
+  {
+    type: "function",
     name: "propose_best_token_move",
     description:
       "Suggest a legal token only when asked to choose for the player. Follow the returned confirmation requirement.",
@@ -264,7 +273,7 @@ const ludoTools = [
   },
 ];
 
-const LUDO_INSTRUCTIONS = `You are the reasoning layer for a Ludo companion. The browser owns state, dice, and rules. Use a Ludo function for current facts or actions. Explicit token orders use propose_token_move and play immediately. Use propose_best_token_move only when asked to choose for the player; follow confirmation_required if returned. Rolls, pause, resume, correction, and board queries need no confirmation. New game clears a save and requires confirmation. For board configuration or positions, call get_position and describe the returned tokens, colors, last die, and turn. Give the full configuration only on request. After moves, do not repeat instructions or narrate future computer actions: the browser supplies short paced updates.`;
+const LUDO_INSTRUCTIONS = `You are the reasoning layer for a Ludo companion. The browser owns state, dice, and rules. Use a Ludo function for current facts or actions. Explicit token orders use propose_token_move and play immediately. Use propose_best_token_move only when asked to choose for the player; follow confirmation_required if returned. Rolls, pause, resume, correction, and board queries need no confirmation. New game clears a save and requires confirmation. For rules questions, call get_game_guide and read the authored text faithfully. For board configuration or positions, call get_position and describe the returned tokens, colors, last die, turn, and any paused or saved-game state. Give the full configuration only on request. After moves, do not repeat instructions or narrate future computer actions: the browser supplies short paced updates.`;
 
 const interceptTools = [
   {
@@ -324,6 +333,22 @@ const interceptTools = [
   },
   {
     type: "function",
+    name: "read_story_transcript",
+    description:
+      "Read the player's revealed story transcript in pages of up to 20 entries. Never add scene text the transcript does not contain.",
+    parameters: {
+      type: "object",
+      properties: {
+        page: { type: "integer", minimum: 1 },
+        pageSize: { type: "integer", minimum: 1, maximum: 20 },
+      },
+      required: ["page", "pageSize"],
+      additionalProperties: false,
+    },
+    strict: true,
+  },
+  {
+    type: "function",
     name: "undo_story_choice",
     description: "Undo the latest story choice immediately when requested.",
     parameters: { type: "object", properties: {}, additionalProperties: false },
@@ -358,9 +383,30 @@ const interceptTools = [
   },
 ];
 
-const INTERCEPT_INSTRUCTIONS = `You are the reasoning layer for The Intercept, an authored interactive story. The browser and Ink runtime own all story state. Never invent scenes, clues, outcomes, choices, or hidden facts. Use get_game_introduction for questions about the premise, role, goal, winning, losing, completion, or endings. Use story tools before stating current story facts. Read returned authored passages faithfully and in their original order. An explicit numbered or clearly identified player choice uses choose_story_option immediately. Only a choice selected by the companion uses suggest_story_option and confirmation. Ambiguous input must not change the story: call get_story_state and ask for a number. Repeat, recap, undo, pause, and resume need no confirmation. Never expose internal variables or unvisited branches. Keep control acknowledgements short so the authored narration remains central.`;
+const INTERCEPT_INSTRUCTIONS = `You are the reasoning layer for The Intercept, an authored interactive story. The browser and Ink runtime own all story state. Never invent scenes, clues, outcomes, choices, or hidden facts. Use get_game_introduction for questions about the premise, role, goal, winning, losing, completion, or endings. Use read_story_transcript only for the revealed transcript, one page at a time. Use story tools before stating current story facts. Read returned authored passages faithfully and in their original order. An explicit numbered or clearly identified player choice uses choose_story_option immediately. Only a choice selected by the companion uses suggest_story_option and confirmation. Ambiguous input must not change the story: call get_story_state and ask for a number. Repeat, recap, undo, pause, and resume need no confirmation. Never expose internal variables or unvisited branches. Keep control acknowledgements short so the authored narration remains central.`;
 
 const ticTacToeTools = [
+  {
+    type: "function",
+    name: "get_tic_tac_toe_introduction",
+    description: "Read the authored Tic-Tac-Toe introduction: goal, order of play, and drawing.",
+    parameters: { type: "object", properties: {}, additionalProperties: false },
+    strict: true,
+  },
+  {
+    type: "function",
+    name: "get_tic_tac_toe_guide",
+    description: "Read the authored Tic-Tac-Toe control guide and command examples.",
+    parameters: { type: "object", properties: {}, additionalProperties: false },
+    strict: true,
+  },
+  {
+    type: "function",
+    name: "get_tic_tac_toe_dashboard",
+    description: "Read the authored description of the Tic-Tac-Toe dashboard layout.",
+    parameters: { type: "object", properties: {}, additionalProperties: false },
+    strict: true,
+  },
   {
     type: "function",
     name: "get_tic_tac_toe_state",
@@ -493,6 +539,7 @@ const werewolfTools = [
 
 const sharedLibraryTools = [
   navigationTool,
+  voiceControlTool,
   {
     type: "function",
     name: "get_preferences",
@@ -636,7 +683,7 @@ export async function handleLibraryVoiceSession(request: Request): Promise<Respo
       : gameId === "intercept"
         ? `The Intercept is a solo authored mystery. The application supplies a spoiler-free introduction plus exact passages and choices. Use get_game_introduction when asked about the premise, goal, winning, losing, or endings. Speak each passage once, faithfully and in order. Do not summarize unless asked for a recap, and do not reveal or predict unseen consequences. Explicit choices play immediately; a choice you select for the player requires confirmation. Use get_story_state when a choice is unclear. Repeat, recap, undo, pause, and resume need no confirmation.`
         : gameId === "tic-tac-toe"
-          ? `The human is X and moves first against computer O. Use natural positions or square numbers one through nine. An explicit square plays immediately; only a move you select for the player requires confirmation. Describe the full board only when asked. The browser announces each committed move and result. Use Tic-Tac-Toe tools for every current fact and action.`
+          ? `The human is X and moves first against computer O. Use natural positions or square numbers one through nine. An explicit square plays immediately; only a move you select for the player requires confirmation. Describe the full board only when asked. The browser announces each committed move and result. Use Tic-Tac-Toe tools for every current fact and action, including get_tic_tac_toe_introduction, get_tic_tac_toe_guide, and get_tic_tac_toe_dashboard for authored rules and layout text.`
           : `If a saved game exists, ask resume or new game and wait. Resume immediately through the game-control tool; confirm only a new game that discards progress. An explicit move order plays immediately. A companion-selected move follows the tool's confirmation requirement. Board questions, rolling, pause, and resume need no confirmation.`;
 
   let upstream: Response;

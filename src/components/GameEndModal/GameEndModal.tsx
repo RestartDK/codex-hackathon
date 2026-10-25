@@ -2,6 +2,7 @@ interface GameEndModalProps {
   result: { winner: "w" | "b" | null; reason: "checkmate" | "resign" | "draw" } | null;
   onNewGame: () => void;
   onEnterReview: () => void;
+  commandControls?: React.ReactNode;
 }
 
 const WINNER_LABEL: Record<"w" | "b", string> = {
@@ -9,7 +10,7 @@ const WINNER_LABEL: Record<"w" | "b", string> = {
   b: "Black",
 };
 
-export default function GameEndModal({ result, onNewGame, onEnterReview }: GameEndModalProps) {
+export default function GameEndModal({ result, onNewGame, onEnterReview, commandControls }: GameEndModalProps) {
   const titleId = useId();
   const messageId = useId();
   const { dialogRef, onKeyDown } = useDialogFocus(undefined, Boolean(result));
@@ -65,6 +66,7 @@ export default function GameEndModal({ result, onNewGame, onEnterReview }: GameE
             Review Game
           </button>
         </div>
+        {commandControls}
       </div>
     </div>
   );

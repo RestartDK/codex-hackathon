@@ -40,6 +40,26 @@ export interface InterceptChoice {
   text: string;
 }
 
+/** Read back only revealed transcript entries, one page at a time. */
+export function transcriptPageText(
+  entries: readonly InterceptTranscriptEntry[],
+  page: number,
+  pageSize: number,
+): string {
+  if (!entries.length) return "The story transcript is empty.";
+  const safeSize = Math.min(20, Math.max(1, Number.isFinite(pageSize) ? Math.trunc(pageSize) : 10));
+  const pages = Math.max(1, Math.ceil(entries.length / safeSize));
+  const safePage = Math.min(pages, Math.max(1, Number.isFinite(page) ? Math.trunc(page) : 1));
+  const start = (safePage - 1) * safeSize;
+  const slice = entries.slice(start, start + safeSize);
+  const lines = slice.map((entry, index) =>
+    entry.kind === "choice"
+      ? `${start + index + 1}. You chose ${entry.text}.`
+      : `${start + index + 1}. ${entry.text}`,
+  );
+  return `Story transcript page ${safePage} of ${pages}, entry ${start + 1} to ${start + slice.length} of ${entries.length}. ${lines.join(" ")}${safePage < pages ? " Say next transcript page to hear more." : ""}`;
+}
+
 export interface InterceptTranscriptEntry {
   kind: "passage" | "choice";
   text: string;
@@ -346,6 +366,10 @@ export class InterceptGame {
     return this.stateValue.choices.length
       ? `Your choices are: ${this.stateValue.choices.map((choice) => `${choice.number}, ${choice.text}`).join(". ")}`
       : "There are no choices available.";
+  }
+
+  transcriptPage(page: number, pageSize: number): string {
+    return transcriptPageText(this.stateValue.transcript, page, pageSize);
   }
 
   recap(): string {

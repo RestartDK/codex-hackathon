@@ -22,6 +22,14 @@ import {
   useStoryAudio,
 } from "../voice/browser-narration.js";
 import { useVoiceCompanion, type VoiceToolExecutor } from "../voice/useVoiceCompanion.js";
+import { looksLikeControlCommand } from "./voiceRouting.js";
+import {
+  clampVillageCount,
+  describeWerewolfSetup,
+  MAX_VILLAGE,
+  MIN_VILLAGE,
+  parseWerewolfSetupCommand,
+} from "./setupCommands.js";
 
 type Session = { game: GameView; token: string };
 type GuideMessage = { role: "user" | "assistant"; text: string; mode?: "model" | "local" };
@@ -69,10 +77,15 @@ const PLAYER_COLORS = [
   "#c9a27e",
 ];
 const MY_COLOR = "#fa8b57";
-const MIN_VILLAGE = 4;
-const MAX_VILLAGE = 12;
 
 type SetupStage = "preparing" | "prepare-error" | "mode" | "village" | "creating" | "create-error";
+
+function roleTotalsFor(count: number) {
+  const totals = DEFAULT_ROLE_COUNTS[count] ?? {};
+  return (Object.keys(totals) as Role[])
+    .filter((role) => (totals[role] ?? 0) > 0)
+    .map((role) => ({ role: roleNames[role], total: totals[role] ?? 0 }));
+}
 type IntroStep = "village" | "role" | "role-details";
 
 const roleCards: Record<
@@ -503,11 +516,13 @@ export default function WerewolfApp({
   onNarrationVolumeChange,
   onShowGamePicker,
   onNavigateGame,
+  autoVoice = false,
 }: {
+  autoVoice?: boolean;
   narrationVolume: number;
   onNarrationVolumeChange: (volume: number) => void;
   onShowGamePicker: () => void;
-  onNavigateGame?: (destination: AvailableDestination) => void;
+  onNavigateGame?: (destination: AvailableDestination, startVoice?: boolean) => void;
 }) {
   const [session, setSession] = useState<Session>();
   const [presentedGame, setPresentedGame] = useState<GameView>();
@@ -521,7 +536,6 @@ export default function WerewolfApp({
   const [busy, setBusy] = useState(false);
   const [commandText, setCommandText] = useState("");
   const [voiceStatus, setVoiceStatus] = useState("Voice is off.");
-  const [voiceCommandsPaused, setVoiceCommandsPaused] = useState(false);
   const [guideMessages, setGuideMessages] = useState<GuideMessage[]>([]);
   const [guideText, setGuideText] = useState("");
   const [voiceTranscript, setVoiceTranscript] = useState("");
@@ -581,6 +595,14 @@ export default function WerewolfApp({
     "home",
     Math.round(narrationVolume * 100),
   );
+  const voiceCommandsPaused = voice.commandsPaused;
+  const countRef = useRef(count);
+  const explainGameRef = useRef(explainGame);
+  const startVoice = useRef(voice.start);
+  startVoice.current = voice.start;
+  useEffect(() => {
+    if (autoVoice) void startVoice.current();
+  }, [autoVoice]);
   const commandQueueRef = useRef(Promise.resolve());
   const lastVoiceCommandRef = useRef({ text: "", at: 0 });
   const actionInFlightRef = useRef(false);
@@ -689,6 +711,8 @@ export default function WerewolfApp({
     event?.preventDefault();
     // One launch at a time: repeated clicks or voice commands reuse the pending request.
     if (createControllerRef.current) return;
+    const count = countRef.current;
+    const explainGame = explainGameRef.current;
     const controller = new AbortController();
     createControllerRef.current = controller;
     lastCreateTestModeRef.current = testMode;
@@ -894,45 +918,33 @@ export default function WerewolfApp({
     setVoiceTranscript(command);
     const navigation = localIntent(command);
     if (navigation?.name === "navigate_app") {
-      const destination = parseDestination(
-        (navigation.args as { destination?: unknown }).destination,
-      );
+      const destination = parseDestination(navigation.args.destination);
       if (destination === "audio" || destination === "help") {
         openTools(destination);
         return;
       }
       if (destination && destination !== "loups-garous") {
-        leaveToGamePicker();
-        onNavigateGame?.(destination);
+        const keepVoice = voice.status === "connected";
+        window.setTimeout(() => {
+          leaveToGamePicker();
+          onNavigateGame?.(destination, keepVoice);
+        }, 0);
         return;
       }
     }
-    if (/\bpause\b.*\b(listening|voice control|microphone)\b/iu.test(command)) {
-      setVoiceCommandsPaused(true);
-      setVoiceStatus("Voice commands are paused. Say ‘resume listening’ to continue.");
-      appendAssistantCaption(
-        "Voice commands are paused. Say ‘resume listening’ when you are ready.",
-      );
+    if (navigation?.name === "voice_control") {
+      const message = voice.runVoiceControl(navigation.args.action);
+      setVoiceStatus(message);
+      queueAssistant(message, "local", { instant: true });
       return;
     }
-    if (
-      voiceCommandsPaused &&
-      /\b(resume|continue)\b.*\b(listening|voice control|microphone)\b/iu.test(command)
-    ) {
-      setVoiceCommandsPaused(false);
-      setVoiceStatus("Voice guide is listening");
-      queueAssistant("Voice commands are active again.");
+    const screenControls = [handleDialogVoiceCommand, handleBackVoiceCommand, handleAudioVoiceCommand];
+    if (screenControls.some((handle) => handle(command))) return;
+    if (voice.commandsPaused) {
+      queueAssistant("Voice commands are paused. Say resume voice commands before playing.", "local", { instant: true });
       return;
     }
-    if (/\b(stop|disable|turn off)\b.*\b(listening|voice control|microphone)\b/iu.test(command)) {
-      setVoiceCommandsPaused(true);
-      setVoiceStatus("Voice commands are paused. Say ‘resume listening’ to continue.");
-      appendAssistantCaption(
-        "Voice commands are paused. Say ‘resume listening’ when you are ready.",
-      );
-      return;
-    }
-    if (voiceCommandsPaused) return;
+    if (handleSetupVoiceCommand(command)) return;
     if (!session) {
       if (startsNewGameNaturally(command) || /\bstart\b.*\bdefaults?\b/iu.test(command)) {
         queueAssistant("Starting a new village. I will introduce the characters first.");
@@ -1050,86 +1062,21 @@ export default function WerewolfApp({
       return;
     }
     if (
-      /\b(turn|switch|set|put)\b.*\b(auto(?:matic)?(?:\s+read(?:ing)?)?|auto-read)\b.*\b(off|disable|stop)\b/iu.test(
+      /^(?:please )?(?:play again|new game|new round|start over|restart|another round|one more game)[.!]?$/iu.test(
         command,
       )
     ) {
-      if (storyAudio.autoRead) storyAudio.toggleAutoRead();
-      appendAssistantCaption("Automatic reading is off. Say ‘turn auto read on’ to restore it.");
+      queueAssistant(
+        "Opening game setup. Choose your village size, then start when you are ready.",
+        "local",
+        { instant: true },
+      );
+      openNewGameSetup();
       return;
     }
-    if (
-      /\b(turn|switch|set|put)\b.*\b(auto(?:matic)?(?:\s+read(?:ing)?)?|auto-read)\b.*\b(on|enable|start)\b/iu.test(
-        command,
-      )
-    ) {
-      if (!storyAudio.autoRead) storyAudio.toggleAutoRead();
-      queueAssistant("Automatic reading is on.", "local", { instant: true });
-      return;
-    }
-    if (/\b(mute|silence)\b.*\b(narration|audio|story|guide)\b/iu.test(command)) {
-      if (!storyAudio.muted) storyAudio.toggleMuted();
-      appendAssistantCaption("Narration is muted. Voice commands remain available.");
-      setVoiceStatus("Narration is muted. Voice guide is still listening.");
-      return;
-    }
-    if (/\b(unmute|sound on)\b.*\b(narration|audio|story|guide)?\b/iu.test(command)) {
-      if (storyAudio.muted) storyAudio.toggleMuted();
-      queueAssistant("Narration is unmuted.", "local", { instant: true });
-      return;
-    }
-    if (/\b(louder|volume up|increase volume)\b/iu.test(command)) {
-      const next = Math.min(1, storyAudio.volume + 0.1);
-      storyAudio.updateVolume(next);
-      queueAssistant(`Volume is ${Math.round(next * 100)} percent.`, "local", { instant: true });
-      return;
-    }
-    if (/\b(quieter|volume down|decrease volume)\b/iu.test(command)) {
-      const next = Math.max(0, storyAudio.volume - 0.1);
-      storyAudio.updateVolume(next);
-      queueAssistant(`Volume is ${Math.round(next * 100)} percent.`, "local", { instant: true });
-      return;
-    }
-
-    if (
-      /\b(stop|quiet|silence)\b.*\b(talking|speaking|narration|audio)\b/iu.test(command) ||
-      /\blet me speak\b/iu.test(command)
-    ) {
-      storyAudio.stop();
-      setVoiceStatus("Narration stopped. Voice guide is still listening.");
-      return;
-    }
-    if (/\b(repeat|replay|read|play)\b.*\b(guide|briefing|instructions)\b/iu.test(command)) {
-      replayOpeningBriefing();
-      return;
-    }
-    if (/\b(repeat|say that again|repeat that)\b/iu.test(command)) {
-      storyAudio.repeatLast();
-      return;
-    }
-    if (/\b(slower|slow down)\b/iu.test(command)) {
-      storyAudio.updateSpeechRate(storyAudio.speechRate - 0.1);
-      queueAssistant("I will speak more slowly.");
-      return;
-    }
-    if (/\b(faster|speed up)\b/iu.test(command)) {
-      storyAudio.updateSpeechRate(storyAudio.speechRate + 0.1);
-      queueAssistant("I will speak faster.");
-      return;
-    }
-    if (/\b(pause|hold)\b.*\b(narration|conversation|audio|talking)\b/iu.test(command)) {
-      storyAudio.pause();
-      setVoiceStatus("Narration paused. Voice guide is still listening.");
-      return;
-    }
-    if (/\b(resume|continue)\b.*\b(narration|conversation|audio|talking)\b/iu.test(command)) {
-      storyAudio.resume();
-      return;
-    }
-    if (startsNewGameNaturally(command) || /\b(?:restart|start over|new round)\b/iu.test(command)) {
-      queueAssistant("Starting a new village. I will introduce the characters first.");
-      recoverExpiredSession();
-      await create(undefined, /\b(quick|test)\b/iu.test(command));
+    if (startsNewGameNaturally(command) && !isVillageMessage(command)) {
+      queueAssistant("Opening village setup. Start when your choices are ready.");
+      openNewGameSetup();
       return;
     }
     if (/\b(pause|hold|freeze)\b.*\b(game|match|play)\b/iu.test(command)) {
@@ -1144,6 +1091,30 @@ export default function WerewolfApp({
       storyAudio.replayPublicLines();
       return;
     }
+    if (/^(cancel|never mind|cancel that)\b/iu.test(command.trim())) {
+      queueAssistant(
+        "There is nothing to cancel right now. Say back to leave a screen, or voice help for the current commands.",
+        "local",
+        { instant: true },
+      );
+      return;
+    }
+    if (/^undo\b/iu.test(command.trim())) {
+      queueAssistant(
+        "Loups-Garous has no undo. Say read updates to hear what happened, or voice help for the current commands.",
+        "local",
+        { instant: true },
+      );
+      return;
+    }
+    if (looksLikeControlCommand(command)) {
+      queueAssistant(
+        "I could not match that control. Say voice help for the current commands, or ask me about the game.",
+        "local",
+        { instant: true },
+      );
+      return;
+    }
     if (isVillageMessage(command)) {
       await perform({ command }, true);
       return;
@@ -1156,6 +1127,257 @@ export default function WerewolfApp({
     }
     await perform({ command }, true);
   }
+
+  function handleDialogVoiceCommand(command: string): boolean {
+    if (!dialog) return false;
+    if (
+      /\b(close|dismiss|exit|hide|shut)\b/iu.test(command) ||
+      /^(close|dismiss|done|never mind|cancel)$/iu.test(command.trim())
+    ) {
+      setDialog(null);
+      queueAssistant(`Closed ${dialog === "audio" ? "audio settings" : "help"}.`, "local", {
+        instant: true,
+      });
+      return true;
+    }
+    return false;
+  }
+
+  function handleBackVoiceCommand(command: string): boolean {
+    if (!/^(back|go back|previous step)\.?$/iu.test(command.trim())) return false;
+    if (dialog) {
+      setDialog(null);
+      queueAssistant("Closed the dialog.", "local", { instant: true });
+      return true;
+    }
+    if (backAction) {
+      backAction.run();
+      queueAssistant(`${backAction.label}.`, "local", { instant: true });
+      return true;
+    }
+    queueAssistant("There is no previous screen right now.", "local", { instant: true });
+    return true;
+  }
+
+  function handleSetupVoiceCommand(command: string): boolean {
+    if (session) return false;
+    const parsed = parseWerewolfSetupCommand(command, countRef.current);
+    if (!parsed) return false;
+    if (stage === "creating" && parsed.kind !== "read" && parsed.kind !== "cancel") {
+      queueAssistant("The village is still being created. Say cancel to stop it.", "local", {
+        instant: true,
+      });
+      return true;
+    }
+    if (
+      (stage === "preparing" || stage === "prepare-error" || stage === "create-error") &&
+      parsed.kind !== "read"
+    ) {
+      queueAssistant("Loups-Garous is still loading. Try again in a moment.", "local", {
+        instant: true,
+      });
+      return true;
+    }
+    switch (parsed.kind) {
+      case "read":
+        queueAssistant(
+          describeWerewolfSetup({
+            stage: stage === "village" || stage === "creating" ? "village" : "mode",
+            count: countRef.current,
+            explainGame: explainGameRef.current,
+            roles: roleTotalsFor(countRef.current),
+          }),
+          "local",
+          { instant: true },
+        );
+        return true;
+      case "open-mode":
+        setStage("mode");
+        queueAssistant(
+          "Solo is ready. With Friends is coming soon. Say solo or start the game.",
+          "local",
+          { instant: true },
+        );
+        return true;
+      case "open-village":
+        setStage("village");
+        queueAssistant(
+          `${countRef.current} players. Say more players, fewer players, or start the game.`,
+          "local",
+          { instant: true },
+        );
+        return true;
+      case "set-count": {
+        const next = clampVillageCount(parsed.count);
+        countRef.current = next;
+        setCount(next);
+        queueAssistant(
+          `${next} players. Explain the game as we play is ${explainGameRef.current ? "on" : "off"}.`,
+          "local",
+          { instant: true },
+        );
+        return true;
+      }
+      case "explain":
+        explainGameRef.current = parsed.enabled;
+        setExplainGame(parsed.enabled);
+        queueAssistant(
+          `Explain the game as we play is ${parsed.enabled ? "on" : "off"}.`,
+          "local",
+          { instant: true },
+        );
+        return true;
+      case "back":
+        if (stage === "village") {
+          setStage("mode");
+          queueAssistant("Back at the play mode choice.", "local", { instant: true });
+        } else if (stage === "creating") {
+          cancelCreation();
+          setStage("village");
+          queueAssistant("Stopped creating the village. Back at village setup.", "local", {
+            instant: true,
+          });
+        } else {
+          leaveToGamePicker();
+        }
+        return true;
+      case "cancel":
+        if (stage === "creating") {
+          cancelCreation();
+          setStage("village");
+          queueAssistant("Stopped creating the village. Back at village setup.", "local", {
+            instant: true,
+          });
+        } else if (stage === "village" || stage === "create-error") {
+          setStage("mode");
+          queueAssistant("Setup cancelled. Back at the play mode choice.", "local", {
+            instant: true,
+          });
+        } else leaveToGamePicker();
+        return true;
+      case "defaults":
+        countRef.current = 8;
+        explainGameRef.current = true;
+        setCount(8);
+        setExplainGame(true);
+        void create();
+        return true;
+      case "start":
+        queueAssistant(
+          parsed.quickTest
+            ? "Starting a quick test village. I will introduce the characters first."
+            : "Starting a new village. I will introduce the characters first.",
+          "local",
+          { instant: true },
+        );
+        void create(undefined, parsed.quickTest);
+        return true;
+    }
+  }
+
+  function handleAudioVoiceCommand(command: string): boolean {
+    if (
+      /\b(turn|switch|set|put)\b.*\b(auto(?:matic)?(?:\s+read(?:ing)?)?|auto-read)\b.*\b(off|disable|stop)\b/iu.test(
+        command,
+      )
+    ) {
+      if (storyAudio.autoRead) storyAudio.toggleAutoRead();
+      appendAssistantCaption("Automatic reading is off. Say ‘turn auto read on’ to restore it.");
+      return true;
+    }
+    if (
+      /\b(turn|switch|set|put)\b.*\b(auto(?:matic)?(?:\s+read(?:ing)?)?|auto-read)\b.*\b(on|enable|start)\b/iu.test(
+        command,
+      )
+    ) {
+      if (!storyAudio.autoRead) storyAudio.toggleAutoRead();
+      queueAssistant("Automatic reading is on.", "local", { instant: true });
+      return true;
+    }
+    if (/\b(mute|silence)\b.*\b(narration|audio|story|guide)\b/iu.test(command)) {
+      if (!storyAudio.muted) storyAudio.toggleMuted();
+      appendAssistantCaption("Narration is muted. Voice commands remain available.");
+      setVoiceStatus("Narration is muted. Voice guide is still listening.");
+      return true;
+    }
+    if (/\b(unmute|sound on)\b.*\b(narration|audio|story|guide)\b/iu.test(command)) {
+      if (storyAudio.muted) storyAudio.toggleMuted();
+      queueAssistant("Narration is unmuted.", "local", { instant: true });
+      return true;
+    }
+    if (/\b(louder|volume up|increase volume)\b/iu.test(command)) {
+      const next = Math.min(1, storyAudio.volume + 0.1);
+      storyAudio.updateVolume(next);
+      queueAssistant(`Volume is ${Math.round(next * 100)} percent.`, "local", { instant: true });
+      return true;
+    }
+    if (/\b(quieter|volume down|decrease volume)\b/iu.test(command)) {
+      const next = Math.max(0, storyAudio.volume - 0.1);
+      storyAudio.updateVolume(next);
+      queueAssistant(`Volume is ${Math.round(next * 100)} percent.`, "local", { instant: true });
+      return true;
+    }
+
+    const exactVolume =
+      command.match(/\bvolume\b[^\d]{0,12}(\d{1,3})\b/iu) ??
+      command.match(/\b(\d{1,3})\b[^\d]{0,8}\bvolume\b/iu);
+    if (exactVolume) {
+      const next = Math.min(1, Math.max(0, Number(exactVolume[1]) / 100));
+      storyAudio.updateVolume(next);
+      queueAssistant(`Volume is ${Math.round(next * 100)} percent.`, "local", { instant: true });
+      return true;
+    }
+    const exactRate = command.match(/\b(?:speed|rate)\b[^\d]{0,14}([\d.]+)\b/iu);
+    if (exactRate) {
+      const rate = Number(exactRate[1]);
+      if (!Number.isFinite(rate)) {
+        queueAssistant("Choose a speech speed from 0.7 to 1.35.", "local", { instant: true });
+        return true;
+      }
+      storyAudio.updateSpeechRate(rate);
+      queueAssistant(`Speech speed is ${Math.min(1.35, Math.max(0.7, rate)).toFixed(2)}.`, "local", {
+        instant: true,
+      });
+      return true;
+    }
+    if (
+      /\b(stop|quiet|silence)\b.*\b(talking|speaking|narration|audio)\b/iu.test(command) ||
+      /\blet me speak\b/iu.test(command)
+    ) {
+      storyAudio.stop();
+      setVoiceStatus("Narration stopped. Voice guide is still listening.");
+      return true;
+    }
+    if (/\b(repeat|replay|read|play back)\b.*\b(guide|briefing)\b/iu.test(command)) {
+      replayOpeningBriefing();
+      return true;
+    }
+    if (/\b(repeat|say that again|repeat that)\b/iu.test(command)) {
+      storyAudio.repeatLast();
+      return true;
+    }
+    if (/\b(slower|slow down)\b/iu.test(command)) {
+      storyAudio.updateSpeechRate(storyAudio.speechRate - 0.1);
+      queueAssistant("I will speak more slowly.");
+      return true;
+    }
+    if (/\b(faster|speed up)\b/iu.test(command)) {
+      storyAudio.updateSpeechRate(storyAudio.speechRate + 0.1);
+      queueAssistant("I will speak faster.");
+      return true;
+    }
+    if (/\b(pause|hold)\b.*\b(narration|conversation|audio|talking)\b/iu.test(command)) {
+      storyAudio.pause();
+      setVoiceStatus("Narration paused. Voice guide is still listening.");
+      return true;
+    }
+    if (/\b(resume|continue)\b.*\b(narration|conversation|audio|talking)\b/iu.test(command)) {
+      storyAudio.resume();
+      return true;
+    }
+    return false;
+  }
+
 
   async function askGuide(text = guideText) {
     const activeSession = sessionRef.current;
@@ -1287,6 +1509,8 @@ export default function WerewolfApp({
     };
   }, []);
 
+  countRef.current = count;
+  explainGameRef.current = explainGame;
   const voiceConnected = voice.status === "connected";
   const voiceBusy = voice.status === "connecting" || voice.status === "closing";
   const voiceActive = voiceConnected && !voiceCommandsPaused;
@@ -1314,17 +1538,12 @@ export default function WerewolfApp({
   function toggleVoiceFromOrb() {
     primeBrowserNarration();
     if (voiceConnected) {
-      if (voiceCommandsPaused) {
-        setVoiceCommandsPaused(false);
-        setVoiceStatus("Voice guide is listening");
-      } else {
-        setVoiceCommandsPaused(true);
-        setVoiceStatus("Voice commands are paused. Say ‘resume listening’ to continue.");
-      }
+      const message = voice.runVoiceControl(voice.commandsPaused ? "resume_commands" : "pause_commands");
+      setVoiceStatus(message);
+      queueAssistant(message, "local", { instant: true });
       return;
     }
     if (!voiceBusy) {
-      setVoiceCommandsPaused(false);
       setVoiceStatus("Voice guide is listening");
       void voice.start();
     }

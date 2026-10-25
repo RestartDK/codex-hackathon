@@ -1,5 +1,7 @@
 import { navigationTool, PLAYABLE_GAMES_LABEL } from "../../src/voice/navigation.js";
 import { preferenceNames } from "../../src/lib/preferences.js";
+import { appControlTool, chessSetupTool } from "../../src/voice/chessCommands.js";
+import { voiceControlTool } from "../../src/voice/voiceControl.js";
 
 const DEFAULT_ALLOWED_ORIGINS =
   "http://localhost:3000,http://127.0.0.1:3000,http://localhost:5173,http://127.0.0.1:5173";
@@ -18,12 +20,17 @@ Only ask a clarification when the requested move is ambiguous or its promotion p
 Never invent a move, board fact or successful outcome. Report tool errors without claiming success.
 Use get_preferences/set_preference for every audio and chess preference, review_move for history,
 and game_control for pause, resume, new_game, undo, resign, return_live, flip_board or retry_engine.
+Use chess_setup for every setup step and choice, app_control for back, close, or reviewing a finished
+game, and voice_control for pausing commands, muting the microphone, reading voice state, or ending voice.
 Use navigate_app for page/game selection. ${PLAYABLE_GAMES_LABEL} are playable.
 Keep answers brief; say coordinates as a letter then number. The app narrates committed moves.
 `.trim();
 
 const tools = [
   navigationTool,
+  chessSetupTool,
+  appControlTool,
+  voiceControlTool,
   {
     type: "function",
     name: "promote_pawn",
@@ -363,6 +370,12 @@ async function providerRejectionMessage(response: Response): Promise<string> {
   return `The voice provider rejected this session (${response.status})${suffix}`;
 }
 
+const LOBBY_INSTRUCTIONS = `You are the public lobby listener for Play by Voice. This session is
+transcription only. The application reads every transcript and performs any action, so never invent
+game state, never mention a saved or private game, and never answer with game facts.`;
+
+const LOBBY_TOOL_INSTRUCTIONS = `Do not call tools. The application routes every spoken lobby command.`;
+
 function greetingFor(view: unknown): string {
   switch (view) {
     case "chess":
@@ -378,10 +391,13 @@ function greetingFor(view: unknown): string {
   }
 }
 
+export type VoiceSessionMode = "chess" | "lobby";
+
 export async function handleChessVoiceSession(
   request: Request,
   settings: ChessVoiceSettings,
   transport: ChessVoiceTransport,
+  mode: VoiceSessionMode = "chess",
 ): Promise<Response> {
   const origin = request.headers.get("origin");
   if (!isAllowedOrigin(request, origin, settings.allowedOrigins))
@@ -408,7 +424,10 @@ export async function handleChessVoiceSession(
   )
     return problem("A valid SDP offer is required", 400);
 
-  const greeting = greetingFor(body.view);
+  const lobby = mode === "lobby";
+  const greeting = lobby
+    ? "Voice navigation is ready. Say start playing or help."
+    : greetingFor(body.view);
   let upstream: Response;
   try {
     upstream = await transport.fetch("https://api.openai.com/v1/live/sessions", {
@@ -429,20 +448,20 @@ export async function handleChessVoiceSession(
               content: [
                 {
                   type: "input_text",
-                  text: `Greet the player immediately in English. ${greeting}`,
+                  text: `Listen in English. ${greeting}`,
                 },
               ],
             },
           ],
-          instructions: INSTRUCTIONS,
+          instructions: lobby ? LOBBY_INSTRUCTIONS : INSTRUCTIONS,
           delegation: {
             type: "responses",
             responses: {
               model: settings.delegationModel,
               reasoning: { effort: "low" },
-              instructions: TOOL_INSTRUCTIONS,
-              tools,
-              tool_choice: "auto",
+              instructions: lobby ? LOBBY_TOOL_INSTRUCTIONS : TOOL_INSTRUCTIONS,
+              tools: lobby ? [] : tools,
+              tool_choice: lobby ? "none" : "auto",
               parallel_tool_calls: false,
             },
           },

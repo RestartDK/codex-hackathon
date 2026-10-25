@@ -2,6 +2,13 @@ import type { Chess, Color, Move, PieceSymbol, Square } from "chess.js";
 import { appSettingsSchema, describePreference, type AppSettings } from "../lib/preferences";
 import { moveArgumentsSchema, squareSchema } from "./chessActions";
 import { parseDestination, PLAYABLE_GAMES_LABEL, type AvailableDestination } from "./navigation";
+import {
+  describeChessSetup,
+  parseChessSetupCommand,
+  type ChessSetupCommand,
+  type ChessSetupState,
+} from "../components/PlayByVoice/chessSetup";
+import { parseAppControl, type AppControlAction } from "./chessCommands";
 
 const pieceNames: Record<PieceSymbol, string> = {
   p: "pawn",
@@ -55,7 +62,9 @@ export interface ChessToolBridge {
     | { ok: false; message: string }
   >;
   newGame: () => void;
-  startDefaultGame?: () => void;
+  setup?: ChessSetupState;
+  setupCommand?: (command: ChessSetupCommand) => string;
+  appControl?: (action: AppControlAction) => { ok: boolean; message: string };
   pendingPromotion?: { from: Square; to: Square } | null;
   promote?: (piece: "q" | "r" | "b" | "n") => void;
   cancelPromotion?: () => void;
@@ -155,11 +164,29 @@ export function createChessToolExecutor(getBridge: () => ChessToolBridge) {
           message: "That value is not available for this preference.",
         });
       cancelRequests();
+      const settingsAfter = { ...bridge.settings, ...changes.data };
+      if (bridge.view === "chess-setup" && bridge.setupCommand) {
+        if (preference.data === "gameMode" && settingsAfter.gameMode !== "computer")
+          return json({ status: "error", message: "Player games are coming soon. Choose the computer." });
+        const setupCommand: ChessSetupCommand | null =
+          preference.data === "difficulty"
+            ? { kind: "choose-difficulty", difficulty: settingsAfter.difficulty }
+            : preference.data === "playerColor"
+              ? { kind: "choose-color", color: settingsAfter.playerColor }
+              : preference.data === "gameMode"
+                ? { kind: "choose-opponent", gameMode: "computer" }
+                : null;
+        if (setupCommand)
+          return json({
+            status: "completed",
+            message: `${describePreference(preference.data, settingsAfter)}. ${bridge.setupCommand(setupCommand)}`,
+          });
+      }
       bridge.updateSettings(changes.data);
       const resets = preference.data === "playerColor" || preference.data === "gameMode";
       return json({
         status: "completed",
-        message: `${describePreference(preference.data, { ...bridge.settings, ...changes.data })}.${resets ? " A new chess game starts with this preference." : ""}`,
+        message: `${describePreference(preference.data, settingsAfter)}.${resets ? " A new chess game starts with this preference." : ""}`,
       });
     }
 
@@ -435,16 +462,13 @@ export function createChessToolExecutor(getBridge: () => ChessToolBridge) {
       const action = fields.get("action");
       cancelRequests();
       if (action === "start_game") {
-        if (bridge.view !== "chess-setup" || !bridge.startDefaultGame)
+        if (bridge.view !== "chess-setup" || !bridge.setupCommand)
           return json({
             status: "error",
             message: "Open new game setup first, or say play chess to resume.",
           });
-        bridge.startDefaultGame();
-        return json({
-          status: "completed",
-          message: "Chess has started. Say your move or ask about the board.",
-        });
+        const message = bridge.setupCommand({ kind: "start" });
+        return json({ status: "completed", message });
       }
       if (action === "new_game") {
         bridge.newGame();
@@ -490,6 +514,41 @@ export function createChessToolExecutor(getBridge: () => ChessToolBridge) {
         status: result?.ok === false ? "error" : "completed",
         message: result?.message ?? message,
       });
+    }
+
+    if (name === "chess_setup") {
+      if (bridge.view !== "chess-setup" || !bridge.setup || !bridge.setupCommand)
+        return json({
+          status: "error",
+          message: "Chess setup is not open. Say new game to open it, or play chess to continue.",
+        });
+      const actionValue = fields.get("action");
+      const action = typeof actionValue === "string" ? actionValue : "";
+      if (action === "read")
+        return json({
+          status: "ok",
+          message: describeChessSetup(bridge.setup),
+          step: bridge.setup.step,
+          ready: bridge.setup.ready,
+          draft: bridge.setup.draft,
+        });
+      const parsed = parseChessSetupCommand(action, fields.get("value"));
+      if (!parsed.ok) return json({ status: "error", message: parsed.message });
+      cancelRequests();
+      const message = bridge.setupCommand(parsed.command);
+      return json({
+        status: parsed.command.kind === "cancel" ? "cancelled" : "completed",
+        message,
+      });
+    }
+
+    if (name === "app_control") {
+      const action = parseAppControl(fields.get("action"));
+      if (!action || !bridge.appControl)
+        return json({ status: "error", message: "That control is not available here." });
+      cancelRequests();
+      const result = bridge.appControl(action);
+      return json({ status: result.ok ? "completed" : "error", message: result.message });
     }
 
     return json({ status: "error", message: `Unknown tool: ${name}` });

@@ -3,12 +3,14 @@ import { AVAILABLE_DESTINATIONS } from "../../voice/navigation";
 import { GAME_CARDS } from "./gameCatalog";
 
 describe("game picker catalog", () => {
-  it("launches chess and Loups-Garous and leaves the third card disabled", () => {
+  it("launches every playable card and leaves none disabled", () => {
     const launches = GAME_CARDS.map((card) => [card.id, card.launch]);
     expect(launches).toEqual([
       ["chess", "chess"],
       ["loups-garous", "loups-garous"],
-      ["tic-tac-toe", null],
+      ["ludo", "ludo"],
+      ["intercept", "intercept"],
+      ["tic-tac-toe", "tic-tac-toe"],
     ]);
   });
 

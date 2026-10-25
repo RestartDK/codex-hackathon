@@ -30,7 +30,9 @@ export default function CompanionDock({
         : active
           ? voice.microphoneMuted
             ? "Microphone muted"
-            : "Listening"
+            : voice.commandsPaused
+              ? "Listening, commands paused"
+              : "Listening"
           : voice.status === "error"
             ? "Retry voice"
             : "Start voice";

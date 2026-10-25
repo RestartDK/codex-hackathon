@@ -46,7 +46,7 @@ const acceptedSession = async () =>
 
 type ProviderTool = {
   name: string;
-  parameters: { properties: { destination: { enum: string[] } } };
+  parameters: { properties: { destination?: { enum: string[] } } };
 };
 
 type ProviderPayload = {
@@ -54,8 +54,15 @@ type ProviderPayload = {
   session: {
     model: string;
     audio: { output: { voice: string } };
+    instructions: string;
     delegation: {
-      responses: { model: string; reasoning: { effort: string }; tools: ProviderTool[] };
+      responses: {
+        model: string;
+        reasoning: { effort: string };
+        tools: ProviderTool[];
+        tool_choice: string;
+        instructions: string;
+      };
     };
   };
 };
@@ -90,14 +97,55 @@ describe("chess voice session endpoint", () => {
     const navigation = payload.session.delegation.responses.tools.find(
       (tool) => tool.name === "navigate_app",
     );
-    expect(navigation?.parameters.properties.destination.enum).toEqual([
+    expect(navigation?.parameters.properties.destination?.enum).toEqual([
       "home",
       "audio",
       "help",
       "chess",
       "loups-garous",
+      "ludo",
+      "intercept",
+      "tic-tac-toe",
     ]);
+    const names = payload.session.delegation.responses.tools.map((tool) => tool.name);
+    expect(names).toEqual(
+      expect.arrayContaining([
+        "navigate_app",
+        "chess_setup",
+        "app_control",
+        "voice_control",
+        "game_control",
+      ]),
+    );
     expect(request.body).not.toContain("sk-test-only-key");
+  });
+
+  it("creates a public lobby session with no game tools or game context", async () => {
+    const recorder = recordingTransport(acceptedSession);
+    expect(
+      (
+        await handleChessVoiceSession(
+          offerRequest("http://evil.example"),
+          settings,
+          recorder.transport,
+          "lobby",
+        )
+      ).status,
+    ).toBe(403);
+    const response = await handleChessVoiceSession(
+      offerRequest(),
+      settings,
+      recorder.transport,
+      "lobby",
+    );
+    expect(response.status).toBe(200);
+    const payload: ProviderPayload = JSON.parse(recorder.requests[0]!.body);
+    expect(payload.session.delegation.responses.tools).toEqual([]);
+    expect(payload.session.delegation.responses.tool_choice).toBe("none");
+    expect(payload.session.instructions).toContain("transcription only");
+    expect(payload.session.instructions).not.toContain("saved chess game");
+    expect(payload.session.delegation.responses.instructions).not.toContain("navigate_app");
+    expect(recorder.requests[0]!.body).not.toContain("sk-test-only-key");
   });
 
   it("reports a provider rejection without echoing the provider key", async () => {

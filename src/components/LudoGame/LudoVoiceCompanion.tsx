@@ -56,9 +56,6 @@ function localIntent(command: string): { name: string; args: object } | null {
   return null;
 }
 
-const GUIDE =
-  "Say roll, then move token one, two, three, or four. Your choice plays immediately. A six brings a token out of base. Safe squares prevent captures. Reach home exactly with all four tokens to win. A six, capture, or finishing gives another roll; three sixes end your turn. The computer plays automatically. Say correct before the next roll to change your choice, board configuration to hear positions, or pause to take your time.";
-
 export default function LudoVoiceCompanion(props: Props) {
   const [, refreshPending] = useState(0);
   const bridgeRef = useRef<LudoToolBridge>(props);
@@ -106,8 +103,11 @@ export default function LudoVoiceCompanion(props: Props) {
       return;
     }
     if (/^(guide|tutorial|how to play|quick guide|help|rules)$/.test(value)) {
-      setResponse(GUIDE);
-      if (voice.status === "connected") voice.announce(GUIDE);
+      const parsed = JSON.parse(await executor.execute("get_game_guide", "{}")) as {
+        message?: string;
+      };
+      setResponse(parsed.message ?? "The guide is unavailable.");
+      if (voice.status === "connected" && parsed.message) voice.announce(parsed.message);
       setTypedCommand("");
       return;
     }
@@ -146,8 +146,10 @@ export default function LudoVoiceCompanion(props: Props) {
           <p className="voice-eyebrow">Conversational game controls</p>
           <h2 id="ludo-voice-heading">Voice companion</h2>
           <p className="voice-status">
-            {voice.status === "connected"
-              ? "Listening"
+            {voice.status === "connected" && voice.commandsPaused
+              ? "Listening, commands paused"
+              : voice.status === "connected"
+                ? "Listening"
               : voice.status === "connecting"
                 ? "Connecting…"
                 : voice.status === "error"
@@ -222,9 +224,12 @@ export default function LudoVoiceCompanion(props: Props) {
         <p>New to Ludo or voice controls?</p>
         <Button
           type="button"
-          onClick={() => {
-            setResponse(GUIDE);
-            if (voice.status === "connected") voice.announce(GUIDE);
+          onClick={async () => {
+            const parsed = JSON.parse(await executor.execute("get_game_guide", "{}")) as {
+              message?: string;
+            };
+            setResponse(parsed.message ?? "The guide is unavailable.");
+            if (voice.status === "connected" && parsed.message) voice.announce(parsed.message);
           }}
         >
           Hear the quick guide

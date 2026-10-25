@@ -10,11 +10,17 @@ const transport = createChessVoiceTransport();
 
 export default defineHandler(async (event) => {
   let gameId: unknown;
+  let mode: unknown;
   try {
-    gameId = ((await event.req.clone().json()) as { gameId?: unknown }).gameId;
+    const body = (await event.req.clone().json()) as { gameId?: unknown; mode?: unknown };
+    gameId = body.gameId;
+    mode = body.mode;
   } catch {
     gameId = undefined;
+    mode = undefined;
   }
+  if (mode === "lobby")
+    return handleChessVoiceSession(event.req, chessVoiceSettings(process.env), transport, "lobby");
   if (
     gameId === "loups-garous" ||
     gameId === "ludo" ||
@@ -24,4 +30,3 @@ export default defineHandler(async (event) => {
     return handleLibraryVoiceSession(event.req);
   return handleChessVoiceSession(event.req, chessVoiceSettings(process.env), transport);
 });
-

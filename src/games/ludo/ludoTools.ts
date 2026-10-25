@@ -2,6 +2,7 @@ import {
   describeToken,
   describeLudoPosition,
   chooseStrategicToken,
+  LUDO_GUIDE,
   legalTokenIds,
   type LudoState,
 } from "./ludo";
@@ -63,10 +64,14 @@ export function createLudoToolExecutor(
       return json({ status: "error", message: "The tool arguments were not valid JSON." });
     }
 
+    if (name === "get_game_guide")
+      return json({ status: "ok", message: LUDO_GUIDE, guide: LUDO_GUIDE });
     if (name === "get_position") {
       return json({
         status: "ok",
-        message: describeLudoPosition(bridge.state),
+        message: `${bridge.awaitingStartChoice ? "A saved game is waiting; resume it or start a new game. " : ""}${bridge.paused ? "The game is paused. " : ""}${describeLudoPosition(bridge.state)}`,
+        paused: bridge.paused,
+        awaitingStartChoice: bridge.awaitingStartChoice,
         activePlayer: bridge.state.activePlayer,
         phase: bridge.state.phase,
         roll: bridge.state.currentRoll,

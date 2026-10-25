@@ -8,6 +8,8 @@ import { useTicTacToeGame } from "../../games/tic-tac-toe/useTicTacToeGame";
 import {
   parseTicTacToePosition,
   POSITION_NAMES,
+  TIC_TAC_TOE_DASHBOARD,
+  TIC_TAC_TOE_INTRODUCTION,
   type TicTacToeDifficulty,
 } from "../../games/tic-tac-toe/ticTacToe";
 import {
@@ -15,13 +17,6 @@ import {
   type TicTacToeToolBridge,
 } from "../../games/tic-tac-toe/ticTacToeTools";
 import "./TicTacToePage.css";
-
-const INTRODUCTION =
-  "Tic-Tac-Toe is a three by three strategy game. You are X and move first. Make three X marks in a row, column, or diagonal before the computer makes three O marks. If all nine squares fill without a line, the round is a draw. Name squares by position, from top left to bottom right, or as square one through nine.";
-const GUIDE =
-  "Say play center, top left, or square nine. You can also ask describe the board, available squares, what is in a square, move history, whose turn, suggest a move, undo, pause, or new round. Direct moves play immediately. A move selected by the companion asks for confirmation.";
-const DASHBOARD =
-  "The dashboard has voice controls and a typed-command fallback, a three by three board, turn and difficulty status, the wins, losses, and draws scoreboard, move history, and undo, pause, new round, and reset match controls.";
 
 function localIntent(
   command: string,
@@ -110,7 +105,7 @@ export default function TicTacToePage({
     if (voice.status === "connected" && previousVoiceStatus.current !== "connected") {
       const welcome = game.awaitingStartChoice
         ? "Welcome back to Tic-Tac-Toe. Resume your saved round or start a new round?"
-        : `Welcome to Tic-Tac-Toe. ${INTRODUCTION} Say help for the controls.`;
+        : `Welcome to Tic-Tac-Toe. ${TIC_TAC_TOE_INTRODUCTION} Say help for the controls.`;
       setResponse(welcome);
       voice.announce(welcome);
     }
@@ -153,18 +148,15 @@ export default function TicTacToePage({
         normalized,
       )
     ) {
-      setResponse(INTRODUCTION);
-      if (voice.status === "connected") voice.announce(INTRODUCTION);
+      await execute("get_tic_tac_toe_introduction", {}, true);
       return;
     }
     if (/^(guide|tutorial|how to play|help)$/.test(normalized)) {
-      setResponse(GUIDE);
-      if (voice.status === "connected") voice.announce(GUIDE);
+      await execute("get_tic_tac_toe_guide", {}, true);
       return;
     }
     if (/^(dashboard|describe dashboard|what is on the screen)$/.test(normalized)) {
-      setResponse(DASHBOARD);
-      if (voice.status === "connected") voice.announce(DASHBOARD);
+      await execute("get_tic_tac_toe_dashboard", {}, true);
       return;
     }
     const intent = localIntent(value);
@@ -219,7 +211,7 @@ export default function TicTacToePage({
         >
           <p className="voice-eyebrow">Three in a row</p>
           <h2 id="tic-tac-toe-introduction-heading">Beat the computer using voice alone</h2>
-          <p>{INTRODUCTION}</p>
+          <p>{TIC_TAC_TOE_INTRODUCTION}</p>
         </section>
 
         <Card className="voice-companion" aria-labelledby="tic-tac-toe-voice-heading">
@@ -228,8 +220,10 @@ export default function TicTacToePage({
               <p className="voice-eyebrow">Conversational game controls</p>
               <h2 id="tic-tac-toe-voice-heading">Voice companion</h2>
               <p className="voice-status">
-                {voice.status === "connected"
-                  ? "Listening"
+                {voice.status === "connected" && voice.commandsPaused
+                  ? "Listening, commands paused"
+                  : voice.status === "connected"
+                    ? "Listening"
                   : voice.status === "connecting"
                     ? "Connecting…"
                     : voice.status === "closing"
@@ -267,7 +261,7 @@ export default function TicTacToePage({
             Try: “play center,” “top left,” “describe the board,” “available squares,” or “suggest a
             move.”
           </p>
-          <p className="dashboard-overview">{DASHBOARD}</p>
+          <p className="dashboard-overview">{TIC_TAC_TOE_DASHBOARD}</p>
           {game.awaitingStartChoice && (
             <div className="resume-choice" role="group" aria-label="Saved Tic-Tac-Toe round choice">
               <p>A saved round is loaded. Resume it or start a new round?</p>
@@ -288,20 +282,12 @@ export default function TicTacToePage({
           )}
           <div className="voice-onboarding" role="group" aria-label="Tic-Tac-Toe introduction">
             <p>Need the rules or controls?</p>
-            <Button
-              onClick={() => {
-                setResponse(INTRODUCTION);
-                if (voice.status === "connected") voice.announce(INTRODUCTION);
-              }}
-            >
+            <Button onClick={() => void execute("get_tic_tac_toe_introduction", {}, true)}>
               Hear game introduction
             </Button>
             <Button
               className="secondary-button"
-              onClick={() => {
-                setResponse(GUIDE);
-                if (voice.status === "connected") voice.announce(GUIDE);
-              }}
+              onClick={() => void execute("get_tic_tac_toe_guide", {}, true)}
             >
               Hear the quick guide
             </Button>

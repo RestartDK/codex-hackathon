@@ -1,5 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { AvailableDestination } from "./navigation";
+import {
+  applyVoiceControl,
+  parseVoiceControlAction,
+  parseVoiceControlValue,
+  pausedCommandMessage,
+  recoveryDelay,
+  voiceControlAllowedWhilePaused,
+  voiceControlTool,
+  type VoiceControlAction,
+  type VoiceControlState,
+} from "./voiceControl";
 
 export type VoiceToolExecutor = {
   execute: (name: string, rawArguments: string) => Promise<string>;
@@ -100,6 +111,15 @@ export function useVoiceCompanion(
   const [error, setError] = useState<string | null>(null);
   const [caption, setCaption] = useState("");
   const [microphoneMuted, setMicrophoneMuted] = useState(false);
+  const [commandsPaused, setCommandsPaused] = useState(false);
+  const commandsPausedRef = useRef(false);
+  const microphoneMutedRef = useRef(false);
+  const mountedRef = useRef(true);
+  const userStoppedRef = useRef(false);
+  const recoveryAttempts = useRef(0);
+  const recoveryTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const startRef = useRef<() => Promise<void>>(async () => undefined);
+  const stopRef = useRef<() => Promise<void>>(async () => undefined);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const speechDeadlineRef = useRef(0);
   const speechContextRef = useRef<AudioContext | null>(null);
@@ -116,6 +136,66 @@ export function useVoiceCompanion(
   const disconnectTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const connectionTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const transcriptSource = useRef<"user" | "companion" | null>(null);
+
+  const currentControlState = useCallback(
+    (connected: boolean): VoiceControlState => ({
+      connected,
+      commandsPaused: commandsPausedRef.current,
+      microphoneMuted: microphoneMutedRef.current,
+    }),
+    [],
+  );
+
+  const setMicrophoneEnabled = useCallback((enabled: boolean) => {
+    streamRef.current?.getAudioTracks().forEach((track) => {
+      track.enabled = enabled;
+    });
+  }, []);
+
+  const applyLifecycleControl = useCallback(
+    (action: VoiceControlAction | null) => {
+      if (!action)
+        return {
+          ok: false,
+          message:
+            "Choose pause commands, resume commands, mute microphone, unmute microphone, read state, or end voice.",
+          commandsPaused: commandsPausedRef.current,
+          microphoneMuted: microphoneMutedRef.current,
+        };
+      const result = applyVoiceControl(currentControlState(channelRef.current?.readyState === "open"), action);
+      if (result.effect === "pause") {
+        commandsPausedRef.current = true;
+        setCommandsPaused(true);
+      }
+      if (result.effect === "resume") {
+        commandsPausedRef.current = false;
+        setCommandsPaused(false);
+      }
+      if (result.effect === "mute") {
+        microphoneMutedRef.current = true;
+        setMicrophoneMuted(true);
+        setMicrophoneEnabled(false);
+      }
+      if (result.effect === "unmute") {
+        microphoneMutedRef.current = false;
+        setMicrophoneMuted(false);
+        setMicrophoneEnabled(true);
+      }
+      if (result.effect === "end") {
+        const endingGeneration = generation.current;
+        window.setTimeout(() => {
+          if (generation.current === endingGeneration) void stopRef.current();
+        }, 1_500);
+      }
+      return {
+        ok: true,
+        message: result.message,
+        commandsPaused: result.state.commandsPaused,
+        microphoneMuted: result.state.microphoneMuted,
+      };
+    },
+    [currentControlState, setMicrophoneEnabled],
+  );
 
   const send = useCallback((event: object) => {
     const channel = channelRef.current;
@@ -141,7 +221,7 @@ export function useVoiceCompanion(
     [audioMuted, send],
   );
 
-  const cleanup = useCallback(() => {
+  const cleanup = useCallback((controlPolicy: "reset" | "preserve" = "reset") => {
     generation.current++;
     starting.current = false;
     requestRef.current?.abort();
@@ -162,6 +242,8 @@ export function useVoiceCompanion(
     disconnectTimeout.current = null;
     if (connectionTimeout.current !== null) clearTimeout(connectionTimeout.current);
     connectionTimeout.current = null;
+    if (recoveryTimeout.current !== null) clearTimeout(recoveryTimeout.current);
+    recoveryTimeout.current = null;
     closeResolver.current?.();
     closeResolver.current = null;
     executor.cancelRequests?.();
@@ -171,11 +253,19 @@ export function useVoiceCompanion(
     speechContextRef.current = null;
     speechAnalyserRef.current = null;
     setIsSpeaking(false);
-    setMicrophoneMuted(false);
+    if (controlPolicy === "reset") {
+      setMicrophoneMuted(false);
+      setCommandsPaused(false);
+      microphoneMutedRef.current = false;
+      commandsPausedRef.current = false;
+    }
     setStatus("idle");
   }, [executor]);
 
   const stop = useCallback(async () => {
+    userStoppedRef.current = true;
+    if (recoveryTimeout.current !== null) clearTimeout(recoveryTimeout.current);
+    recoveryTimeout.current = null;
     if (channelRef.current?.readyState !== "open") {
       cleanup();
       return;
@@ -196,6 +286,27 @@ export function useVoiceCompanion(
     cleanup();
   }, [cleanup, send]);
 
+  const scheduleRecovery = useCallback((reason: string) => {
+    if (!mountedRef.current || userStoppedRef.current) return;
+    const delay = recoveryDelay(recoveryAttempts.current);
+    if (delay === null) {
+      setStatus("error");
+      setError(
+        `${reason} Voice could not reconnect automatically. Use the Start voice companion control. Typed commands still work.`,
+      );
+      return;
+    }
+    recoveryAttempts.current += 1;
+    setStatus("connecting");
+    setError(null);
+    if (recoveryTimeout.current !== null) clearTimeout(recoveryTimeout.current);
+    recoveryTimeout.current = window.setTimeout(() => {
+      recoveryTimeout.current = null;
+      if (!mountedRef.current || userStoppedRef.current) return;
+      void startRef.current();
+    }, delay);
+  }, []);
+
   const handleEvent = useCallback(
     async (message: MessageEvent<string>, channel: RTCDataChannel) => {
       if (channelRef.current !== channel) return;
@@ -205,11 +316,16 @@ export function useVoiceCompanion(
         case "started":
           if (connectionTimeout.current !== null) clearTimeout(connectionTimeout.current);
           connectionTimeout.current = null;
+          recoveryAttempts.current = 0;
+          userStoppedRef.current = false;
           setStatus("connected");
           return;
         case "closed":
           if (closeResolver.current) closeResolver.current();
-          else cleanup();
+          else {
+            cleanup("preserve");
+            scheduleRecovery("The voice connection ended.");
+          }
           return;
         case "error":
           setError(
@@ -231,13 +347,28 @@ export function useVoiceCompanion(
           if (handledCalls.current.has(event.callId)) return;
           handledCalls.current.add(event.callId);
           let output: string;
-          try {
-            output = await executor.execute(event.name, event.arguments);
-          } catch {
+          if (event.name === voiceControlTool.name) {
+            const result = applyLifecycleControl(parseVoiceControlAction(event.arguments));
+            output = JSON.stringify({
+              status: result.ok ? "completed" : "error",
+              message: result.message,
+              commandsPaused: result.commandsPaused,
+              microphoneMuted: result.microphoneMuted,
+            });
+          } else if (commandsPausedRef.current && !voiceControlAllowedWhilePaused(event.name)) {
             output = JSON.stringify({
               status: "error",
-              message: "The request could not finish. Ask the player to try again.",
+              message: pausedCommandMessage(currentControlState(true)),
             });
+          } else {
+            try {
+              output = await executor.execute(event.name, event.arguments);
+            } catch {
+              output = JSON.stringify({
+                status: "error",
+                message: "The request could not finish. Ask the player to try again.",
+              });
+            }
           }
           if (!audioMuted) {
             speechDeadlineRef.current = Date.now() + 8_000;
@@ -253,12 +384,21 @@ export function useVoiceCompanion(
         }
       }
     },
-    [audioMuted, cleanup, executor, send],
+    [
+      applyLifecycleControl,
+      audioMuted,
+      cleanup,
+      currentControlState,
+      executor,
+      scheduleRecovery,
+      send,
+    ],
   );
 
   const start = useCallback(async () => {
     if (starting.current || peerRef.current || status === "closing") return;
     starting.current = true;
+    userStoppedRef.current = false;
     const attempt = ++generation.current;
     const request = new AbortController();
     requestRef.current = request;
@@ -273,6 +413,7 @@ export function useVoiceCompanion(
         return;
       }
       streamRef.current = stream;
+      setMicrophoneEnabled(!microphoneMutedRef.current);
       connectionTimeout.current = setTimeout(() => {
         if (generation.current !== attempt) return;
         cleanup();
@@ -317,11 +458,8 @@ export function useVoiceCompanion(
           disconnectTimeout.current = null;
         }
         const fail = () => {
-          cleanup();
-          setStatus("error");
-          setError(
-            "The voice connection ended. Your game is saved. You can reconnect or use typed commands.",
-          );
+          cleanup("preserve");
+          scheduleRecovery("The voice connection ended.");
         };
         if (peer.connectionState === "failed") fail();
         if (peer.connectionState === "disconnected" && disconnectTimeout.current === null)
@@ -372,15 +510,17 @@ export function useVoiceCompanion(
           : "Voice startup failed. Check microphone permission and try again.",
       );
     }
-  }, [audioMuted, cleanup, gameId, handleEvent, status, volume, view]);
+  }, [audioMuted, cleanup, gameId, handleEvent, scheduleRecovery, setMicrophoneEnabled, status, volume, view]);
+
+  stopRef.current = stop;
+  startRef.current = start;
 
   const toggleMicrophone = useCallback(() => {
-    const next = !microphoneMuted;
-    streamRef.current?.getAudioTracks().forEach((track) => {
-      track.enabled = !next;
-    });
+    const next = !microphoneMutedRef.current;
+    microphoneMutedRef.current = next;
     setMicrophoneMuted(next);
-  }, [microphoneMuted]);
+    setMicrophoneEnabled(!next);
+  }, [setMicrophoneEnabled]);
 
   useEffect(() => {
     if (audioRef.current) {
@@ -389,7 +529,16 @@ export function useVoiceCompanion(
     }
   }, [audioMuted, volume]);
 
-  useEffect(() => cleanup, [cleanup]);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      recoveryAttempts.current = 0;
+      if (recoveryTimeout.current !== null) clearTimeout(recoveryTimeout.current);
+      recoveryTimeout.current = null;
+      cleanup();
+    };
+  }, [cleanup]);
 
   useEffect(() => {
     if (audioMuted || status !== "connected") {
@@ -414,10 +563,12 @@ export function useVoiceCompanion(
     error,
     caption,
     microphoneMuted,
+    commandsPaused,
     isSpeaking,
     start,
     stop,
     toggleMicrophone,
     announce,
+    runVoiceControl: (value: unknown) => applyLifecycleControl(parseVoiceControlValue(value)).message,
   };
 }

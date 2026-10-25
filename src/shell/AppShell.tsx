@@ -23,7 +23,16 @@ export default function AppShell() {
   const preferences = useSettings();
   const [experience, setExperience] = useState<Experience>("play-by-voice");
   const [initialDestination, setInitialDestination] = useState<AvailableDestination>("home");
-  const [autoVoice, setAutoVoice] = useState(false);
+  const [autoVoice, setAutoVoice] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return new URLSearchParams(window.location.search).get("voice") === "1";
+  });
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    if (url.searchParams.get("voice") !== "1") return;
+    url.searchParams.delete("voice");
+    window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
+  }, []);
   const navigateLibrary = useCallback((destination: AvailableDestination, startVoice = false) => {
     setAutoVoice(startVoice);
     if (
@@ -36,7 +45,10 @@ export default function AppShell() {
       setExperience("play-by-voice");
     } else setExperience(destination);
   }, []);
-  const playLoupsGarous = useCallback(() => setExperience("loups-garous"), []);
+  const playLoupsGarous = useCallback((voice = false) => {
+    setAutoVoice(voice);
+    setExperience("loups-garous");
+  }, []);
   const playLudo = useCallback((voice = false) => {
     setAutoVoice(voice);
     setExperience("ludo");
@@ -74,6 +86,7 @@ export default function AppShell() {
         onNarrationVolumeChange={changeNarrationVolume}
         onShowGamePicker={showGamePicker}
         onNavigateGame={navigateLibrary}
+        autoVoice={autoVoice}
       />
     );
 

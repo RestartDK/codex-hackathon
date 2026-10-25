@@ -4,6 +4,9 @@ import {
   describeTicTacToeBoard,
   parseTicTacToePosition,
   POSITION_NAMES,
+  TIC_TAC_TOE_DASHBOARD,
+  TIC_TAC_TOE_GUIDE,
+  TIC_TAC_TOE_INTRODUCTION,
   type TicTacToeActionResult,
   type TicTacToeDifficulty,
   type TicTacToeState,
@@ -70,12 +73,21 @@ export function createTicTacToeToolExecutor(
       return json({ status: "error", message: "The tool arguments were not valid JSON." });
     }
 
+    if (name === "get_tic_tac_toe_introduction")
+      return json({ status: "ok", message: TIC_TAC_TOE_INTRODUCTION });
+    if (name === "get_tic_tac_toe_guide")
+      return json({ status: "ok", message: TIC_TAC_TOE_GUIDE });
+    if (name === "get_tic_tac_toe_dashboard")
+      return json({ status: "ok", message: TIC_TAC_TOE_DASHBOARD });
+
     if (name === "get_tic_tac_toe_state") {
       return json({
         status: "ok",
-        message: describeTicTacToeBoard(bridge.state),
+        message: `${bridge.awaitingStartChoice ? "A saved round is waiting; resume it or start a new round. " : ""}${bridge.paused ? "The game is paused. " : ""}${describeTicTacToeBoard(bridge.state)}`,
         turn: bridge.state.turn === "X" ? "human" : "computer",
         gameStatus: bridge.state.status,
+        paused: bridge.paused,
+        awaitingStartChoice: bridge.awaitingStartChoice,
         score: bridge.state.score,
         difficulty: bridge.state.difficulty,
         revision: bridge.state.revision,
