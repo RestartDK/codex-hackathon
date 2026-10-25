@@ -1,17 +1,5 @@
-import { useState } from "react";
 import { Chess } from "chess.js";
-import {
-  Headphones,
-  Lightbulb,
-  History,
-  RotateCw,
-  House,
-  Undo2,
-  Flag,
-  Pause,
-  Play,
-  FlipVertical2,
-} from "lucide-react";
+import { RotateCw, House, Undo2, Flag, Pause, Play, FlipVertical2 } from "lucide-react";
 import Board from "../Board/Board";
 import type { ChessSession } from "../../hooks/useChessGame";
 import type { AppSettings } from "../../types";
@@ -21,12 +9,13 @@ export default function ChessView({
   session,
   settings,
   companion,
+  flipped,
 }: {
   session: ChessSession;
   settings: AppSettings;
   companion: ChessCompanion;
+  flipped: boolean;
 }) {
-  const [flipped, setFlipped] = useState(false);
   const moves = session.game.history({ verbose: true });
   const last = session.reviewMode ? moves[session.reviewIndex] : moves.at(-1);
   const position = session.displayFen ? new Chess(session.displayFen) : session.game;
@@ -36,7 +25,6 @@ export default function ChessView({
         .flat()
         .find((piece) => piece?.type === "k" && piece.color === position.turn())
     : null;
-  const pending = companion.pending?.kind === "move" ? companion.pending : null;
   const controlsDisabled = session.awaitingStartChoice || Boolean(session.gameResult);
   return (
     <section className="chess-page" aria-labelledby="page-heading">
@@ -49,7 +37,7 @@ export default function ChessView({
           aria-label="Start a new game"
           title="Start a new game"
           onClick={() => {
-            void companion.runTool("propose_game_control", { action: "new_game" });
+            void companion.runTool("game_control", { action: "new_game" });
           }}
         >
           <RotateCw size={23} aria-hidden="true" />
@@ -141,7 +129,11 @@ export default function ChessView({
               )}{" "}
               {session.isPaused ? "Resume" : "Pause"}
             </button>
-            <button onClick={() => setFlipped(!flipped)}>
+            <button
+              onClick={() => {
+                void companion.runTool("game_control", { action: "flip_board" });
+              }}
+            >
               <FlipVertical2 size={15} aria-hidden="true" /> Flip
             </button>
             <button
@@ -202,8 +194,7 @@ export default function ChessView({
                         : undefined
                     }
                     onClick={() => {
-                      if (!session.reviewMode) session.enterReviewMode();
-                      session.goToMove(index);
+                      void companion.runTool("review_move", { move: index + 1 });
                     }}
                   >
                     <span>
@@ -223,83 +214,6 @@ export default function ChessView({
                 <span>Try "e2 to e4" with your companion.</span>
               </p>
             )}
-          </section>
-          <section className="surface chess-assistant-panel" aria-labelledby="assistant-heading">
-            <h2 id="assistant-heading">Assistant</h2>
-            <button
-              className="assistant-card"
-              disabled={companion.busy}
-              onClick={() => {
-                void companion.runCommand("describe the board");
-              }}
-            >
-              <span className="assistant-icon">
-                <Headphones size={21} aria-hidden="true" />
-              </span>
-              <span>
-                <strong>Listen to the board</strong>
-                <span>Ask "describe the board" to hear the current state.</span>
-              </span>
-            </button>
-            <button
-              className="assistant-card"
-              disabled={
-                companion.busy || controlsDisabled || session.isPaused || session.isComputerThinking
-              }
-              onClick={() => {
-                void companion.runCommand("hint");
-              }}
-            >
-              <span className="assistant-icon">
-                <Lightbulb size={21} aria-hidden="true" />
-              </span>
-              <span>
-                <strong>Get a suggested move</strong>
-                <span>Say "what should I play next?" for a quick recommendation.</span>
-              </span>
-            </button>
-            <button
-              className="assistant-card"
-              disabled={companion.busy}
-              onClick={() => {
-                void companion.runCommand("history");
-              }}
-            >
-              <span className="assistant-icon">
-                <History size={21} aria-hidden="true" />
-              </span>
-              <span>
-                <strong>Keep the game moving</strong>
-                <span>Use voice to undo, repeat the last move, or start a new game.</span>
-              </span>
-            </button>
-            {pending && (
-              <div className="move-confirmation" role="group" aria-label="Move confirmation">
-                <p>{pending.description}. Confirm?</p>
-                <div>
-                  <button
-                    className="pill-button primary"
-                    disabled={companion.busy}
-                    onClick={() => {
-                      void companion.runCommand("yes");
-                    }}
-                  >
-                    Confirm move
-                  </button>
-                  <button
-                    className="pill-button"
-                    onClick={() => {
-                      void companion.runCommand("cancel");
-                    }}
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            )}
-            <div className="guide-link">
-              <button onClick={companion.guide}>New to chess? Hear the quick guide</button>
-            </div>
           </section>
         </div>
       </div>

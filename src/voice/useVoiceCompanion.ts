@@ -147,7 +147,7 @@ export function useVoiceCompanion(
     connectionTimeout.current = null;
     closeResolver.current?.();
     closeResolver.current = null;
-    executor.invalidatePending();
+    executor.cancelRequests();
     setMicrophoneMuted(false);
     setStatus("idle");
   }, [executor]);

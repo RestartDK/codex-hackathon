@@ -74,18 +74,6 @@ export default function AudioSettings({
             onChange={(event) => preferences.setScreenReaderMode(event.target.checked)}
           />
         </label>
-        <label className="toggle-field">
-          <span>
-            <strong>Confirm voice and typed moves</strong>
-            <span>Read a proposed move back before it is played.</span>
-          </span>
-          <input
-            type="checkbox"
-            role="switch"
-            checked={settings.confirmMoves}
-            onChange={(event) => preferences.setConfirmMoves(event.target.checked)}
-          />
-        </label>
       </div>
       <details className="chess-preferences">
         <summary>Chess preferences</summary>

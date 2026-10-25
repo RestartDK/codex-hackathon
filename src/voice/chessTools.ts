@@ -1,4 +1,6 @@
 import type { Chess, Color, Move, PieceSymbol, Square } from "chess.js";
+import { appSettingsSchema, describePreference, type AppSettings } from "../lib/preferences";
+import { moveArgumentsSchema, squareSchema } from "./chessActions";
 import { parseDestination, PLAYABLE_GAMES_LABEL, type AvailableDestination } from "./navigation";
 
 const pieceNames: Record<PieceSymbol, string> = {
@@ -33,7 +35,13 @@ export interface ChessToolBridge {
   awaitingStartChoice?: boolean;
   isTerminated?: boolean;
   isPaused?: boolean;
-  confirmMoves?: boolean;
+  settings: AppSettings;
+  updateSettings: (changes: Partial<AppSettings>) => void;
+  review: { game: Chess; move: number } | null;
+  reviewMove: (move: number) => { ok: boolean; message: string };
+  returnToLive: () => void;
+  flipBoard: () => void;
+  retryEngine: () => void;
   makeMove: (
     from: Square,
     to: Square,
@@ -52,14 +60,6 @@ export interface ChessToolBridge {
   undoMove: () => void | { ok: boolean; message: string };
   resign: () => void | { ok: boolean; message: string };
 }
-
-type PendingAction = {
-  id: string;
-  fen: string;
-  kind: "move" | "game-control" | "navigation";
-  description: string;
-  execute: () => { ok: boolean; message: string };
-};
 
 export type ChessToolExecutor = ReturnType<typeof createChessToolExecutor>;
 
@@ -80,23 +80,16 @@ function json(value: unknown): string {
   return JSON.stringify(value);
 }
 
-export function createChessToolExecutor(
-  getBridge: () => ChessToolBridge,
-  onPendingChange: () => void = () => undefined,
-) {
-  let pending: PendingAction | null = null;
-  let nextId = 1;
+export function createChessToolExecutor(getBridge: () => ChessToolBridge) {
   let revision = 0;
-
-  const invalidatePending = () => {
+  const cancelRequests = () => {
     revision++;
-    pending = null;
-    onPendingChange();
   };
+  const readGame = () => getBridge().review?.game ?? getBridge().game;
 
   function currentPieces(color: Color, piece?: PieceSymbol) {
-    const found: Array<{ square: string; piece: string }> = [];
-    for (const rank of getBridge().game.board()) {
+    const found: Array<{ square: Square; piece: string }> = [];
+    for (const rank of readGame().board()) {
       for (const entry of rank) {
         if (entry && entry.color === color && (!piece || entry.type === piece)) {
           found.push({ square: entry.square, piece: pieceNames[entry.type] });
@@ -104,24 +97,6 @@ export function createChessToolExecutor(
       }
     }
     return found;
-  }
-
-  function propose(
-    description: string,
-    execute: PendingAction["execute"],
-    kind: PendingAction["kind"] = "move",
-  ) {
-    const bridge = getBridge();
-    revision++;
-    pending = {
-      id: `action-${nextId++}`,
-      fen: bridge.game.fen(),
-      kind,
-      description,
-      execute,
-    };
-    onPendingChange();
-    return json({ status: "confirmation_required", actionId: pending.id, description });
   }
 
   async function execute(name: string, rawArguments: string): Promise<string> {
@@ -151,7 +126,7 @@ export function createChessToolExecutor(
           message: `${PLAYABLE_GAMES_LABEL} are ready to play. Tic-Tac-Toe is coming soon.`,
         });
       }
-      invalidatePending();
+      cancelRequests();
       if (
         (destination === "home" || destination === "loups-garous") &&
         bridge.view !== "home" &&
@@ -159,29 +134,59 @@ export function createChessToolExecutor(
         !bridge.awaitingStartChoice &&
         !bridge.isPaused &&
         !bridge.isTerminated
-      ) {
-        return propose(
-          "Leave the game? Your current position will be saved, so you can resume it later",
-          () => {
-            if (!bridge.isTerminated) getBridge().pauseGame?.();
-            return { ok: true, message: getBridge().navigate(destination) };
-          },
-          "navigation",
-        );
-      }
+      )
+        bridge.pauseGame?.();
       return json({ status: "completed", message: bridge.navigate(destination) });
     }
 
+    if (name === "get_preferences") return json({ status: "ok", preferences: bridge.settings });
+
+    if (name === "set_preference") {
+      const preference = appSettingsSchema.keyof().safeParse(fields.get("preference"));
+      if (!preference.success) return json({ status: "error", message: "Unknown preference." });
+      if (!fields.has("value"))
+        return json({ status: "error", message: "A preference value is required." });
+      const changes = appSettingsSchema
+        .partial()
+        .safeParse({ [preference.data]: fields.get("value") });
+      if (!changes.success)
+        return json({
+          status: "error",
+          message: "That value is not available for this preference.",
+        });
+      cancelRequests();
+      bridge.updateSettings(changes.data);
+      const resets = preference.data === "playerColor" || preference.data === "gameMode";
+      return json({
+        status: "completed",
+        message: `${describePreference(preference.data, { ...bridge.settings, ...changes.data })}.${resets ? " A new chess game starts with this preference." : ""}`,
+      });
+    }
+
     if (
-      ["propose_move", "get_hint", "propose_best_move"].includes(name) &&
+      ["make_move", "get_hint", "play_best_move", "review_move"].includes(name) &&
       bridge.view !== "chess"
     ) {
       return json({ status: "error", message: "Open Chess first. Say play chess." });
     }
 
+    if (name === "review_move") {
+      const move = fields.get("move");
+      if (typeof move !== "number" || !Number.isInteger(move) || move < 0)
+        return json({
+          status: "error",
+          message: "Use a move number, or zero for the starting position.",
+        });
+      cancelRequests();
+      const result = bridge.reviewMove(move);
+      return json({ status: result.ok ? "completed" : "error", message: result.message });
+    }
+
     if (name === "get_position") {
-      const game = bridge.game;
-      const latest = game.history().at(-1) ?? "No moves yet";
+      const game = readGame();
+      const latest = bridge.review
+        ? (bridge.history[bridge.review.move - 1] ?? "Starting position")
+        : (game.history().at(-1) ?? "No moves yet");
       const material: Record<Color, Record<string, number>> = {
         w: { pawn: 0, knight: 0, bishop: 0, rook: 0, queen: 0 },
         b: { pawn: 0, knight: 0, bishop: 0, rook: 0, queen: 0 },
@@ -198,15 +203,16 @@ export function createChessToolExecutor(
         inCheck: game.isCheck(),
         gameOver: game.isGameOver(),
         latestMove: latest,
+        reviewMove: bridge.review?.move ?? null,
         material,
       });
     }
 
     if (name === "inspect_square") {
-      const square = String(fields.get("square") ?? "").toLowerCase() as Square;
-      if (!/^[a-h][1-8]$/.test(square))
-        return json({ status: "error", message: "Use a square from a1 to h8." });
-      const piece = bridge.game.get(square);
+      const parsed = squareSchema.safeParse(String(fields.get("square") ?? "").toLowerCase());
+      if (!parsed.success) return json({ status: "error", message: "Use a square from a1 to h8." });
+      const square = parsed.data;
+      const piece = readGame().get(square);
       return json({
         status: "ok",
         square,
@@ -234,17 +240,17 @@ export function createChessToolExecutor(
     }
 
     if (name === "get_legal_moves") {
-      const fromValue =
-        fields.get("from") == null ? null : String(fields.get("from")).toLowerCase();
-      if (fromValue && !/^[a-h][1-8]$/.test(fromValue))
-        return json({ status: "error", message: "Use a square from a1 to h8." });
-      const moves = bridge.game.moves({
-        ...(fromValue ? { square: fromValue as Square } : {}),
+      const parsed = squareSchema
+        .nullable()
+        .safeParse(fields.get("from") == null ? null : String(fields.get("from")).toLowerCase());
+      if (!parsed.success) return json({ status: "error", message: "Use a square from a1 to h8." });
+      const moves = readGame().moves({
+        ...(parsed.data ? { square: parsed.data } : {}),
         verbose: true,
       });
       return json({
         status: "ok",
-        turn: colorName(bridge.game.turn()),
+        turn: colorName(readGame().turn()),
         moves: moves.map((move) => ({ san: move.san, from: move.from, to: move.to })),
       });
     }
@@ -284,7 +290,7 @@ export function createChessToolExecutor(
       const value = String(fields.get("value") ?? "").toLowerCase();
       const pieces = [...currentPieces("w"), ...currentPieces("b")].map((item) => ({
         ...item,
-        color: bridge.game.get(item.square as Square)?.color === "w" ? "White" : "Black",
+        color: readGame().get(item.square)?.color === "w" ? "White" : "Black",
       }));
       let selected = pieces;
       if (scope === "rank") {
@@ -301,7 +307,7 @@ export function createChessToolExecutor(
       return json({ status: "ok", scope, value: value || null, pieces: selected });
     }
 
-    if (name === "propose_move") {
+    if (name === "make_move") {
       if (bridge.awaitingStartChoice)
         return json({ status: "error", message: "Choose Resume or New Game first." });
       if (bridge.isPaused)
@@ -310,14 +316,20 @@ export function createChessToolExecutor(
         return json({ status: "error", message: "The game is already over." });
       if (bridge.game.turn() !== bridge.playerColor)
         return json({ status: "error", message: "It is the computer’s turn." });
-      const to = String(fields.get("to") ?? "").toLowerCase();
-      if (!/^[a-h][1-8]$/.test(to))
-        return json({ status: "error", message: "A destination square is required." });
-      const from = fields.get("from") == null ? null : String(fields.get("from")).toLowerCase();
-      const requestedPiece =
-        fields.get("piece") == null ? null : pieceSymbols[String(fields.get("piece"))];
-      const requestedPromotion =
-        fields.get("promotion") == null ? null : promotionSymbols[String(fields.get("promotion"))];
+      const parsed = moveArgumentsSchema.safeParse({
+        from: fields.get("from") ?? null,
+        to: fields.get("to"),
+        piece: fields.get("piece") ?? null,
+        promotion: fields.get("promotion") ?? null,
+      });
+      if (!parsed.success)
+        return json({
+          status: "error",
+          message: "Use valid squares and a known piece or promotion.",
+        });
+      const { from, to, piece, promotion } = parsed.data;
+      const requestedPiece = piece === null ? null : pieceSymbols[piece];
+      const requestedPromotion = promotion === null ? null : promotionSymbols[promotion];
       let candidates = bridge.game.moves({ verbose: true }).filter((move) => move.to === to);
       if (from) candidates = candidates.filter((move) => move.from === from);
       if (requestedPiece) candidates = candidates.filter((move) => move.piece === requestedPiece);
@@ -345,21 +357,13 @@ export function createChessToolExecutor(
           message: `More than one piece can move to ${to}.`,
         });
       const move = candidates[0];
-      const description = describeMove(move);
-      if (bridge.confirmMoves === false) {
-        const result = bridge.makeMove(
-          move.from,
-          move.to,
-          move.promotion as "q" | "r" | "b" | "n" | undefined,
-        );
-        return json({ status: result.ok ? "completed" : "error", message: result.message });
-      }
-      return propose(description, () =>
-        bridge.makeMove(move.from, move.to, move.promotion as "q" | "r" | "b" | "n" | undefined),
-      );
+      cancelRequests();
+      bridge.returnToLive();
+      const result = bridge.makeMove(move.from, move.to, requestedPromotion ?? undefined);
+      return json({ status: result.ok ? "completed" : "error", message: result.message });
     }
 
-    if (name === "get_hint" || name === "propose_best_move") {
+    if (name === "get_hint" || name === "play_best_move") {
       if (bridge.awaitingStartChoice)
         return json({ status: "error", message: "Choose Resume or New Game first." });
       if (bridge.isPaused)
@@ -372,9 +376,19 @@ export function createChessToolExecutor(
       if (bridge.game.turn() !== bridge.playerColor)
         return json({ status: "error", message: "Wait for the computer to finish its turn." });
       if (!bridge.getHint) return json({ status: "error", message: "Hints are not available." });
-      const requestRevision = revision;
+      const wasReviewing = bridge.review !== null;
+      bridge.returnToLive();
+      const requestRevision = ++revision;
+      const requestFen = bridge.game.fen();
       const hint = await bridge.getHint();
-      if (revision !== requestRevision)
+      if (
+        revision !== requestRevision ||
+        getBridge().game.fen() !== requestFen ||
+        getBridge().isPaused ||
+        getBridge().isTerminated ||
+        getBridge().review !== null ||
+        getBridge().view !== "chess"
+      )
         return json({
           status: "stale",
           message: "That request was cancelled or replaced before the hint was ready.",
@@ -393,100 +407,65 @@ export function createChessToolExecutor(
           status: "stale",
           message: "The position changed, so the hint was discarded.",
         });
-      const description = describeMove(move);
+      const description = `${wasReviewing ? "Back at the live board. " : ""}${describeMove(move)}`;
       if (name === "get_hint") return json({ status: "ok", move: hint.san, description });
-      return propose(description, () =>
-        bridge.makeMove(move.from, move.to, move.promotion as "q" | "r" | "b" | "n" | undefined),
-      );
-    }
-
-    if (name === "confirm_action") {
-      if (!pending)
-        return json({
-          status: "nothing_pending",
-          message: "There is no action waiting for confirmation.",
-        });
-      if (
-        pending.kind === "move" &&
-        (bridge.awaitingStartChoice || bridge.isPaused || bridge.isTerminated)
-      ) {
-        const message = bridge.awaitingStartChoice
-          ? "Choose Resume or New Game first."
-          : bridge.isPaused
-            ? "The game is paused. Resume it before moving."
-            : "The game is already over.";
-        if (bridge.isTerminated) invalidatePending();
-        return json({ status: "error", message });
-      }
-      if (pending.kind !== "navigation" && pending.fen !== bridge.game.fen()) {
-        invalidatePending();
-        return json({
-          status: "stale",
-          message: "The position changed, so that action was cancelled.",
-        });
-      }
-      const action = pending;
-      invalidatePending();
-      const result = action.execute();
+      const result = getBridge().makeMove(hint.from, hint.to, hint.promotion);
       return json({ status: result.ok ? "completed" : "error", message: result.message });
     }
 
     if (name === "cancel_action") {
-      const hadPending = Boolean(pending);
-      invalidatePending();
-      return json({ status: hadPending ? "cancelled" : "nothing_pending" });
+      cancelRequests();
+      return json({ status: "cancelled", message: "Cancelled the current request." });
     }
 
-    if (name === "propose_game_control") {
-      const action = String(fields.get("action") ?? "");
-      if (action === "resume") {
-        if (!bridge.resumeGame)
-          return json({ status: "error", message: "There is no game to resume." });
-        const result = bridge.resumeGame();
-        return json({
-          status: result?.ok === false ? "error" : "completed",
-          message: result?.message ?? "The game is resumed. Would you like the quick guide?",
-        });
+    if (name === "game_control") {
+      const action = fields.get("action");
+      cancelRequests();
+      if (action === "new_game") {
+        bridge.newGame();
+        return json({ status: "completed", message: "A new game has started." });
       }
-      if (action === "pause") {
-        if (!bridge.pauseGame) return json({ status: "error", message: "Pause is not available." });
-        const result = bridge.pauseGame();
-        return json({
-          status: result?.ok === false ? "error" : "completed",
-          message: result?.message ?? "The game is paused.",
-        });
+      if (action === "return_live") {
+        bridge.returnToLive();
+        return json({ status: "completed", message: "Back at the live board." });
       }
-      if (action === "new_game")
-        return propose(
-          "Start a new game and clear the current position",
-          () => {
-            bridge.newGame();
-            return { ok: true, message: "A new game has started. Would you like the quick guide?" };
-          },
-          "game-control",
-        );
-      if (action === "undo")
-        return propose(
-          "Undo your latest turn",
-          () => bridge.undoMove() ?? { ok: true, message: "Your latest turn was undone." },
-          "game-control",
-        );
-      if (action === "resign")
-        return propose(
-          "Resign the current game",
-          () => bridge.resign() ?? { ok: true, message: "You resigned the game." },
-          "game-control",
-        );
-      return json({ status: "error", message: "Unknown game control." });
+      if (action === "flip_board") {
+        bridge.flipBoard();
+        return json({ status: "completed", message: "The board is flipped." });
+      }
+      if (action === "retry_engine") {
+        bridge.retryEngine();
+        return json({ status: "completed", message: "Restarting the local chess engine." });
+      }
+      const control =
+        action === "resume"
+          ? bridge.resumeGame
+          : action === "pause"
+            ? bridge.pauseGame
+            : action === "undo"
+              ? bridge.undoMove
+              : action === "resign"
+                ? bridge.resign
+                : null;
+      if (!control)
+        return json({ status: "error", message: "That game control is not available." });
+      const result = control();
+      const message =
+        action === "resume"
+          ? "The game is resumed."
+          : action === "pause"
+            ? "The game is paused."
+            : action === "undo"
+              ? "Your latest turn was undone."
+              : "You resigned the game.";
+      return json({
+        status: result?.ok === false ? "error" : "completed",
+        message: result?.message ?? message,
+      });
     }
 
     return json({ status: "error", message: `Unknown tool: ${name}` });
   }
 
-  return {
-    execute,
-    invalidatePending,
-    getPending: () =>
-      pending && { id: pending.id, kind: pending.kind, description: pending.description },
-  };
+  return { execute, cancelRequests };
 }
