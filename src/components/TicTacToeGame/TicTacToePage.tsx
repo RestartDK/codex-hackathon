@@ -88,6 +88,7 @@ export default function TicTacToePage({
   const [typedCommand, setTypedCommand] = useState("");
   const [response, setResponse] = useState("Ready. You are X. Choose any square.");
   const [focusedCell, setFocusedCell] = useState(0);
+  const [panel, setPanel] = useState<"audio" | "help" | "details" | null>(null);
   const bridgeRef = useRef<TicTacToeToolBridge>(game);
   bridgeRef.current = game;
   const executorRef = useRef<ReturnType<typeof createTicTacToeToolExecutor> | null>(null);
@@ -201,28 +202,74 @@ export default function TicTacToePage({
     game.state.turn !== "X";
 
   return (
-    <div className="app tic-tac-toe-app">
+    <div
+      className={`app tic-tac-toe-app${game.state.status !== "playing" ? " is-finished" : ""}`}
+    >
       <a href="#tic-tac-toe-main" className="skip-link">
         Skip to game
       </a>
-      <header className="app-header">
-        <button className="library-link" onClick={onExit}>
-          Game library
-        </button>
-        <h1>Voice Tic-Tac-Toe</h1>
-        <span className="game-badge">You are X</span>
+      <header className="figma-game-header">
+        <div className="figma-game-brand">
+          <strong>Playora</strong>
+          <img src="/assets/figma/nav-separator.png" alt="" />
+          <span>Tic-Tac-Toe</span>
+        </div>
+        <nav aria-label="Tic-Tac-Toe options">
+          <button
+            type="button"
+            aria-expanded={panel === "audio"}
+            onClick={() => setPanel((current) => (current === "audio" ? null : "audio"))}
+          >
+            Audio Settings
+          </button>
+          <button
+            type="button"
+            aria-expanded={panel === "details"}
+            onClick={() => setPanel((current) => (current === "details" ? null : "details"))}
+          >
+            Game details
+          </button>
+          <button
+            type="button"
+            aria-expanded={panel === "help"}
+            onClick={() => setPanel((current) => (current === "help" ? null : "help"))}
+          >
+            Help
+          </button>
+        </nav>
       </header>
       <main id="tic-tac-toe-main" className="tic-tac-toe-main">
+        <div className="figma-side-actions" aria-label="Game actions">
+          <button type="button" onClick={onExit} aria-label="Return to game library">
+            <img src="/artwork/loups-garous/home.svg" alt="" />
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              const result = game.newRound();
+              setResponse(result.message);
+            }}
+            aria-label="Start a new round"
+          >
+            <img src="/assets/figma/restart.png" alt="" />
+          </button>
+        </div>
+
         <section
-          className="tic-tac-toe-introduction"
+          className="tic-tac-toe-introduction figma-option-panel"
           aria-labelledby="tic-tac-toe-introduction-heading"
+          hidden={panel !== "help"}
         >
           <p className="voice-eyebrow">Three in a row</p>
           <h2 id="tic-tac-toe-introduction-heading">Beat the computer using voice alone</h2>
           <p>{INTRODUCTION}</p>
         </section>
 
-        <Card className="voice-companion" aria-labelledby="tic-tac-toe-voice-heading">
+        <Card
+          className="voice-companion figma-option-panel"
+          aria-labelledby="tic-tac-toe-voice-heading"
+          hidden={panel !== "audio"}
+        >
           <div className="voice-heading-row">
             <div>
               <p className="voice-eyebrow">Conversational game controls</p>
@@ -316,40 +363,6 @@ export default function TicTacToePage({
               <strong>Caption:</strong> {voice.caption}
             </p>
           )}
-          <form
-            className="typed-command"
-            onSubmit={(event) => {
-              event.preventDefault();
-              void runTypedCommand();
-            }}
-          >
-            <label htmlFor="tic-tac-toe-command">Typed command fallback</label>
-            <div>
-              <input
-                id="tic-tac-toe-command"
-                value={typedCommand}
-                onChange={(event) => setTypedCommand(event.target.value)}
-                placeholder="play center"
-              />
-              <Button type="submit">Run command</Button>
-            </div>
-          </form>
-          {pending && (
-            <div
-              className="pending-action"
-              role="group"
-              aria-label="Tic-Tac-Toe action confirmation"
-            >
-              <p>{pending.description}. Confirm?</p>
-              <Button onClick={() => void execute("confirm_tic_tac_toe_action")}>Confirm</Button>
-              <Button
-                className="secondary-button"
-                onClick={() => void execute("cancel_tic_tac_toe_action", {}, true)}
-              >
-                Cancel
-              </Button>
-            </div>
-          )}
           <label className="tic-tac-toe-screen-reader">
             <input
               type="checkbox"
@@ -358,14 +371,29 @@ export default function TicTacToePage({
             />{" "}
             Screen-reader narration
           </label>
-          <p
-            className="sr-announcement"
-            aria-live={settings.screenReaderMode ? "polite" : "off"}
-            aria-atomic="true"
-          >
-            <Volume2 aria-hidden="true" size={18} /> {response}
-          </p>
         </Card>
+
+        {game.awaitingStartChoice && panel !== "audio" && (
+          <section className="figma-resume-dialog" aria-label="Saved Tic-Tac-Toe round choice">
+            <h2>Continue your game?</h2>
+            <p>A saved round is ready.</p>
+            <div>
+              <Button
+                onClick={() =>
+                  void execute("propose_tic_tac_toe_control", { action: "resume" }, true)
+                }
+              >
+                Resume saved round
+              </Button>
+              <Button
+                className="secondary-button"
+                onClick={() => void execute("propose_tic_tac_toe_control", { action: "new_round" })}
+              >
+                New round
+              </Button>
+            </div>
+          </section>
+        )}
 
         <div className="tic-tac-toe-layout">
           <section className="tic-tac-toe-board-panel" aria-labelledby="tic-tac-toe-board-heading">
@@ -412,7 +440,16 @@ export default function TicTacToePage({
                       }
                     }}
                   >
-                    <span aria-hidden="true">{mark ?? index + 1}</span>
+                    <span aria-hidden="true" className="tic-tac-toe-mark">
+                      {mark ? (
+                        <img
+                          src={mark === "X" ? "/assets/figma/mark-x.png" : "/assets/figma/mark-o.png"}
+                          alt=""
+                        />
+                      ) : (
+                        index + 1
+                      )}
+                    </span>
                     <span className="tic-tac-toe-cell-name" aria-hidden="true">
                       {POSITION_NAMES[index]}
                     </span>
@@ -426,7 +463,11 @@ export default function TicTacToePage({
             </p>
           </section>
 
-          <aside className="tic-tac-toe-sidebar" aria-label="Round information and controls">
+          <aside
+            className="tic-tac-toe-sidebar figma-option-panel"
+            aria-label="Round information and controls"
+            hidden={panel !== "details"}
+          >
             <Card>
               <h2>Scoreboard</h2>
               <dl className="tic-tac-toe-score">
@@ -514,6 +555,48 @@ export default function TicTacToePage({
           </aside>
         </div>
 
+        <form
+          className="typed-command figma-command-bar"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void runTypedCommand();
+          }}
+        >
+          <label htmlFor="tic-tac-toe-command">Typed command</label>
+          <div>
+            <input
+              id="tic-tac-toe-command"
+              value={typedCommand}
+              onChange={(event) => setTypedCommand(event.target.value)}
+              placeholder="play center"
+            />
+            <Button type="submit">Run command</Button>
+          </div>
+        </form>
+        <p
+          className="sr-announcement figma-response"
+          aria-live={settings.screenReaderMode ? "polite" : "off"}
+          aria-atomic="true"
+        >
+          <Volume2 aria-hidden="true" size={18} /> {response}
+        </p>
+        {pending && (
+          <div
+            className="pending-action figma-pending-action"
+            role="group"
+            aria-label="Tic-Tac-Toe action confirmation"
+          >
+            <p>{pending.description}. Confirm?</p>
+            <Button onClick={() => void execute("confirm_tic_tac_toe_action")}>Confirm</Button>
+            <Button
+              className="secondary-button"
+              onClick={() => void execute("cancel_tic_tac_toe_action", {}, true)}
+            >
+              Cancel
+            </Button>
+          </div>
+        )}
+
         {game.state.status !== "playing" && (
           <section
             className="tic-tac-toe-result"
@@ -529,16 +612,27 @@ export default function TicTacToePage({
                   : "Computer wins"}
             </h2>
             <p>{game.status}</p>
-            <Button
-              onClick={() => {
-                const result = game.newRound();
-                setResponse(result.message);
-              }}
-            >
-              Play another round
-            </Button>
           </section>
         )}
+
+        <button
+          type="button"
+          className={`figma-voice-orb${voice.status === "connected" ? " is-connected" : ""}`}
+          onClick={() => {
+            if (voice.status === "connected") voice.toggleMicrophone();
+            else void voice.start();
+          }}
+          disabled={voice.status === "connecting" || voice.status === "closing"}
+          aria-label={
+            voice.status === "connected"
+              ? voice.microphoneMuted
+                ? "Unmute voice companion"
+                : "Mute voice companion"
+              : "Start voice companion"
+          }
+        >
+          <img src="/assets/figma/ttt-companion.png" alt="" />
+        </button>
       </main>
     </div>
   );

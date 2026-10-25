@@ -10,6 +10,7 @@ import { useInterceptGame } from "../../games/intercept/useInterceptGame";
 import { useLibraryVoice } from "../../voice/useLibraryVoice";
 import { Button } from "../ui/Button";
 import { Card } from "../ui/Card";
+import "./InterceptPage.css";
 
 const DASHBOARD =
   "The dashboard has voice controls, typed commands, the current story passage, numbered choices, a transcript, repeat, recap, undo, pause, and new story controls.";
@@ -47,6 +48,7 @@ export default function InterceptPage({
   const executor = executorRef.current;
   const { voice, runGlobalCommand } = useLibraryVoice(executor, "intercept");
   const [typedCommand, setTypedCommand] = useState("");
+  const [panel, setPanel] = useState<"audio" | "help" | null>(null);
   const [response, setResponse] = useState(
     "Ready. Start the voice companion or choose with the controls below.",
   );
@@ -145,23 +147,49 @@ export default function InterceptPage({
       <a href="#intercept-main" className="skip-link">
         Skip to story
       </a>
-      <header className="app-header">
-        <button className="library-link" onClick={onExit}>
-          Game library
-        </button>
-        <h1>The Intercept</h1>
-        <span className="game-badge">Interactive mystery</span>
+      <header className="figma-game-header">
+        <div className="figma-game-brand">
+          <strong>Playora</strong>
+          <img src="/assets/figma/nav-separator.png" alt="" />
+          <span>Intercept</span>
+        </div>
+        <nav aria-label="Intercept options">
+          <button
+            type="button"
+            aria-expanded={panel === "audio"}
+            onClick={() => setPanel((current) => (current === "audio" ? null : "audio"))}
+          >
+            Audio Settings
+          </button>
+          <button
+            type="button"
+            aria-expanded={panel === "help"}
+            onClick={() => setPanel((current) => (current === "help" ? null : "help"))}
+          >
+            Help
+          </button>
+        </nav>
       </header>
       <main id="intercept-main" className="intercept-main">
+        <div className="figma-side-actions" aria-label="Game actions">
+          <button type="button" onClick={onExit} aria-label="Return to game library">
+            <img src="/artwork/loups-garous/home.svg" alt="" />
+          </button>
+        </div>
         <section
-          className="intercept-introduction"
+          className="intercept-introduction figma-option-panel"
           aria-labelledby="intercept-introduction-heading"
+          hidden={panel !== "help"}
         >
           <p className="voice-eyebrow">Your mission</p>
           <h2 id="intercept-introduction-heading">A mystery where your choices shape the ending</h2>
           <p>{INTERCEPT_INTRODUCTION}</p>
         </section>
-        <Card className="voice-companion" aria-labelledby="intercept-voice-heading">
+        <Card
+          className="voice-companion figma-option-panel"
+          aria-labelledby="intercept-voice-heading"
+          hidden={panel !== "audio"}
+        >
           <div className="voice-heading-row">
             <div>
               <p className="voice-eyebrow">Conversational story controls</p>
@@ -254,36 +282,6 @@ export default function InterceptPage({
               <strong>Caption:</strong> {voice.caption}
             </p>
           )}
-          <form
-            className="typed-command"
-            onSubmit={(event) => {
-              event.preventDefault();
-              void runTypedCommand();
-            }}
-          >
-            <label htmlFor="intercept-command">Typed command fallback</label>
-            <div>
-              <input
-                id="intercept-command"
-                value={typedCommand}
-                onChange={(event) => setTypedCommand(event.target.value)}
-                placeholder="choice 1"
-              />
-              <Button type="submit">Run command</Button>
-            </div>
-          </form>
-          {pending && (
-            <div className="pending-action" role="group" aria-label="Story action confirmation">
-              <p>{pending.description}. Confirm?</p>
-              <Button onClick={() => void execute("confirm_action")}>Confirm</Button>
-              <Button
-                className="secondary-button"
-                onClick={() => void execute("cancel_action", {}, false)}
-              >
-                Cancel
-              </Button>
-            </div>
-          )}
           <label className="intercept-screen-reader">
             <input
               type="checkbox"
@@ -292,14 +290,67 @@ export default function InterceptPage({
             />{" "}
             Screen-reader narration
           </label>
-          <p
-            className="sr-announcement"
-            aria-live={settings.screenReaderMode ? "polite" : "off"}
-            aria-atomic="true"
-          >
-            <Volume2 aria-hidden="true" size={18} /> {response}
-          </p>
         </Card>
+
+        {game.awaitingStartChoice && panel !== "audio" && (
+          <section className="figma-resume-dialog" aria-label="Saved Intercept story choice">
+            <h2>Continue your story?</h2>
+            <p>A saved mission is ready.</p>
+            <div>
+              <Button onClick={() => void execute("propose_story_control", { action: "resume" })}>
+                Resume saved story
+              </Button>
+              <Button
+                className="secondary-button"
+                onClick={() => void execute("propose_story_control", { action: "new_story" }, false)}
+              >
+                New story
+              </Button>
+            </div>
+          </section>
+        )}
+
+        <form
+          className="typed-command figma-command-bar"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void runTypedCommand();
+          }}
+        >
+          <label htmlFor="intercept-command">Typed command</label>
+          <div>
+            <input
+              id="intercept-command"
+              value={typedCommand}
+              onChange={(event) => setTypedCommand(event.target.value)}
+              placeholder="choice 1"
+            />
+            <Button type="submit">Run command</Button>
+          </div>
+        </form>
+        <p
+          className="sr-announcement figma-response"
+          aria-live={settings.screenReaderMode ? "polite" : "off"}
+          aria-atomic="true"
+        >
+          <Volume2 aria-hidden="true" size={18} /> {response}
+        </p>
+        {pending && (
+          <div
+            className="pending-action figma-pending-action"
+            role="group"
+            aria-label="Story action confirmation"
+          >
+            <p>{pending.description}. Confirm?</p>
+            <Button onClick={() => void execute("confirm_action")}>Confirm</Button>
+            <Button
+              className="secondary-button"
+              onClick={() => void execute("cancel_action", {}, false)}
+            >
+              Cancel
+            </Button>
+          </div>
+        )}
 
         <section className="intercept-story" aria-labelledby="story-heading">
           <div className="intercept-story-heading">
@@ -399,6 +450,24 @@ export default function InterceptPage({
         <p className="intercept-credit">
           The Intercept story © 2016 inkle Ltd., used under the MIT License.
         </p>
+        <button
+          type="button"
+          className={`figma-voice-orb${voice.status === "connected" ? " is-connected" : ""}`}
+          onClick={() => {
+            if (voice.status === "connected") voice.toggleMicrophone();
+            else void voice.start();
+          }}
+          disabled={voice.status === "connecting" || voice.status === "closing"}
+          aria-label={
+            voice.status === "connected"
+              ? voice.microphoneMuted
+                ? "Unmute voice companion"
+                : "Mute voice companion"
+              : "Start voice companion"
+          }
+        >
+          <img src="/assets/figma/intercept-companion.png" alt="" />
+        </button>
       </main>
     </div>
   );
