@@ -35,9 +35,15 @@ function defaultChessSetup(): ChessSetupSelection {
 export default function PlayByVoiceApp({
   preferences,
   onPlayLoupsGarous,
+  onPlayLudo,
+  onPlayIntercept,
+  onPlayTicTacToe,
 }: {
   preferences: Preferences;
   onPlayLoupsGarous: () => void;
+  onPlayLudo: () => void;
+  onPlayIntercept: () => void;
+  onPlayTicTacToe: () => void;
 }) {
   const { settings } = preferences;
   const session = useChessGame({ settings });
@@ -70,10 +76,19 @@ export default function PlayByVoiceApp({
       case "loups-garous":
         onPlayLoupsGarous();
         return "Loups-Garous is open. Say start the game. Use Games to return to the game picker.";
+      case "ludo":
+        onPlayLudo();
+        return "Ludo is open. Say roll to begin, or ask for the rules or board configuration.";
+      case "intercept":
+        onPlayIntercept();
+        return "The Intercept is open. Listen to the scene, then speak a numbered choice.";
+      case "tic-tac-toe":
+        onPlayTicTacToe();
+        return "Tic-Tac-Toe is open. You are X. Say a square such as center or top left.";
       case "home":
         if (view.kind === "loading") session.cancelStockfishPreparation();
         setView({ kind: "home" });
-        return `You are back at the game picker. ${session.history.length > 0 ? "Your chess position is saved. Say play chess to return." : "Say play chess to begin."} ${PLAYABLE_GAMES_LABEL} are ready to play. Tic-Tac-Toe is coming soon.`;
+        return `You are back at the game picker. ${session.history.length > 0 ? "Your chess position is saved. Say play chess to return." : "Say play chess to begin."} ${PLAYABLE_GAMES_LABEL} are ready to play.`;
       case "audio":
       case "help": {
         const returnTo = view.kind === "audio" || view.kind === "help" ? view.returnTo : view.kind;
@@ -221,7 +236,7 @@ export default function PlayByVoiceApp({
           </button>
           {chessContextVisible && (
             <span className="header-game">
-              <span aria-hidden="true">•</span> Chess
+              <span aria-hidden="true">â€¢</span> Chess
             </span>
           )}
           <nav aria-label="Main navigation">
@@ -365,3 +380,4 @@ export default function PlayByVoiceApp({
     </>
   );
 }
+

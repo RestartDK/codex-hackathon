@@ -203,9 +203,11 @@ export default function GamePicker({ companion }: { companion: ChessCompanion })
         </div>
       </div>
       <p className="picker-hint">
-        Choose a game. Or start voice and say <span>"Play chess"</span> or{" "}
-        <span>"Play Loups-Garous"</span>.
+        Choose a game, or start voice and say its name: Chess, Loups-Garous, Ludo, The Intercept,
+        or Tic-Tac-Toe.
       </p>
     </section>
   );
 }
+
+
