@@ -1,51 +1,104 @@
-import { useLayoutEffect, useRef } from "react";
+import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import type { ChessCompanion } from "../../voice/useChessCompanion";
 import { GAME_CARDS } from "./gameCatalog";
+import { LOOP_CENTER, LOOP_COPIES, normalizeLoopPosition } from "./infiniteCarousel";
 
-const CARD_CYCLES = [0, 1, 2, 3, 4];
-const CENTER_CYCLE = 2;
+type DragState = {
+  pointerId: number;
+  startX: number;
+  startScroll: number;
+  moved: boolean;
+};
 
 export default function GamePicker({ companion }: { companion: ChessCompanion }) {
   const carouselRef = useRef<HTMLDivElement>(null);
-  const cycleRef = useRef<HTMLDivElement>(null);
+  const centerGroupRef = useRef<HTMLDivElement>(null);
+  const cycleWidthRef = useRef(0);
+  const dragRef = useRef<DragState | null>(null);
+  const suppressClickRef = useRef(false);
+  const [dragging, setDragging] = useState(false);
 
-  useLayoutEffect(() => {
+  function launchGame(game: (typeof GAME_CARDS)[number]["launch"]) {
+    if (!game || companion.busy) return;
+    void companion.navigate(game);
+  }
+
+  useEffect(() => {
     const carousel = carouselRef.current;
-    const cycle = cycleRef.current;
-    const nextCycle = cycle?.nextElementSibling;
-    if (!carousel || !cycle || !nextCycle) return;
+    const centerGroup = centerGroupRef.current;
+    if (!carousel || !centerGroup) return;
 
-    let cycleWidth = 0;
-    const measure = () => {
-      const nextWidth = nextCycle.getBoundingClientRect().left - cycle.getBoundingClientRect().left;
-      const offset = cycleWidth ? carousel.scrollLeft / cycleWidth : CENTER_CYCLE;
-      cycleWidth = nextWidth;
-      carousel.scrollLeft = offset * cycleWidth;
-    };
-    const wrap = () => {
+    const positionAtCenter = () => {
+      const styles = getComputedStyle(carousel.querySelector(".game-cards")!);
+      const gap = Number.parseFloat(styles.columnGap) || 0;
+      const cycleWidth = centerGroup.getBoundingClientRect().width + gap;
       if (!cycleWidth) return;
-      const cycles = Math.floor(carousel.scrollLeft / cycleWidth - CENTER_CYCLE + 0.5);
-      if (cycles) carousel.scrollLeft -= cycles * cycleWidth;
+      const previousWidth = cycleWidthRef.current;
+      cycleWidthRef.current = cycleWidth;
+      if (!previousWidth) carousel.scrollLeft = cycleWidth * LOOP_CENTER;
+      else carousel.scrollLeft *= cycleWidth / previousWidth;
     };
+
+    // A vertical mouse wheel browses the cards sideways, as on origin/main (#16).
     const wheel = (event: WheelEvent) => {
       if (event.ctrlKey || Math.abs(event.deltaX) >= Math.abs(event.deltaY)) return;
       event.preventDefault();
       const unit = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? carousel.clientWidth : 1;
-      carousel.scrollLeft += event.deltaY * unit;
-      wrap();
+      carousel.scrollLeft = normalizeLoopPosition(
+        carousel.scrollLeft + event.deltaY * unit,
+        cycleWidthRef.current,
+      );
     };
 
-    measure();
-    const observer = new ResizeObserver(measure);
-    observer.observe(cycle);
-    carousel.addEventListener("scroll", wrap);
+    positionAtCenter();
+    const resize = new ResizeObserver(positionAtCenter);
+    resize.observe(carousel);
+    resize.observe(centerGroup);
     carousel.addEventListener("wheel", wheel, { passive: false });
     return () => {
-      observer.disconnect();
-      carousel.removeEventListener("scroll", wrap);
+      resize.disconnect();
       carousel.removeEventListener("wheel", wheel);
     };
   }, []);
+
+  function beginDrag(event: ReactPointerEvent<HTMLDivElement>) {
+    if (event.button !== 0) return;
+    const carousel = event.currentTarget;
+    dragRef.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startScroll: carousel.scrollLeft,
+      moved: false,
+    };
+  }
+
+  function continueDrag(event: ReactPointerEvent<HTMLDivElement>) {
+    const drag = dragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    const delta = event.clientX - drag.startX;
+    if (!drag.moved && Math.abs(delta) > 4) {
+      drag.moved = true;
+      suppressClickRef.current = true;
+      setDragging(true);
+      event.currentTarget.setPointerCapture(event.pointerId);
+    }
+    if (!drag.moved) return;
+    const next = normalizeLoopPosition(drag.startScroll - delta, cycleWidthRef.current);
+    if (next !== drag.startScroll - delta) drag.startScroll += next - (drag.startScroll - delta);
+    event.currentTarget.scrollLeft = next;
+  }
+
+  function endDrag(event: ReactPointerEvent<HTMLDivElement>) {
+    const drag = dragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    dragRef.current = null;
+    setDragging(false);
+    if (event.currentTarget.hasPointerCapture(event.pointerId))
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    window.setTimeout(() => {
+      suppressClickRef.current = false;
+    }, 0);
+  }
 
   return (
     <section className="game-picker" aria-labelledby="page-heading">
@@ -55,63 +108,95 @@ export default function GamePicker({ companion }: { companion: ChessCompanion })
       <div className="game-carousel-frame">
         <div
           ref={carouselRef}
-          className="game-carousel"
+          className={`game-carousel${dragging ? " is-dragging" : ""}`}
           role="region"
-          aria-label="Choose a game. Scroll or use the left and right arrow keys to browse."
           aria-roledescription="carousel"
+          aria-label="Choose a game. Scroll or use the left and right arrow keys to browse."
           tabIndex={0}
           onKeyDown={(event) => {
+            if (event.target !== event.currentTarget) return;
             if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
             if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
-            const cycle = cycleRef.current;
-            const card = cycle?.firstElementChild;
-            if (!cycle || !card) return;
+            const group = centerGroupRef.current;
+            const card = group?.firstElementChild;
+            if (!group || !card) return;
             event.preventDefault();
-            const gap = Number.parseFloat(getComputedStyle(cycle).columnGap);
-            event.currentTarget.scrollLeft +=
-              (card.getBoundingClientRect().width + gap) * (event.key === "ArrowRight" ? 1 : -1);
+            const gap = Number.parseFloat(getComputedStyle(group).columnGap) || 0;
+            const carousel = event.currentTarget;
+            carousel.scrollLeft = normalizeLoopPosition(
+              carousel.scrollLeft +
+                (card.getBoundingClientRect().width + gap) * (event.key === "ArrowRight" ? 1 : -1),
+              cycleWidthRef.current,
+            );
+          }}
+          onPointerDown={beginDrag}
+          onPointerMove={continueDrag}
+          onPointerUp={endDrag}
+          onPointerCancel={endDrag}
+          onScroll={(event) => {
+            if (dragRef.current) return;
+            const carousel = event.currentTarget;
+            const normalized = normalizeLoopPosition(carousel.scrollLeft, cycleWidthRef.current);
+            if (normalized !== carousel.scrollLeft) carousel.scrollLeft = normalized;
+          }}
+          onClickCapture={(event) => {
+            if (!suppressClickRef.current) return;
+            event.preventDefault();
+            event.stopPropagation();
           }}
         >
           <div className="game-cards">
-            {CARD_CYCLES.map((cycle) => (
+            {Array.from({ length: LOOP_COPIES }, (_, copyIndex) => (
               <div
                 className="game-card-cycle"
-                key={cycle}
-                ref={cycle === CENTER_CYCLE ? cycleRef : undefined}
-                aria-hidden={cycle !== CENTER_CYCLE ? true : undefined}
+                key={copyIndex}
+                ref={copyIndex === LOOP_CENTER ? centerGroupRef : undefined}
+                aria-hidden={copyIndex === LOOP_CENTER ? undefined : true}
               >
-                {GAME_CARDS.map((game) => (
-                  <article
-                    className={`game-card game-card-${game.id}`}
-                    key={game.id}
-                    aria-labelledby={`${game.id}-${cycle}-title`}
-                  >
-                    {!game.launch && <span className="coming-soon">Coming soon</span>}
-                    <span className={`game-shape ${game.shape}`} aria-hidden="true" />
-                    <div className="game-card-copy">
-                      <h2 id={`${game.id}-${cycle}-title`}>{game.title}</h2>
-                      <p>{game.description}</p>
-                    </div>
-                    <button
-                      className="start-game"
-                      disabled={!game.launch || companion.busy}
-                      tabIndex={cycle === CENTER_CYCLE ? undefined : -1}
-                      onPointerDown={(event) => {
-                        if (cycle !== CENTER_CYCLE) event.preventDefault();
-                      }}
-                      onClick={() => {
-                        if (game.launch) void companion.navigate(game.launch);
-                      }}
-                      aria-label={
-                        game.launch
-                          ? `Start the game: ${game.title}`
-                          : `${game.title} is coming soon`
-                      }
+                {GAME_CARDS.map((game) => {
+                  const semantic = copyIndex === LOOP_CENTER;
+                  return (
+                    <article
+                      className={`game-card game-card-${game.id}${game.launch ? " is-playable" : ""}`}
+                      key={game.id}
+                      aria-labelledby={semantic ? `${game.id}-title` : undefined}
                     >
-                      {game.launch ? "Start the game" : "Coming soon"}
-                    </button>
-                  </article>
-                ))}
+                      {!game.launch && <span className="coming-soon">Coming soon</span>}
+                      <button
+                        type="button"
+                        className="game-card-control"
+                        disabled={!game.launch || companion.busy}
+                        tabIndex={semantic ? undefined : -1}
+                        onMouseDown={semantic ? undefined : (event) => event.preventDefault()}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          launchGame(game.launch);
+                        }}
+                        aria-label={
+                          game.launch
+                            ? `Start the game: ${game.title}`
+                            : `${game.title} is coming soon`
+                        }
+                      >
+                        <span className={`game-shape ${game.shape}`} aria-hidden="true" />
+                        <span className="game-card-copy">
+                          <span
+                            className="game-card-title"
+                            id={semantic ? `${game.id}-title` : undefined}
+                            role="heading"
+                            aria-level={2}
+                          >
+                            {game.title}
+                          </span>
+                          <span className="game-card-description">{game.description}</span>
+                        </span>
+                        <span className="start-game" aria-hidden="true">
+                          <span>{game.launch ? "Start the game" : "Coming soon"}</span>
+                        </span>
+                      </button>
+                    </article>
+                  );
+                })}
               </div>
             ))}
           </div>

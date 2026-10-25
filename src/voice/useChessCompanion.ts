@@ -28,6 +28,9 @@ function welcome(bridge: ChessToolBridge): string {
     return "You are in Audio Settings. You can adjust narrator volume, game sounds, and chess preferences. Say play chess to return to the board, or home for the game picker.";
   if (bridge.view === "help")
     return "You are in Help. Say play chess to begin, or ask me about chess rules and voice commands.";
+  if (bridge.view === "loading") return "Chess is loading. You can return to the game picker.";
+  if (bridge.view === "chess-setup")
+    return "Chess setup is open. Choose each preference, or say start with the defaults.";
   if (bridge.awaitingStartChoice)
     return `Welcome back. A saved chess game with ${bridge.history.length} moves is waiting. Say resume or new game.`;
   if (bridge.isTerminated)
@@ -125,7 +128,21 @@ export function useChessCompanion(
     }
   }
 
+  function announce(message: string) {
+    setMessage(message);
+    if (voice.status === "connected") voice.announce(message);
+  }
+
   async function runCommand(command: string) {
+    if (/^start (with )?(the )?defaults?$/i.test(command.trim())) {
+      if (bridgeRef.current.view !== "chess-setup") {
+        announce("Open Chess setup first, then say start with the defaults.");
+        return;
+      }
+      bridgeRef.current.startDefaultGame?.();
+      announce("Starting Chess with the default settings. You play White. White to move.");
+      return;
+    }
     if (/^(tutorial|guide|quick guide|how to play)$/i.test(command.trim())) {
       guide();
       return;
@@ -145,6 +162,7 @@ export function useChessCompanion(
     message,
     busy,
     guide,
+    announce,
     runCommand,
     runTool,
     navigate: (destination: AvailableDestination) => runTool("navigate_app", { destination }),

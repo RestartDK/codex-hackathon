@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-import { ArrowUp, Keyboard, Mic, MicOff, Square, X } from "lucide-react";
+import { ArrowUp, Keyboard, Square, X } from "lucide-react";
 import type { ChessCompanion } from "../../voice/useChessCompanion";
+import LiquidOrb from "./LiquidOrb";
+import { usePresence } from "../../hooks/usePresence";
 
 export default function CompanionDock({
   companion,
@@ -18,6 +20,12 @@ export default function CompanionDock({
   const captionRef = useRef<HTMLParagraphElement>(null);
   const followCaption = useRef(true);
   const voice = companion.voice;
+  const commandPanel = usePresence(typing);
+
+  // Reopening during the closing animation reuses the panel, so focus the input explicitly.
+  useEffect(() => {
+    if (typing) commandRef.current?.focus();
+  }, [typing]);
 
   function closeCommands() {
     setTyping(false);
@@ -66,20 +74,8 @@ export default function CompanionDock({
             else void voice.start();
           }}
         >
-          <img
-            className="companion-orb"
-            src={`/artwork/orb-${green ? "green" : "blue"}.webp`}
-            width={201}
-            height={201}
-            alt=""
-            draggable={false}
-          />
-          <span className="orb-state">
-            {active && voice.microphoneMuted ? (
-              <MicOff size={13} aria-hidden="true" />
-            ) : (
-              <Mic size={13} aria-hidden="true" />
-            )}{" "}
+          <LiquidOrb green={green} />
+          <span className="sr-only" aria-live="polite" aria-atomic="true">
             {label}
           </span>
         </button>
@@ -126,10 +122,11 @@ export default function CompanionDock({
       >
         {voice.caption || companion.message}
       </p>
-      {typing && (
+      {commandPanel.mounted && (
         <form
           id="command-panel"
-          className="command-panel"
+          className={`command-panel${commandPanel.closing ? " is-closing" : ""}`}
+          inert={commandPanel.closing || undefined}
           onKeyDown={(event) => {
             if (event.key === "Escape") {
               event.preventDefault();

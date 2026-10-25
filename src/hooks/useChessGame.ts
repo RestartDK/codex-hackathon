@@ -632,6 +632,19 @@ export function useChessGame({ settings }: UseChessGameOptions) {
     }
   }, [handleNewGame, scheduleComputerMove]);
 
+  const startConfiguredGame = useCallback(
+    (next: Pick<AppSettings, "gameMode" | "difficulty" | "playerColor">) => {
+      settingsRef.current = { ...settingsRef.current, ...next };
+      prevModeRef.current = next.gameMode;
+      prevPlayerColorRef.current = next.playerColor;
+      handleNewGame();
+      if (next.gameMode === "computer" && next.playerColor === "b") {
+        scheduleComputerMove();
+      }
+    },
+    [handleNewGame, scheduleComputerMove],
+  );
+
   const resumeGame = useCallback(() => {
     if (gameResult || gameRef.current.isGameOver())
       return {
@@ -865,17 +878,7 @@ export function useChessGame({ settings }: UseChessGameOptions) {
     }
   }, [game, scheduleComputerMove, settings.gameMode, settings.playerColor]);
 
-  useEffect(() => {
-    const isComputerMode = settings.gameMode === "computer";
-
-    if (isComputerMode && stockfishStatus === "unloaded") {
-      initStockfish();
-    }
-
-    if (!isComputerMode && stockfishStatus !== "unloaded") {
-      terminateStockfish();
-    }
-  }, [settings.gameMode, stockfishStatus]);
+  useEffect(() => terminateStockfish, [terminateStockfish]);
 
   useEffect(() => {
     if (
@@ -896,12 +899,6 @@ export function useChessGame({ settings }: UseChessGameOptions) {
       if (computerMoveTimeoutRef.current) {
         clearTimeout(computerMoveTimeoutRef.current);
       }
-      if (stockfishEngineRef.current) {
-        stockfishEngineRef.current.terminate();
-        stockfishEngineRef.current = null;
-      }
-      analysisEngineRef.current?.terminate();
-      analysisEngineRef.current = null;
     };
   }, []);
 
@@ -924,6 +921,8 @@ export function useChessGame({ settings }: UseChessGameOptions) {
     stockfishError,
     stockfishProgress,
     retryStockfish,
+    prepareStockfish: initStockfish,
+    cancelStockfishPreparation: terminateStockfish,
     moveFeedback,
     selectSquare,
     makeMove,
@@ -931,6 +930,7 @@ export function useChessGame({ settings }: UseChessGameOptions) {
     promote,
     cancelPromotion,
     newGame,
+    startConfiguredGame,
     resumeGame,
     pauseGame,
     exportFen,

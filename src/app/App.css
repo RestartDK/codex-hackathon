@@ -89,6 +89,12 @@
   padding: 0 max(24px, calc((100% - 1088px) / 2));
   overscroll-behavior-x: contain;
   overflow-anchor: none;
+  cursor: grab;
+  touch-action: pan-y;
+  user-select: none;
+}
+.pbv-root .game-carousel.is-dragging {
+  cursor: grabbing;
 }
 .pbv-root .game-carousel:focus-visible {
   outline-offset: -4px;
@@ -101,6 +107,10 @@
   display: flex;
   width: max-content;
   gap: 28px;
+}
+.pbv-root .game-cards {
+  position: relative;
+  isolation: isolate;
 }
 .pbv-root .game-card-cycle {
   flex-shrink: 0;
@@ -122,6 +132,25 @@
   inset: 45% 0 0;
   background: linear-gradient(transparent, #00000028);
   pointer-events: none;
+}
+.pbv-root .game-card-control {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  border-radius: inherit;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+}
+.pbv-root .game-card-control:disabled {
+  opacity: 1;
+}
+.pbv-root .game-card-control:focus-visible {
+  outline-offset: -5px;
 }
 .pbv-root .game-card-chess {
   background-image: url("/artwork/chess-card.webp");
@@ -164,14 +193,16 @@
   bottom: 70px;
   z-index: 1;
 }
-.pbv-root .game-card h2 {
+.pbv-root .game-card-title {
+  display: block;
   font-size: 30px;
   line-height: 36px;
   letter-spacing: -0.65px;
   margin-bottom: 14px;
   font-weight: 600;
 }
-.pbv-root .game-card p {
+.pbv-root .game-card-description {
+  display: block;
   font-size: 16px;
   line-height: 24px;
 }
@@ -189,17 +220,47 @@
   padding: 11px 12px 20px;
   font-size: 14px;
   color: #111;
+  overflow: hidden;
+  isolation: isolate;
   transition:
     transform 160ms var(--ease-out),
-    background-color 160ms ease;
+    color 500ms var(--ease-out),
+    background-color 500ms var(--ease-out);
 }
-.pbv-root .start-game:active:not(:disabled) {
+.pbv-root .start-game::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  width: 16px;
+  height: 16px;
+  left: 50%;
+  top: 0;
+  border-radius: 50%;
+  background: #111;
+  transform: translate(-50%, -50%) scale(0);
+  transition: transform 500ms var(--ease-out);
+}
+.pbv-root .start-game > span {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  text-align: center;
+  line-height: 20px;
+}
+.pbv-root .game-card.is-playable:hover .start-game,
+.pbv-root .game-card-control:focus-visible .start-game {
+  color: #fff;
+}
+.pbv-root .game-card.is-playable:hover .start-game::before,
+.pbv-root .game-card-control:focus-visible .start-game::before {
+  transform: translate(-50%, -50%) scale(14);
+}
+.pbv-root .game-card-control:active:not(:disabled) .start-game {
   transform: translateX(-50%) scale(0.97);
 }
-.pbv-root .start-game:focus-visible {
-  outline-offset: -5px;
-}
-.pbv-root .start-game:disabled {
+.pbv-root .game-card-control:disabled .start-game {
   opacity: 0.9;
   color: #666;
 }
@@ -642,33 +703,37 @@
   border-radius: 48%;
 }
 .pbv-root .companion-orb {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  transition: opacity 320ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+.pbv-root .companion-liquid-orb {
+  display: block;
   width: 201px;
-  max-width: none;
   height: 201px;
   position: absolute;
   left: -20.5px;
   top: 0;
   pointer-events: none;
-  transition: transform 160ms var(--ease-out);
+  transition: transform 700ms cubic-bezier(0.32, 0.72, 0, 1);
 }
-.pbv-root .orb-state {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 5px;
-  white-space: nowrap;
+.pbv-root .companion-liquid-orb .orb-glass {
   position: absolute;
-  bottom: 2px;
-  left: 50%;
-  transform: translateX(-50%);
-  font-size: 11px;
-  line-height: 18px;
-  color: #425d77;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 320ms cubic-bezier(0.32, 0.72, 0, 1);
 }
-.pbv-root .dock-green .orb-state {
-  color: #526834;
+.pbv-root .companion-liquid-orb.liquid-glass-ready .orb-glass {
+  opacity: 1;
 }
-.pbv-root .voice-connected .companion-orb {
+.pbv-root .companion-liquid-orb.liquid-glass-ready > .companion-orb {
+  opacity: 0;
+}
+.pbv-root .voice-connected .companion-liquid-orb {
   animation: orb-breathe 4s var(--ease-in-out) infinite;
 }
 .pbv-root .orb-button:disabled {
@@ -676,7 +741,8 @@
 }
 .pbv-root .dock-icon {
   position: absolute;
-  bottom: 40px;
+  top: 50%;
+  transform: translateY(-50%);
   width: 42px;
   height: 42px;
   display: grid;
@@ -728,19 +794,42 @@
   overflow: auto;
 }
 .pbv-root .command-panel {
-  position: absolute;
-  bottom: 228px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: min(480px, calc(100% - 32px));
+  position: fixed;
+  top: auto;
+  right: max(24px, env(safe-area-inset-right, 0px));
+  bottom: max(24px, env(safe-area-inset-bottom, 0px));
+  left: auto;
+  z-index: 30;
+  width: min(480px, calc(100vw - 48px));
+  max-height: min(500px, calc(100svh - 48px));
+  overflow-y: auto;
   border: 1px solid #e5e7eb;
   border-radius: 24px;
   padding: 20px;
   background: white;
   box-shadow: 0 12px 60px #243b2524;
   pointer-events: auto;
-  max-height: min(500px, calc(100svh - 32px));
-  overflow-y: auto;
+  transform-origin: bottom right;
+  animation: command-panel-in 200ms var(--ease-out) both;
+}
+.pbv-root .command-panel.is-closing {
+  pointer-events: none;
+  animation: command-panel-out 140ms ease-in both;
+}
+.pbv-root .companion-dock:has(.command-panel) {
+  z-index: 6;
+}
+@keyframes command-panel-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+}
+@keyframes command-panel-out {
+  to {
+    opacity: 0;
+    transform: translateY(8px);
+  }
 }
 .pbv-root .command-panel-heading {
   display: flex;
@@ -1003,27 +1092,32 @@
 .pbv-root .loading-center {
   text-align: center;
 }
-.pbv-root .loading-center .game-shape {
+.pbv-root .loading-visual {
   position: relative;
-  left: auto;
-  top: auto;
-  transform: none;
-  margin: 0 auto 48px;
+  width: min(420px, 82vw);
+  height: 300px;
+  display: grid;
+  place-items: center;
+}
+.pbv-root .loading-triangle {
+  position: absolute;
+  left: 50%;
+  top: 9%;
   width: 156px;
   height: 136px;
+  background: white;
+  clip-path: polygon(0 0, 100% 0, 50% 100%);
+  animation: loading-orbit 2.8s var(--ease-in-out) infinite;
+  transform-origin: 50% 50%;
+  transform: translate(-50%, -50%) rotate(0deg) scale(0.72);
 }
 .pbv-root .loading-center h1 {
-  font-size: 24px;
-  font-weight: 400;
-  line-height: 32px;
-}
-.pbv-root .loading-center p {
-  font-size: 13px;
-  margin-top: 12px;
-  opacity: 0.8;
-}
-.pbv-root .rotating-shape {
-  animation: loading-turn 2.4s steps(4, end) infinite;
+  position: relative;
+  z-index: 1;
+  font-size: 48px;
+  font-weight: 600;
+  line-height: 56px;
+  color: white;
 }
 .pbv-root .loading-back {
   position: absolute;
@@ -1034,6 +1128,234 @@
   border-radius: 24px;
   color: #111;
   font-size: 14px;
+}
+.pbv-root .loading-error {
+  width: min(480px, calc(100% - 32px));
+  padding: 32px;
+  border-radius: 28px;
+  background: #fff;
+  color: #111;
+  text-align: center;
+}
+.pbv-root .loading-error h1 {
+  font-size: 28px;
+  line-height: 36px;
+}
+.pbv-root .loading-error p {
+  margin-top: 12px;
+  color: #707070;
+  line-height: 24px;
+}
+.pbv-root .loading-error > div {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 24px;
+}
+.pbv-root .loading-error button {
+  min-height: 48px;
+  padding: 10px 20px;
+  border: 1px solid #ededed;
+  border-radius: 16px;
+  background: white;
+}
+.pbv-root .loading-error button:first-child {
+  border-color: #111;
+  background: #111;
+  color: white;
+}
+
+.pbv-root .chess-setup-page {
+  position: relative;
+  min-height: 620px;
+  padding: 125px 24px 38px;
+}
+.pbv-root .setup-rail {
+  position: absolute;
+  left: 15px;
+  top: 50%;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  transform: translateY(-50%);
+}
+.pbv-root .setup-rail .round-control:active {
+  transform: scale(0.97);
+}
+.pbv-root .setup-intro {
+  width: min(403px, 100%);
+  margin: 0 auto 26px;
+  text-align: center;
+}
+.pbv-root .setup-intro h1,
+.pbv-root .setup-panel h2 {
+  font-size: 24px;
+  line-height: 32px;
+  font-weight: 600;
+  letter-spacing: -0.35px;
+}
+.pbv-root .setup-intro p {
+  margin-top: 14px;
+  color: #707070;
+  font-size: 16px;
+  line-height: 24px;
+}
+.pbv-root .setup-panel {
+  width: min(403px, calc(100% - 48px));
+  min-height: 194px;
+  margin: 0 auto;
+  padding: 24px;
+  border: 1px solid #f1f1f1;
+  border-radius: 28px;
+  background: white;
+}
+.pbv-root .setup-panel h2:focus {
+  outline: none;
+}
+.pbv-root .setup-option-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 14px;
+}
+.pbv-root .setup-option-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+}
+.pbv-root .setup-option {
+  position: relative;
+  min-height: 72px;
+  padding: 12px;
+  overflow: hidden;
+  border: 1px solid #f1f1f1;
+  border-radius: 16px;
+  background: white;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  text-align: left;
+  font-size: 18px;
+  line-height: 28px;
+  transition:
+    border-color 180ms ease-out,
+    background-color 180ms ease-out,
+    color 180ms ease-out;
+}
+.pbv-root .setup-option:hover:not(:disabled) {
+  border-color: #b8c89a;
+}
+.pbv-root .setup-option.is-dark {
+  border-color: #111;
+  background: #111;
+  color: white;
+}
+.pbv-root .setup-option small {
+  font-size: 12px;
+  line-height: 17px;
+  color: #7a7a7a;
+}
+.pbv-root .setup-option.is-dark small {
+  color: #d3d3d3;
+}
+.pbv-root .setup-option:disabled {
+  opacity: 1;
+  color: #8c8c8c;
+  background: #f7f7f7;
+}
+.pbv-root .setup-opponents .setup-option {
+  min-height: 126px;
+}
+.pbv-root .difficulty-option {
+  min-height: 62px;
+}
+.pbv-root .difficulty-option::after,
+.pbv-root .rules-options .setup-option::after,
+.pbv-root .timer-off::after {
+  content: "";
+  position: absolute;
+  right: -5px;
+  bottom: -7px;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  filter: blur(10px);
+  background: #b1e249;
+}
+.pbv-root .difficulty-option.tone-1::after {
+  background: #fff56e;
+}
+.pbv-root .difficulty-option.tone-2::after,
+.pbv-root .rules-off::after,
+.pbv-root .timer-off::after {
+  background: #ff6e6e;
+}
+.pbv-root .color-option {
+  min-height: 92px;
+  justify-content: flex-start;
+}
+.pbv-root .setup-option-wide {
+  grid-column: 1 / -1;
+  min-height: 54px;
+  justify-content: center;
+}
+.pbv-root .timer-off,
+.pbv-root .rules-off {
+  color: #e25151;
+}
+.pbv-root .rules-on {
+  color: #779a2b;
+}
+.pbv-root .rules-options .rules-off::after {
+  background: #ff6e6e;
+}
+.pbv-root .rules-options .rules-off:hover:not(:disabled) {
+  border-color: #f0a3a3;
+}
+.pbv-root .rules-options .rules-off.is-selected {
+  border-color: #e25151;
+  background: #fff5f5;
+}
+.pbv-root .setup-description {
+  margin-top: 10px;
+  color: #7b7b7b;
+  font-size: 18px;
+  line-height: 28px;
+}
+.pbv-root .rules-options {
+  margin-top: 8px;
+}
+.pbv-root .rules-options .setup-option {
+  min-height: 54px;
+}
+.pbv-root .setup-actions {
+  width: min(353px, calc(100% - 72px));
+  min-height: 54px;
+  margin: 12px auto 0;
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+.pbv-root .setup-actions button {
+  flex: 1;
+  min-height: 54px;
+  padding: 12px;
+  border: 1px solid #f1f1f1;
+  border-radius: 16px;
+  background: white;
+  font-size: 18px;
+}
+.pbv-root .setup-actions .setup-cancel {
+  color: #e25151;
+}
+.pbv-root .setup-actions .setup-start {
+  border-color: #111;
+  background: #111;
+  color: white;
 }
 .pbv-root .page-loading .companion-dock {
   min-height: 0;
@@ -1155,9 +1477,27 @@
 .pbv-root .promotion-btn:hover {
   background: #d4e89c;
 }
-@keyframes loading-turn {
-  to {
-    transform: rotate(360deg);
+@keyframes loading-orbit {
+  0%,
+  100% {
+    left: 50%;
+    top: 9%;
+    transform: translate(-50%, -50%) rotate(0deg) scale(0.72);
+  }
+  25% {
+    left: 86%;
+    top: 50%;
+    transform: translate(-50%, -50%) rotate(90deg) scale(0.72);
+  }
+  50% {
+    left: 50%;
+    top: 91%;
+    transform: translate(-50%, -50%) rotate(180deg) scale(0.72);
+  }
+  75% {
+    left: 14%;
+    top: 50%;
+    transform: translate(-50%, -50%) rotate(270deg) scale(0.72);
   }
 }
 @keyframes breathe {
@@ -1186,11 +1526,8 @@
   }
 }
 @media (hover: hover) and (pointer: fine) {
-  .pbv-root .orb-button:hover .companion-orb {
+  .pbv-root .orb-button:hover .companion-liquid-orb {
     transform: scale(1.035);
-  }
-  .pbv-root .start-game:hover:not(:disabled) {
-    background: #f2f8e6;
   }
 }
 @media (min-width: 1600px) {
@@ -1278,14 +1615,10 @@
     width: 112px;
     height: 132px;
   }
-  .pbv-root .companion-orb {
+  .pbv-root .companion-liquid-orb {
     width: 132px;
     height: 132px;
     left: -10px;
-  }
-  .pbv-root .orb-state {
-    font-size: 10px;
-    bottom: 0;
   }
   .pbv-root .companion-caption {
     font-size: 11px;
@@ -1297,7 +1630,6 @@
   .pbv-root .dock-icon {
     width: 44px;
     height: 44px;
-    bottom: 30px;
   }
   .pbv-root .typed-toggle {
     left: calc(50% + 82px);
@@ -1306,15 +1638,10 @@
     right: calc(50% + 82px);
   }
   .pbv-root .command-panel {
-    position: fixed;
-    top: max(16px, env(safe-area-inset-top, 0px));
-    bottom: auto;
-    left: 16px;
-    right: 16px;
-    width: auto;
+    right: max(16px, env(safe-area-inset-right, 0px));
+    bottom: max(16px, env(safe-area-inset-bottom, 0px));
+    width: min(480px, calc(100vw - 32px));
     max-height: calc(100svh - 32px);
-    transform: none;
-    overflow-y: auto;
   }
   .pbv-root .command-input-row input,
   .pbv-root .preferences-grid select {
@@ -1355,13 +1682,10 @@
   .pbv-root .orb-button {
     width: 96px;
   }
-  .pbv-root .companion-orb {
+  .pbv-root .companion-liquid-orb {
     width: 96px;
     height: 96px;
     left: 0;
-  }
-  .pbv-root .dock-icon {
-    bottom: 16px;
   }
 }
 @media (max-width: 600px) {
@@ -1395,6 +1719,21 @@
     padding-top: 40px;
     min-height: 540px;
   }
+  .pbv-root .chess-setup-page {
+    min-height: 540px;
+    padding: 70px 16px 24px;
+  }
+  .pbv-root .setup-rail {
+    position: fixed;
+    left: 12px;
+    top: auto;
+    bottom: calc(190px + env(safe-area-inset-bottom, 0px));
+    transform: none;
+    z-index: 5;
+  }
+  .pbv-root .setup-panel {
+    width: min(403px, 100%);
+  }
   .pbv-root .game-carousel {
     padding-inline: 24px;
   }
@@ -1411,10 +1750,10 @@
     left: 24px;
     right: 24px;
   }
-  .pbv-root .game-card h2 {
+  .pbv-root .game-card-title {
     font-size: 28px;
   }
-  .pbv-root .game-card p {
+  .pbv-root .game-card-description {
     font-size: 15px;
   }
   .pbv-root .picker-hint {

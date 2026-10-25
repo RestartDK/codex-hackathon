@@ -86,7 +86,7 @@ export function useVoiceCompanion(
   executor: ChessToolExecutor,
   audioMuted: boolean,
   volume: number,
-  view: AvailableDestination | "loading",
+  view: AvailableDestination | "loading" | "chess-setup",
 ) {
   const [status, setStatus] = useState<VoiceStatus>("idle");
   const [error, setError] = useState<string | null>(null);

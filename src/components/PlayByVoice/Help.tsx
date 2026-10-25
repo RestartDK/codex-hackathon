@@ -24,8 +24,10 @@ export default function Help({
           <h2>Start with your voice</h2>
           <p>
             Select the orb, allow microphone access, and say "Play chess." Voice stays connected
-            between Chess, Audio Settings, and Help. Select the orb again to mute your microphone.
-            Use the stop button to end voice.
+            between Chess, Audio Settings, and Help. Loups-Garous starts its own voice companion.
+            Select the orb again to mute your microphone. Use the stop button to end voice. Chess
+            live voice requires a server-side API key; typed commands and the quick guide work
+            without it.
           </p>
         </section>
         <section>
@@ -59,8 +61,8 @@ export default function Help({
           <h2>Pick up later</h2>
           <p>
             Your chess position and preferences stay on this device. Leaving a game saves and pauses
-            it. Say "play chess" to return and resume automatically. Chess and Loups-Garous are
-            playable. Tic-Tac-Toe is coming soon.
+            it. Chess and Loups-Garous are playable, but leaving a Loups-Garous match returns you to
+            setup. Tic-Tac-Toe is coming soon.
           </p>
         </section>
       </div>

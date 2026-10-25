@@ -29,6 +29,7 @@ export class StockfishEngine {
   private callbacks: StockfishCallbacks | null = null;
   private state: StockfishEngineState = "idle";
   private ready = false;
+  private generation = 0;
   private currentSkillLevel = 0;
   private currentThinkTimeMs = 1000;
   private listeners = new Set<(line: string) => void>();
@@ -38,30 +39,36 @@ export class StockfishEngine {
   private lastPv: string | undefined;
 
   async init(callbacks: StockfishCallbacks): Promise<void> {
+    const generation = ++this.generation;
     this.callbacks = callbacks;
     this.setState("loading");
     try {
       this.worker = new Worker(ENGINE_URL);
       this.worker.addEventListener("message", (event: MessageEvent<string>) => {
+        if (generation !== this.generation) return;
         const line = String(event.data);
         this.listeners.forEach((listener) => listener(line));
         this.handleLine(line);
       });
       this.worker.addEventListener("error", () => {
+        if (generation !== this.generation) return;
         this.ready = false;
         this.setState("error");
         callbacks.onError("The Stockfish worker could not be loaded.");
       });
       this.command("uci");
       await this.waitFor("uciok", 8000);
+      if (generation !== this.generation) return;
       this.command("setoption name Hash value 16");
       this.command("setoption name Threads value 1");
       this.command("isready");
       await this.waitFor("readyok", 8000);
+      if (generation !== this.generation) return;
       this.ready = true;
       this.setSkillLevel(0);
       this.setState("ready");
     } catch (cause) {
+      if (generation !== this.generation) return;
       this.ready = false;
       this.setState("error");
       callbacks.onError(cause instanceof Error ? cause.message : "Stockfish failed to start.");
@@ -140,6 +147,7 @@ export class StockfishEngine {
   }
 
   terminate(): void {
+    this.generation++;
     this.worker?.terminate();
     this.worker = null;
     this.listeners.clear();

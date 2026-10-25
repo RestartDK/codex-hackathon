@@ -49,6 +49,13 @@ export function useSettings() {
     setSettings((prev: AppSettings) => ({ ...prev, soundEnabled }));
   }, []);
 
+  const applyChessSetup = useCallback(
+    (setup: Pick<AppSettings, "gameMode" | "difficulty" | "playerColor">) => {
+      setSettings((prev: AppSettings) => ({ ...prev, ...setup }));
+    },
+    [],
+  );
+
   return {
     settings,
     setGameMode,
@@ -61,6 +68,7 @@ export function useSettings() {
     setBoardTheme,
     setPieceSet,
     setSoundEnabled,
+    applyChessSetup,
   };
 }
 

@@ -158,7 +158,7 @@ Fallback if no product screen exists: an honestly labeled “Example conversatio
 H2: **Choose your world.**
 Lead: **A growing world of games, brought closer by conversation.**
 
-Present a growing collection rather than a page about two games. Use a three-column library shelf on desktop and compact horizontal game entries stacked on mobile. Current entries are Chess (available), Loups-Garous (coming soon), and Tic-Tac-Toe (coming soon), reflecting the actual game picker. Retain one launch link for Chess and no enabled links for planned games. Future entries should be straightforward to add without changing the composition.
+Present a growing collection rather than a page about two games. Use a three-column library shelf on desktop and compact horizontal game entries stacked on mobile. Current entries are Chess (available), Loups-Garous (available), and Tic-Tac-Toe (coming soon), reflecting the actual game picker. Provide game-picker launch links for Chess and Loups-Garous, with no enabled link for Tic-Tac-Toe. Future entries should be straightforward to add without changing the composition.
 
 Use cooler, restrained blue-gray, mist-lavender, and pale sage surfaces with simple game objects. Below the shelf, an open editorial invitation reads **More games. More ways in.** with a real link to the game picker. Do not invent release dates, gameplay, or named future games. These entries are the beginning of the collection, not its limit.
 

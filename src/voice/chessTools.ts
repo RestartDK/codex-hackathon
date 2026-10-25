@@ -30,7 +30,7 @@ export interface ChessToolBridge {
   game: Chess;
   history: string[];
   playerColor: Color;
-  view: AvailableDestination | "loading";
+  view: AvailableDestination | "loading" | "chess-setup";
   navigate: (destination: AvailableDestination) => string;
   awaitingStartChoice?: boolean;
   isTerminated?: boolean;
@@ -55,6 +55,7 @@ export interface ChessToolBridge {
     | { ok: false; message: string }
   >;
   newGame: () => void;
+  startDefaultGame?: () => void;
   resumeGame?: () => void | { ok: boolean; message: string };
   pauseGame?: () => void | { ok: boolean; message: string };
   undoMove: () => void | { ok: boolean; message: string };
@@ -129,7 +130,7 @@ export function createChessToolExecutor(getBridge: () => ChessToolBridge) {
       cancelRequests();
       if (
         (destination === "home" || destination === "loups-garous") &&
-        bridge.view !== "home" &&
+        bridge.view === "chess" &&
         bridge.history.length > 0 &&
         !bridge.awaitingStartChoice &&
         !bridge.isPaused &&
@@ -423,7 +424,10 @@ export function createChessToolExecutor(getBridge: () => ChessToolBridge) {
       cancelRequests();
       if (action === "new_game") {
         bridge.newGame();
-        return json({ status: "completed", message: "A new game has started." });
+        return json({
+          status: "completed",
+          message: "Chess setup is open. Choose your preferences before starting.",
+        });
       }
       if (action === "return_live") {
         bridge.returnToLive();

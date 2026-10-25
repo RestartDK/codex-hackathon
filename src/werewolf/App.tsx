@@ -1,7 +1,19 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { FormEvent, ReactNode } from "react";
-import type { FeedEntry, GameView, Role } from "../../server/game/types.js";
-import { defaultRoleCounts } from "../../server/game/rules.js";
+import type { CSSProperties, FormEvent, ReactNode } from "react";
+import { useId } from "react";
+import { ArrowLeft, ArrowUp, Keyboard, X } from "lucide-react";
+import LiquidOrb from "../components/PlayByVoice/LiquidOrb";
+import { useDialogFocus } from "../hooks/useDialogFocus";
+import VillageSky from "./VillageSky";
+import { usePresence } from "../hooks/usePresence";
+import { DEFAULT_ROLE_COUNTS } from "../../server/game/rules.js";
+import type {
+  FeedEntry,
+  GameView,
+  PublicPlayerView,
+  Role,
+  VoteResult,
+} from "../../server/game/types.js";
 import {
   createBrowserNarrationBackend,
   primeBrowserNarration,
@@ -24,14 +36,6 @@ const roleNames: Record<Role, string> = {
   hunter: "Hunter",
   cupid: "Cupid",
 };
-const roleSymbols: Record<Role, string> = {
-  werewolf: "🐺",
-  villager: "●",
-  seer: "◆",
-  witch: "✦",
-  hunter: "✹",
-  cupid: "♥",
-};
 const phaseNames = {
   setup: "Setup",
   prologue: "Story introduction",
@@ -42,6 +46,125 @@ const phaseNames = {
   hunter: "Hunter’s shot",
   over: "Game over",
 };
+
+const ART = "/artwork/loups-garous";
+const PREPARE_ASSETS = [
+  `${ART}/voice-companion.png`,
+  `${ART}/player.svg`,
+  `${ART}/minus.svg`,
+  `${ART}/plus.svg`,
+  `${ART}/guidance-check.svg`,
+  `${ART}/home.svg`,
+  `${ART}/separator-dark.svg`,
+];
+const SESSION_ASSETS = [`${ART}/seer-symbol.svg`, `${ART}/werewolf.png`];
+const PLAYER_COLORS = [
+  "#fadc57",
+  "#57c1fa",
+  "#fa57ed",
+  "#d2fa57",
+  "#fa5757",
+  "#8f7bfa",
+  "#57fac0",
+  "#fab657",
+  "#b0b0b0",
+  "#5781fa",
+  "#c9a27e",
+];
+const MY_COLOR = "#fa8b57";
+const MIN_VILLAGE = 4;
+const MAX_VILLAGE = 12;
+
+type SetupStage = "preparing" | "prepare-error" | "mode" | "village" | "creating" | "create-error";
+type IntroStep = "village" | "role" | "role-details";
+
+const roleCards: Record<
+  Role,
+  { color: string; summary: string; howItWorks: string[]; goal: string }
+> = {
+  seer: {
+    color: "#57c1fa",
+    summary: "You can discover the true identity of one player every night.",
+    howItWorks: [
+      "During the night, choose one player.",
+      "I’ll tell you whether they are a Werewolf or not.",
+      "Keep your role secret during the discussion.",
+    ],
+    goal: "Help the village find and eliminate all Werewolves before they take over.",
+  },
+  werewolf: {
+    color: "#ec4c4c",
+    summary: "Each night, your pack secretly chooses one villager to remove.",
+    howItWorks: [
+      "During the night, choose a target with your pack, or let the pack decide.",
+      "By day, blend in with the villagers.",
+      "Never reveal who is in your pack.",
+    ],
+    goal: "Remove villagers until the Werewolves equal or outnumber everyone else.",
+  },
+  witch: {
+    color: "#a77bfa",
+    summary: "You hold one healing potion and one poison potion for the whole game.",
+    howItWorks: [
+      "At night, you learn who the Werewolves targeted.",
+      "You may save them, poison someone else, or pass.",
+      "Each potion can be used only once.",
+    ],
+    goal: "Help the village find and eliminate all Werewolves before they take over.",
+  },
+  hunter: {
+    color: "#8bc34a",
+    summary: "If you are eliminated, you take one final shot.",
+    howItWorks: [
+      "You have no night action, so rest until dawn.",
+      "If you are eliminated, choose one living player to take with you.",
+      "Keep your role secret during the discussion.",
+    ],
+    goal: "Help the village find and eliminate all Werewolves before they take over.",
+  },
+  cupid: {
+    color: "#fa57ed",
+    summary: "At the start of the game, you bind two players as lovers.",
+    howItWorks: [
+      "Before the first night, choose two living players.",
+      "If one lover dies, the other dies too.",
+      "Keep your role secret during the discussion.",
+    ],
+    goal: "Help the village find and eliminate all Werewolves before they take over.",
+  },
+  villager: {
+    color: "#fadc57",
+    summary: "You have no night power, but your voice and vote matter.",
+    howItWorks: [
+      "Rest during the night.",
+      "By day, listen closely and question the other players.",
+      "Vote to remove the player you suspect most.",
+    ],
+    goal: "Help the village find and eliminate all Werewolves before they take over.",
+  },
+};
+
+function preloadImage(src: string, signal: AbortSignal) {
+  return new Promise<void>((resolve) => {
+    if (signal.aborted) return resolve();
+    const image = new Image();
+    const finish = () => {
+      signal.removeEventListener("abort", finish);
+      resolve();
+    };
+    signal.addEventListener("abort", finish);
+    image.onload = finish;
+    // Decorative artwork must not block play when an image is unavailable.
+    image.onerror = finish;
+    image.src = src;
+  });
+}
+
+async function prepareVillage(signal: AbortSignal) {
+  const health = await fetch("/api/health", { signal, cache: "no-store" });
+  if (!health.ok) throw new Error("The village server is not responding.");
+  await Promise.all(PREPARE_ASSETS.map((src) => preloadImage(src, signal)));
+}
 
 function openingBriefing(game: GameView, explainAsWePlay: boolean) {
   const { me } = game;
@@ -283,11 +406,10 @@ function voiceHelp(game: GameView) {
 function interfaceSummary(game: GameView) {
   return [
     `You are on the Loups-Garous game screen, day ${game.day}, in ${phaseNames[game.phase]}.`,
-    "From top to bottom, the header has the game name, Help, the day and phase, and New game.",
-    "Next is the round heading and the latest village update.",
-    "The main area starts with the village board, which lists every player and whether they are alive or eliminated.",
-    "The right side contains the village history, then your private assistant with your role and private findings, then story audio controls, then Voice Guide controls and a typed fallback command box.",
-    "The last section is Your Turn. It shows only the actions available in this phase.",
+    "From top to bottom, the header has the game name, Audio Settings, and Help. Home is on the left edge.",
+    "Next is the round heading, the latest village update, and a card for every player showing whether they are alive or eliminated.",
+    "Below the players are the actions available in this phase.",
+    "After that, Game tools holds the village history, your private role and findings, the private guide, story audio controls, Voice Guide controls, a typed fallback command box, and New game.",
     currentActionHelp(game),
     "You never need to use these controls by sight. Say ‘voice help’ for commands, or ask me to read any section again.",
   ].join(" ");
@@ -338,6 +460,47 @@ function updatesForReading(game: GameView, command: string) {
   return [`Reading ${label}.`, ...entries.map(readableFeedEntry)];
 }
 
+function GameDialog({
+  title,
+  onClose,
+  children,
+}: {
+  title: string;
+  onClose: () => void;
+  children: ReactNode;
+}) {
+  const titleId = useId();
+  const { dialogRef, onKeyDown } = useDialogFocus(onClose);
+  return (
+    <div className="confirm-overlay" onClick={onClose}>
+      <div
+        ref={dialogRef}
+        className="confirm-dialog ww-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        onKeyDown={onKeyDown}
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="ww-dialog-heading">
+          <h2 id={titleId} className="confirm-title">
+            {title}
+          </h2>
+          <button
+            type="button"
+            className="text-icon"
+            aria-label={`Close ${title}`}
+            onClick={onClose}
+          >
+            <X size={17} aria-hidden="true" />
+          </button>
+        </div>
+        {children}
+      </div>
+    </div>
+  );
+}
+
 export default function WerewolfApp({
   narrationVolume,
   onNarrationVolumeChange,
@@ -350,20 +513,14 @@ export default function WerewolfApp({
   const [session, setSession] = useState<Session>();
   const [presentedGame, setPresentedGame] = useState<GameView>();
   const [name] = useState("You");
-  const [count, setCount] = useState(6);
+  const [count, setCount] = useState(8);
   const [tieRule] = useState("no-exile");
-  const [explainAsWePlay, setExplainAsWePlay] = useState(true);
-  const [setupStep, setSetupStep] = useState<"mode" | "village">("mode");
-  const [onboardingStep, setOnboardingStep] = useState<"village" | "role" | "details" | "moon">(
-    "village",
-  );
-  const [cinematic, setCinematic] = useState<
-    "sleep" | "wake" | "finding" | "vote" | "reveal" | undefined
-  >();
   const [selected, setSelected] = useState<string[]>([]);
+  const [message, setMessage] = useState("");
   const [heal, setHeal] = useState(false);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [commandText, setCommandText] = useState("");
   const [voiceStatus, setVoiceStatus] = useState(
     "Tap anywhere once to allow the microphone, then say “start the game”",
   );
@@ -373,7 +530,26 @@ export default function WerewolfApp({
   const [guideText, setGuideText] = useState("");
   const [liveConnected, setLiveConnected] = useState(false);
   const [liveConnecting, setLiveConnecting] = useState(false);
+  const [voiceTranscript, setVoiceTranscript] = useState("");
   const [openingAudio, setOpeningAudio] = useState<{ gameId: string; text: string }>();
+  const [stage, setStage] = useState<SetupStage>("preparing");
+  const [prepareAttempt, setPrepareAttempt] = useState(0);
+  const [explainGame, setExplainGame] = useState(true);
+  const [introStep, setIntroStep] = useState<IntroStep | null>(null);
+  const [seenInvestigations, setSeenInvestigations] = useState(0);
+  const [voteOutcome, setVoteOutcome] = useState<{ result: VoteResult; revealing: boolean }>();
+  const [dialog, setDialog] = useState<"audio" | "help" | null>(null);
+  const [typing, setTyping] = useState(false);
+  const createControllerRef = useRef<AbortController | null>(null);
+  const lastCreateTestModeRef = useRef(false);
+  const typedToggleRef = useRef<HTMLButtonElement>(null);
+  const commandPanel = usePresence(typing);
+  const commandInputRef = useRef<HTMLInputElement>(null);
+
+  // Reopening during the closing animation reuses the panel, so focus the input explicitly.
+  useEffect(() => {
+    if (typing) commandInputRef.current?.focus();
+  }, [typing]);
   const recognitionRef = useRef<SpeechRecognitionSession | null>(null);
   const latestGameRef = useRef<GameView | undefined>(undefined);
   const sessionRef = useRef<Session | undefined>(undefined);
@@ -384,8 +560,6 @@ export default function WerewolfApp({
   const startVoiceRef = useRef<() => void>(() => undefined);
   const liveConnectionRef = useRef<LiveVoiceSession | null>(null);
   const inputModeRef = useRef<VoiceInputMode>("idle");
-  const cinematicTimerRef = useRef<number | undefined>(undefined);
-  const onboardingTimerRef = useRef<number | undefined>(undefined);
   const commandQueueRef = useRef(Promise.resolve());
   const lastVoiceCommandRef = useRef({ text: "", at: 0 });
   const actionInFlightRef = useRef(false);
@@ -401,6 +575,8 @@ export default function WerewolfApp({
     setPresentedGame(latestGame);
   }, []);
   const storyAudio = useStoryAudio({
+    initialVolume: narrationVolume,
+    onVolumeChange: onNarrationVolumeChange,
     feed: session?.game.feed,
     gameId: session?.game.id,
     phase: session?.game.phase,
@@ -413,8 +589,6 @@ export default function WerewolfApp({
       instant: true,
     },
     backend: narrationBackend,
-    initialVolume: narrationVolume,
-    onVolumeChange: onNarrationVolumeChange,
   });
 
   useEffect(() => {
@@ -423,6 +597,13 @@ export default function WerewolfApp({
 
   function commitGame(game: GameView, token: string) {
     const previous = latestGameRef.current;
+    // A newly resolved village vote gets its result and, after an exile, the revealed role.
+    if (
+      previous &&
+      game.lastVoteResult &&
+      JSON.stringify(previous.lastVoteResult) !== JSON.stringify(game.lastVoteResult)
+    )
+      setVoteOutcome({ result: game.lastVoteResult, revealing: false });
     const nextSession = { game, token };
     latestGameRef.current = game;
     sessionRef.current = nextSession;
@@ -432,76 +613,66 @@ export default function WerewolfApp({
     // old day or night screen.
     presentedGameRef.current = game;
     setPresentedGame(game);
-    // The server can move the story forward while an onboarding card is still
-    // visible. Once it has left the prologue, the current game screen wins.
-    if (game.phase !== "prologue") {
-      if (onboardingTimerRef.current) window.clearTimeout(onboardingTimerRef.current);
-      onboardingTimerRef.current = undefined;
-      setOnboardingStep("village");
-    }
-    if (!previous || previous.phase === game.phase) return;
-    if (game.me.investigations.length > previous.me.investigations.length) {
-      showCinematic("finding", 1800);
-      return;
-    }
-    if (previous.phase === "vote") {
-      showVoteOutcome(game);
-      return;
-    }
-    if (game.phase === "day") showCinematic("wake");
-    if (game.phase === "night") showCinematic("sleep");
   }
 
-  function showCinematic(next: "sleep" | "wake" | "finding" | "vote" | "reveal", duration = 1450) {
-    if (cinematicTimerRef.current) window.clearTimeout(cinematicTimerRef.current);
-    setCinematic(next);
-    cinematicTimerRef.current = window.setTimeout(() => {
-      setCinematic(undefined);
-      cinematicTimerRef.current = undefined;
-    }, duration);
+  useEffect(() => {
+    if (stage !== "preparing") return;
+    const controller = new AbortController();
+    prepareVillage(controller.signal)
+      .then(() => {
+        if (controller.signal.aborted) return;
+        setStage("mode");
+      })
+      .catch((cause: unknown) => {
+        if (controller.signal.aborted) return;
+        setError(
+          cause instanceof Error && cause.name !== "TypeError"
+            ? cause.message
+            : "Loups-Garous could not reach the village server.",
+        );
+        setStage("prepare-error");
+      });
+    return () => controller.abort();
+  }, [stage, prepareAttempt]);
+
+  function retryPreparation() {
+    setError("");
+    setStage("preparing");
+    setPrepareAttempt((attempt) => attempt + 1);
   }
 
-  function showVoteOutcome(game: GameView) {
-    if (cinematicTimerRef.current) window.clearTimeout(cinematicTimerRef.current);
-    setCinematic("vote");
-    cinematicTimerRef.current = window.setTimeout(() => {
-      if (game.lastVoteResult?.exiledPlayerId) {
-        setCinematic("reveal");
-        cinematicTimerRef.current = window.setTimeout(() => {
-          setCinematic(undefined);
-          cinematicTimerRef.current = undefined;
-        }, 1_800);
-      } else {
-        setCinematic(undefined);
-        cinematicTimerRef.current = undefined;
-      }
-    }, 2_100);
+  function cancelCreation() {
+    createControllerRef.current?.abort();
+    createControllerRef.current = null;
+    setBusy(false);
   }
 
-  /** A new move makes an older guide answer stale, so never let it speak late. */
-  function cancelPendingGuide() {
-    guideRequestIdRef.current += 1;
-    guideAbortRef.current?.abort();
-    guideAbortRef.current = undefined;
+  function leaveToGamePicker() {
+    cancelCreation();
+    onShowGamePicker();
   }
 
-  /** Keep the reference moon and nightfall slides distinct for clicks and voice commands. */
-  function beginFirstNight() {
-    if (onboardingTimerRef.current) return;
+  function openNewGameSetup() {
+    cancelCreation();
     storyAudio.stop();
-    setOnboardingStep("moon");
-    onboardingTimerRef.current = window.setTimeout(() => {
-      onboardingTimerRef.current = undefined;
-      setOnboardingStep("village");
-      void act("begin-story");
-    }, 2_200);
+    setSession(undefined);
+    setPresentedGame(undefined);
+    latestGameRef.current = undefined;
+    sessionRef.current = undefined;
+    setIntroStep(null);
+    setError("");
+    setStage("village");
   }
 
   async function create(event?: FormEvent, testMode = false) {
     event?.preventDefault();
+    // One launch at a time: repeated clicks or voice commands reuse the pending request.
+    if (createControllerRef.current) return;
+    const controller = new AbortController();
+    createControllerRef.current = controller;
+    lastCreateTestModeRef.current = testMode;
     cancelPendingGuide();
-    if (onboardingTimerRef.current) window.clearTimeout(onboardingTimerRef.current);
-    onboardingTimerRef.current = undefined;
+    setStage("creating");
     primeBrowserNarration();
     // This runs directly from the player's Start or Quick Test gesture, which is
     // the one moment browsers allow microphone permission to be requested.
@@ -513,13 +684,14 @@ export default function WerewolfApp({
       const response = await fetch("/api/games", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        signal: controller.signal,
         body: JSON.stringify({
           name,
           count,
           tieRule,
           start: true,
           testMode,
-          explainAsWePlay,
+          explainAsWePlay: explainGame,
           // The narrated introduction is part of the hands-free game flow. Keep it
           // for every new village so a returning player never lands in the middle
           // of a night without the role and controls being introduced first.
@@ -527,12 +699,15 @@ export default function WerewolfApp({
         }),
       });
       const data = await response.json();
+      if (controller.signal.aborted) return;
       if (!response.ok) throw new Error(data.error ?? "Could not create a game.");
       const game = data as GameView;
-      const briefing = openingBriefing(game, explainAsWePlay);
+      const briefing = openingBriefing(game, explainGame);
+      void Promise.all(SESSION_ASSETS.map((src) => preloadImage(src, controller.signal)));
       commitGame(game, data.session);
-      setOnboardingStep("village");
-      setCinematic(undefined);
+      setSeenInvestigations(game.me.investigations.length);
+      setVoteOutcome(undefined);
+      setIntroStep(game.phase === "prologue" ? "village" : "role");
       // When browser speech recognition is unavailable, try the provider-backed
       // companion once the game session is ready.
       if (!recognitionRef.current && !liveConnectionRef.current) void connectLiveVoice();
@@ -546,9 +721,14 @@ export default function WerewolfApp({
       ]);
       setOpeningAudio({ gameId: game.id, text: briefing });
     } catch (cause) {
+      if (controller.signal.aborted) return;
       setError(cause instanceof Error ? cause.message : "Could not create a game.");
+      setStage("create-error");
     } finally {
-      setBusy(false);
+      if (createControllerRef.current === controller) {
+        createControllerRef.current = null;
+        setBusy(false);
+      }
     }
   }
 
@@ -619,43 +799,6 @@ export default function WerewolfApp({
   async function act(type: string, values: Record<string, unknown> = {}) {
     const result = await perform({ type, ...values });
     return result;
-  }
-
-  /** Stop a stale provider connection before clearing the game it belongs to. */
-  function teardownLiveVoice() {
-    inputModeRef.current = "idle";
-    const live = liveConnectionRef.current;
-    liveConnectionRef.current = null;
-    setLiveConnected(false);
-    setLiveConnecting(false);
-    live?.stop();
-  }
-
-  /** Recover cleanly if a local/dev server has restarted and lost its in-memory match. */
-  function recoverExpiredSession() {
-    storyAudio.stop();
-    teardownLiveVoice();
-    if (onboardingTimerRef.current) window.clearTimeout(onboardingTimerRef.current);
-    onboardingTimerRef.current = undefined;
-    latestGameRef.current = undefined;
-    presentedGameRef.current = undefined;
-    sessionRef.current = undefined;
-    setSession(undefined);
-    setPresentedGame(undefined);
-    setOnboardingStep("village");
-    setCinematic(undefined);
-    setSelected([]);
-    setHeal(false);
-    setOpeningAudio(undefined);
-    setGuideMessages([]);
-    setGuideText("");
-    setError("");
-  }
-
-  function returnToSetup(step: "mode" | "village" = "mode") {
-    recoverExpiredSession();
-    setSetupStep(step);
-    setVoiceStatus("Listening — say “start the game”");
   }
 
   function queueAssistant(
@@ -734,6 +877,7 @@ export default function WerewolfApp({
   async function handleVoiceCommand(transcript: string) {
     const command = transcript.trim();
     if (!command) return;
+    setVoiceTranscript(command);
     if (/\bpause\b.*\b(listening|voice control|microphone)\b/iu.test(command)) {
       setVoiceCommandsPaused(true);
       setVoiceStatus("Voice commands are paused. Say ‘resume listening’ to continue.");
@@ -761,7 +905,7 @@ export default function WerewolfApp({
     }
     if (voiceCommandsPaused) return;
     if (!session) {
-      if (startsNewGameNaturally(command)) {
+      if (startsNewGameNaturally(command) || /\bstart\b.*\bdefaults?\b/iu.test(command)) {
         queueAssistant("Starting a new village. I will introduce the characters first.");
         await create(undefined, /\b(quick|test)\b/iu.test(command));
         return;
@@ -776,13 +920,9 @@ export default function WerewolfApp({
       return;
     }
 
-    // The introduction is deliberately local presentation state, while the game
-    // only advances once the player reaches the moon transition. This keeps the
-    // visual sequence and voice-only sequence in lockstep.
+    // Voice follows the same introduction as the screen: village, role card,
+    // role details, then the first night.
     if (session.game.phase === "prologue") {
-      // The moon is a short intentional transition. Ignore echoed speech until
-      // its timer has opened the first night rather than bypassing the slide.
-      if (onboardingStep === "moon") return;
       const wantsToAdvance =
         /\b(continue|ready|begin|start|next|go on|move on|i(?:'m| am) done|let(?:'s| us) go|get started)\b/iu.test(
           command,
@@ -791,25 +931,24 @@ export default function WerewolfApp({
           command,
         );
       if (wantsToAdvance) {
-        if (onboardingStep === "village") {
-          setOnboardingStep("role");
+        const step = introStep ?? "village";
+        if (step === "village") {
+          setIntroStep("role");
           narrateAccessibility([
             `Your role is ${roleNames[session.game.me.role]}. Say continue to hear how it works.`,
           ]);
           return;
         }
-        if (onboardingStep === "role") {
-          setOnboardingStep("details");
+        if (step === "role") {
+          flipRoleCard("role-details");
           narrateAccessibility([
             roleStateSummary(session.game),
             "Say I am ready when you want the first night to begin.",
           ]);
           return;
         }
-        if (onboardingStep === "details") {
-          beginFirstNight();
-          return;
-        }
+        await act("begin-story");
+        return;
       }
     }
 
@@ -1121,6 +1260,43 @@ export default function WerewolfApp({
     }
   }
 
+  function teardownLiveVoice() {
+    inputModeRef.current = "idle";
+    const live = liveConnectionRef.current;
+    liveConnectionRef.current = null;
+    setLiveConnected(false);
+    setLiveConnecting(false);
+    live?.stop();
+  }
+
+  /** Recover cleanly if a local/dev server has restarted and lost its in-memory match. */
+  function recoverExpiredSession() {
+    storyAudio.stop();
+    teardownLiveVoice();
+    cancelCreation();
+    latestGameRef.current = undefined;
+    presentedGameRef.current = undefined;
+    sessionRef.current = undefined;
+    setSession(undefined);
+    setPresentedGame(undefined);
+    setIntroStep(null);
+    setVoteOutcome(undefined);
+    setSelected([]);
+    setHeal(false);
+    setOpeningAudio(undefined);
+    setGuideMessages([]);
+    setGuideText("");
+    setError("");
+    setStage("mode");
+  }
+
+  /** A new move makes an older guide answer stale, so never let it speak late. */
+  function cancelPendingGuide() {
+    guideRequestIdRef.current += 1;
+    guideAbortRef.current?.abort();
+    guideAbortRef.current = undefined;
+  }
+
   async function connectLiveVoice() {
     const activeSession = sessionRef.current;
     if (
@@ -1196,6 +1372,7 @@ export default function WerewolfApp({
     voiceCommandHandlerRef.current = (transcript) => {
       const text = transcript.trim();
       if (!text) return;
+      setVoiceTranscript(text);
       const normalized = normalizeVoiceCommand(text);
       const now = Date.now();
       if (
@@ -1239,8 +1416,9 @@ export default function WerewolfApp({
     return () => {
       window.removeEventListener("pointerdown", enableVoice);
       autoVoiceRequestedRef.current = false;
-      if (cinematicTimerRef.current) window.clearTimeout(cinematicTimerRef.current);
-      if (onboardingTimerRef.current) window.clearTimeout(onboardingTimerRef.current);
+      // Leaving while a village is being created must not navigate back into it.
+      createControllerRef.current?.abort();
+      createControllerRef.current = null;
       guideAbortRef.current?.abort();
       guideAbortRef.current = undefined;
       recognitionRef.current?.stop();
@@ -1251,521 +1429,1258 @@ export default function WerewolfApp({
     };
   }, []);
 
-  const voiceDock = (
-    <aside
-      className={`voice-dock ${listening || liveConnected || liveConnecting ? "is-active" : ""}`}
-      aria-live="polite"
-      aria-label="Voice companion status"
-    >
-      <span className="voice-dock-orb" aria-hidden="true">
-        <i />
-        <i />
-        <i />
-      </span>
-      <span>
-        <strong>Voice companion</strong>
-        <small>
-          {busy
-            ? "The guide is resolving your move"
-            : liveConnected
-              ? "Listening for your question"
-              : listening
-                ? voiceCommandsPaused
-                  ? "Listening paused"
-                  : session
-                    ? "Always listening"
-                    : "Say “start the game”"
-                : voiceStatus}
-        </small>
-      </span>
-    </aside>
-  );
+  const voiceActive = listening && !voiceCommandsPaused;
+  const voiceDockStatus = liveConnecting
+    ? "Connecting voice"
+    : liveConnected
+      ? voiceCommandsPaused
+        ? "Voice commands paused"
+        : "Listening and answering"
+      : listening
+        ? voiceCommandsPaused
+          ? "Voice commands paused"
+          : "Listening"
+        : "Voice is off";
+  const latestGuideReply = [...guideMessages].reverse().find((entry) => entry.role === "assistant");
 
-  const header = (
-    <header className="reference-header">
-      <a
-        className="reference-wordmark"
-        href="#top"
-        id="top"
-        onClick={(event) => {
-          event.preventDefault();
-          onShowGamePicker();
-        }}
-      >
-        <strong>Play by Voice</strong>
-        <span>•</span>
-        <b>Loups-Garous</b>
-      </a>
-      <nav aria-label="Game options">
-        <button type="button" onClick={storyAudio.toggleMuted}>
-          {storyAudio.muted ? "Audio on" : "Audio settings"}
-        </button>
+  function closeCommands() {
+    setTyping(false);
+    typedToggleRef.current?.focus();
+  }
+
+  function toggleVoiceFromOrb() {
+    if (listening || liveConnected) {
+      if (voiceCommandsPaused) {
+        setVoiceCommandsPaused(false);
+        setVoiceStatus("Voice guide is listening");
+      } else {
+        setVoiceCommandsPaused(true);
+        setVoiceStatus("Voice commands are paused. Say ‘resume listening’ to continue.");
+      }
+      return;
+    }
+    primeBrowserNarration();
+    autoVoiceRequestedRef.current = true;
+    startAlwaysOnVoice();
+  }
+
+  // The same dock, orb, and typed-command panel as Chess (src/components/PlayByVoice/CompanionDock.tsx).
+  const voiceDock = (
+    <footer
+      className={`companion-dock ww-companion-dock${voiceActive ? " voice-connected" : ""}`}
+      aria-label="Voice companion"
+    >
+      <div className="companion-orb-row">
         <button
           type="button"
-          onClick={() =>
-            narrateAccessibility([
-              "Your voice companion is always listening after microphone permission.",
-              "Say voice help to hear every command, or say start the game to begin.",
-            ])
+          className="orb-button"
+          aria-label={
+            listening || liveConnected
+              ? voiceCommandsPaused
+                ? "Resume voice commands"
+                : "Pause voice commands"
+              : liveConnecting
+                ? voiceDockStatus
+                : "Start voice companion"
           }
+          disabled={liveConnecting}
+          onClick={toggleVoiceFromOrb}
         >
+          <LiquidOrb tone="amber" />
+          <span className="sr-only" aria-live="polite" aria-atomic="true">
+            {voiceDockStatus}
+          </span>
+        </button>
+      </div>
+      {commandPanel.mounted && (
+        <form
+          id="command-panel"
+          className={`command-panel${commandPanel.closing ? " is-closing" : ""}`}
+          inert={commandPanel.closing || undefined}
+          onKeyDown={(event) => {
+            if (event.key === "Escape") {
+              event.preventDefault();
+              closeCommands();
+            }
+          }}
+          onSubmit={(event) => {
+            event.preventDefault();
+            const typedCommand = commandText.trim();
+            if (!typedCommand) return;
+            setCommandText("");
+            void handleVoiceCommand(typedCommand);
+          }}
+        >
+          <div className="command-panel-heading">
+            <label htmlFor="typed-command">Type to your companion</label>
+            <button
+              type="button"
+              className="text-icon"
+              aria-label="Close typed commands"
+              onClick={closeCommands}
+            >
+              <X size={17} aria-hidden="true" />
+            </button>
+          </div>
+          <div className="command-input-row">
+            <input
+              id="typed-command"
+              ref={commandInputRef}
+              autoFocus
+              value={commandText}
+              onChange={(event) => setCommandText(event.target.value)}
+              placeholder={
+                !session
+                  ? "Try start the game, or help"
+                  : session.game.phase === "night" && session.game.me.role === "seer"
+                    ? "Try investigate Emma, or help"
+                    : "Try hear the villagers, or help"
+              }
+              autoComplete="off"
+              maxLength={1000}
+            />
+            <button
+              className="send-command"
+              type="submit"
+              disabled={busy || !commandText.trim()}
+              aria-label="Send command"
+            >
+              <ArrowUp size={20} aria-hidden="true" />
+            </button>
+          </div>
+          {latestGuideReply && (
+            <p className="ww-command-reply" aria-live="polite">
+              {latestGuideReply.text}
+            </p>
+          )}
+          <p>No microphone needed. Type any voice command, or a question for your guide.</p>
+        </form>
+      )}
+    </footer>
+  );
+
+  const viewGame = presentedGame ?? session?.game;
+  const transitioning = Boolean(session && storyAudio.phaseTransitioning);
+  const introView: IntroStep | null = viewGame
+    ? viewGame.phase === "prologue"
+      ? (introStep ?? "village")
+      : introStep
+    : null;
+  const pendingFinding =
+    viewGame && !introView && viewGame.me.investigations.length > seenInvestigations
+      ? viewGame.me.investigations.at(-1)
+      : undefined;
+  const screenKey = !viewGame
+    ? stage
+    : [
+        viewGame.id,
+        introView === "role-details" ? "role" : (introView ?? ""),
+        voteOutcome ? `vote-${voteOutcome.result.day}-${voteOutcome.revealing}` : "",
+        pendingFinding ? `finding-${seenInvestigations}` : "",
+        viewGame.phase,
+        viewGame.day,
+        viewGame.paused ? "paused" : "",
+      ].join(":");
+
+  // Move focus to the new screen heading, as the Play by Voice screens do.
+  useEffect(() => {
+    document.getElementById("ww-heading")?.focus({ preventScroll: true });
+  }, [screenKey]);
+
+  // The role card flips between two faces; ignore clicks until a flip has finished.
+  const flipLockRef = useRef(false);
+  const flipFocusRef = useRef<string | null>(null);
+  function flipRoleCard(next: "role" | "role-details") {
+    if (flipLockRef.current || introStep === next) return;
+    flipLockRef.current = true;
+    flipFocusRef.current = next === "role" ? "ww-role-card-title" : "ww-role-back-title";
+    setIntroStep(next);
+    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    window.setTimeout(
+      () => {
+        flipLockRef.current = false;
+      },
+      reduceMotion ? 0 : 720,
+    );
+  }
+  useEffect(() => {
+    const target = flipFocusRef.current;
+    if (!target) return;
+    flipFocusRef.current = null;
+    document.getElementById(target)?.focus({ preventScroll: true });
+  }, [introStep]);
+
+  // A role card shown after skipping the prologue closes once the story moves on.
+  const startPhaseRef = useRef<GameView["phase"] | undefined>(undefined);
+  const latestPhase = session?.game.phase;
+  useEffect(() => {
+    if (!latestPhase) {
+      startPhaseRef.current = undefined;
+      return;
+    }
+    if (startPhaseRef.current === undefined) startPhaseRef.current = latestPhase;
+    else if (startPhaseRef.current !== latestPhase) {
+      startPhaseRef.current = latestPhase;
+      setIntroStep(null);
+    }
+  }, [latestPhase]);
+
+  function openTools(section: "audio" | "help") {
+    setTyping(false);
+    setDialog(section);
+  }
+
+  // Leaving no longer asks for confirmation, matching origin/main (#15).
+  function requestHome() {
+    leaveToGamePicker();
+  }
+
+  const loadingStage =
+    !session &&
+    (stage === "preparing" ||
+      stage === "creating" ||
+      stage === "prepare-error" ||
+      stage === "create-error");
+  const scene = !viewGame
+    ? loadingStage
+      ? "loading"
+      : "plain"
+    : introView
+      ? "plain"
+      : voteOutcome
+        ? "day"
+        : pendingFinding
+          ? "night"
+          : viewGame.phase === "over"
+            ? viewGame.winner === "village"
+              ? "victory"
+              : "night"
+            : viewGame.phase === "night" || viewGame.phase === "cupid"
+              ? "night"
+              : viewGame.phase === "prologue"
+                ? "plain"
+                : "day";
+  const onArtwork = scene !== "plain";
+
+  const header = (
+    <header className={`ww-header${onArtwork ? " is-on-art" : ""}`}>
+      <div className="ww-brand-group">
+        <button className="ww-brand" type="button" onClick={requestHome}>
+          Play by Voice
+          <span className="sr-only">, return to the game picker</span>
+        </button>
+        <img
+          src={`${ART}/separator-${onArtwork ? "light" : "dark"}.svg`}
+          width={8}
+          height={8}
+          alt=""
+        />
+        <span className="ww-header-game">Loups-Garous</span>
+      </div>
+      <nav className="ww-header-nav" aria-label="Main navigation">
+        <button type="button" onClick={() => openTools("audio")}>
+          Audio Settings
+        </button>
+        <button type="button" onClick={() => openTools("help")}>
           Help
         </button>
       </nav>
     </header>
   );
 
-  const renderMoon = (large = false) => (
-    <span className={`reference-moon ${large ? "is-large" : ""}`} aria-hidden="true" />
+  const backAction = (() => {
+    if (!session) {
+      if (stage === "mode") return { label: "Back to game picker", run: leaveToGamePicker };
+      if (stage === "village") return { label: "Back to play mode", run: () => setStage("mode") };
+      return undefined;
+    }
+    if (introView === "role-details")
+      return { label: "Back to role", run: () => flipRoleCard("role") };
+    if (introView === "role" && viewGame?.phase === "prologue")
+      return { label: "Back to meet the village", run: () => setIntroStep("village") };
+    return undefined;
+  })();
+  const rail = (
+    <nav className="ww-rail" aria-label="Game navigation">
+      <button className="ww-round-control" type="button" onClick={requestHome}>
+        <img src={`${ART}/home.svg`} width={24} height={24} alt="" />
+        <span className="sr-only">Return to game picker</span>
+      </button>
+      {backAction && (
+        <button className="ww-round-control" type="button" onClick={backAction.run}>
+          <ArrowLeft size={24} strokeWidth={1.75} aria-hidden="true" />
+          <span className="sr-only">{backAction.label}</span>
+        </button>
+      )}
+      <button
+        type="button"
+        className={`dock-icon typed-toggle${typing ? " is-active" : ""}`}
+        ref={typedToggleRef}
+        onClick={() => {
+          if (typing) closeCommands();
+          else setTyping(true);
+        }}
+        aria-label={typing ? "Close typed commands" : "Type a command"}
+        aria-expanded={typing}
+        aria-controls="command-panel"
+      >
+        <Keyboard size={20} aria-hidden="true" />
+      </button>
+    </nav>
   );
 
-  const homeButton = (
-    <button
-      className="reference-home"
-      type="button"
-      aria-label="Return to game setup"
-      onClick={() => returnToSetup()}
-    >
-      <svg viewBox="0 0 24 24" aria-hidden="true">
-        <path d="m4.5 10.5 7.5-6 7.5 6v8.25a.75.75 0 0 1-.75.75H5.25a.75.75 0 0 1-.75-.75V10.5Z" />
-        <path d="M9.25 19.5v-5.25h5.5v5.25" />
-      </svg>
-    </button>
+  const audioSection = (
+    <section className="audio-controls" aria-labelledby="ww-audio-heading">
+      <div>
+        <h3 id="ww-audio-heading">Story audio</h3>
+        <p>
+          {storyAudio.activeSpeaker
+            ? `AI voice is reading ${storyAudio.activeSpeaker}`
+            : storyAudio.autoRead
+              ? "AI voice ready for narration and dialogue"
+              : "Automatic reading is off"}
+        </p>
+      </div>
+      {session && (
+        <div className="audio-buttons">
+          <button className="plain-button" type="button" onClick={storyAudio.toggleAutoRead}>
+            {storyAudio.autoRead ? "Auto-read on" : "Auto-read off"}
+          </button>
+          <button className="plain-button" type="button" onClick={storyAudio.toggleMuted}>
+            {storyAudio.muted ? "Unmute" : "Mute"}
+          </button>
+          <button
+            className="plain-button"
+            type="button"
+            onClick={storyAudio.paused ? storyAudio.resume : storyAudio.pause}
+            disabled={!storyAudio.autoRead || storyAudio.muted || !storyAudio.activeSpeaker}
+          >
+            {storyAudio.paused ? "Resume" : "Pause"}
+          </button>
+          <button className="plain-button" type="button" onClick={storyAudio.repeatLast}>
+            Repeat
+          </button>
+          <button className="plain-button" type="button" onClick={storyAudio.stop}>
+            Stop
+          </button>
+        </div>
+      )}
+      <label className="volume-control">
+        Volume
+        <input
+          type="range"
+          min="0"
+          max="1"
+          step="0.05"
+          value={storyAudio.volume}
+          onChange={(event) => storyAudio.updateVolume(Number(event.target.value))}
+        />
+      </label>
+      <label className="volume-control">
+        Speech speed
+        <input
+          type="range"
+          min="0.7"
+          max="1.35"
+          step="0.05"
+          value={storyAudio.speechRate}
+          onChange={(event) => storyAudio.updateSpeechRate(Number(event.target.value))}
+        />
+      </label>
+    </section>
   );
 
-  if (!session) {
-    const roleCounts = defaultRoleCounts(count);
-    const rolesForSetup = (["werewolf", "seer", "witch", "hunter", "cupid", "villager"] as Role[])
-      .filter((role) => roleCounts[role] > 0)
-      .map((role) => `${roleCounts[role]} × ${roleNames[role]}`);
-    return (
-      <main className="reference-app reference-day" id="top">
-        {header}
-        {homeButton}
-        <section className="reference-stage setup-stage scene-enter">
-          {setupStep === "mode" ? (
-            <div className="setup-flow">
-              <div className="stage-copy compact-copy">
-                <h1>Set up your game</h1>
-                <p>Choose your preferences, or say “start” with the defaults.</p>
-              </div>
-              <section className="setup-card mode-card" aria-label="Choose who to play with">
-                <h2>Who do you want to play?</h2>
-                <button
-                  className="mode-choice is-selected"
-                  type="button"
-                  onClick={() => setSetupStep("village")}
-                >
-                  <span aria-hidden="true">♙</span>
-                  Solo
-                </button>
-                <button className="mode-choice" type="button" disabled>
-                  With Friends
-                  <small>Coming soon…</small>
-                </button>
-              </section>
-            </div>
-          ) : (
-            <div className="setup-flow village-setup">
-              <div className="stage-copy compact-copy">
-                <h1>Set up your game</h1>
-                <p>Choose your preferences, or say “start” with the defaults.</p>
-              </div>
-              <div className="setup-grid">
-                <section className="setup-card player-count-card">
-                  <h2>Set up your village</h2>
-                  <div className="count-control">
-                    <button
-                      type="button"
-                      aria-label="Remove a player"
-                      onClick={() => setCount((value) => Math.max(4, value - 1))}
-                    >
-                      −
-                    </button>
-                    <strong>{count}</strong>
-                    <button
-                      type="button"
-                      aria-label="Add a player"
-                      onClick={() => setCount((value) => Math.min(12, value + 1))}
-                    >
-                      +
-                    </button>
-                  </div>
-                  <small>Players</small>
-                </section>
-                <section className="setup-card role-list-card">
-                  <h2>Roles</h2>
-                  {rolesForSetup.map((role) => (
-                    <p key={role}>{role}</p>
+  const helpBasics = (
+    <>
+      <p>
+        You receive one secret role. Every other villager is played by the computer. At night, roles
+        with powers act in secret. By day, the village discusses and votes to remove one player. The
+        village wins by removing every Werewolf; the Werewolves win when they equal or outnumber
+        everyone else.
+      </p>
+      <p>
+        Voice: {voiceStatus}
+        {voiceTranscript ? ` You said: “${voiceTranscript}”.` : ""}
+      </p>
+      <p>
+        {session
+          ? "Say or type “choose Emma”, “continue”, “describe the interface”, “read my role”, “read all messages”, “ask the villagers what they think”, “vote for Emma”, or “voice help”."
+          : "Say or type “start the game”, “start with the defaults”, or “start a quick test”."}
+      </p>
+      <p>
+        Audio: “repeat that”, “stop speaking”, “pause narration”, “speak slower”, “volume up”, “turn
+        auto read on”. Game: “pause game”, “resume game”, “pause voice control”.
+      </p>
+    </>
+  );
+  const dialogs = (
+    <>
+      {dialog === "audio" && (
+        <GameDialog title="Audio settings" onClose={() => setDialog(null)}>
+          {audioSection}
+        </GameDialog>
+      )}
+      {dialog === "help" && (
+        <GameDialog title="Help" onClose={() => setDialog(null)}>
+          <div className="ww-help">
+            {session && (
+              <>
+                <p>
+                  <strong>Your role: {roleNames[session.game.me.role]}.</strong>{" "}
+                  {session.game.me.investigations
+                    .map(
+                      (finding) =>
+                        `${finding.name} is ${finding.result === "wolf" ? "a Werewolf" : "clear"}.`,
+                    )
+                    .join(" ")}
+                </p>
+                <p>{currentActionHelp(session.game)}</p>
+              </>
+            )}
+            {helpBasics}
+            {session && (
+              <>
+                <h3>Recent updates</h3>
+                <ul className="ww-history">
+                  {session.game.feed.slice(-6).map((entry) => (
+                    <li key={entry.id}>
+                      <strong>{entry.kind === "private" ? "Private guide" : entry.speaker}:</strong>{" "}
+                      {entry.text}
+                    </li>
                   ))}
-                </section>
+                </ul>
+                <div className="confirm-actions">
+                  <button
+                    type="button"
+                    className="btn btn-cancel"
+                    disabled={!openingAudio}
+                    onClick={replayOpeningBriefing}
+                  >
+                    Replay briefing
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-cancel"
+                    onClick={() => {
+                      setDialog(null);
+                      openNewGameSetup();
+                    }}
+                  >
+                    New game
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </GameDialog>
+      )}
+    </>
+  );
+
+  if (!session || !viewGame) {
+    if (loadingStage) {
+      const failed = stage === "prepare-error" || stage === "create-error";
+      return (
+        <main className="pbv-root ww-app ww-scene-loading">
+          <div className="ww-loading-art" aria-hidden="true" />
+          {header}
+          <section className="ww-loading" aria-labelledby="ww-heading">
+            {failed ? (
+              <div className="ww-loading-error" role="alert">
+                <h1 id="ww-heading" tabIndex={-1}>
+                  {stage === "prepare-error"
+                    ? "Loups-Garous could not load"
+                    : "The village could not be created"}
+                </h1>
+                <p>{error || "Something went wrong. Please try again."}</p>
+                <div>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      stage === "prepare-error"
+                        ? retryPreparation()
+                        : void create(undefined, lastCreateTestModeRef.current)
+                    }
+                  >
+                    Retry
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      stage === "prepare-error" ? leaveToGamePicker() : setStage("village")
+                    }
+                  >
+                    Back
+                  </button>
+                </div>
               </div>
-              <label className="explain-toggle">
-                <input
-                  type="checkbox"
-                  checked={explainAsWePlay}
-                  onChange={(event) => setExplainAsWePlay(event.target.checked)}
-                />
-                <span>Explain the game as we play</span>
-              </label>
-              <div className="setup-actions">
-                <button
-                  className="secondary-pill"
-                  type="button"
-                  onClick={() => setSetupStep("mode")}
-                >
-                  Back
-                </button>
-                <button
-                  className="primary-pill"
-                  type="button"
-                  disabled={busy}
-                  onClick={() => void create()}
-                >
-                  {busy ? "Starting…" : "Start game"}
+            ) : (
+              <div className="ww-loading-center" role="status" aria-live="polite">
+                <span className="ww-loading-visual" aria-hidden="true">
+                  <img
+                    className="ww-loading-shape"
+                    src={`${ART}/pentagon.svg`}
+                    width={190}
+                    height={181}
+                    alt=""
+                  />
+                </span>
+                <h1 id="ww-heading" tabIndex={-1}>
+                  Loading
+                </h1>
+                <span className="sr-only">
+                  {stage === "creating"
+                    ? "Creating your village and assigning secret roles."
+                    : "Preparing Loups-Garous."}
+                </span>
+              </div>
+            )}
+            {!failed && (
+              <button className="ww-loading-back" type="button" onClick={leaveToGamePicker}>
+                Go back to main
+              </button>
+            )}
+          </section>
+        </main>
+      );
+    }
+
+    const roleTotals = Object.entries(DEFAULT_ROLE_COUNTS[count] ?? {}).filter(
+      ([, total]) => total > 0,
+    ) as Array<[Role, number]>;
+    return (
+      <main className="pbv-root ww-app ww-scene-plain">
+        {header}
+        {rail}
+        <section className="ww-stage ww-setup" aria-labelledby="ww-setup-title">
+          <div className="ww-stage-intro">
+            <h1 id="ww-setup-title">Set up your game</h1>
+            <p>Choose your preferences, or say ‘Start with the defaults.’</p>
+          </div>
+          {stage === "mode" ? (
+            <>
+              <div className="ww-panel ww-mode-panel">
+                <h2 id="ww-heading" tabIndex={-1}>
+                  Who do you want to play?
+                </h2>
+                <div className="ww-mode-options">
+                  <button
+                    className="ww-mode-option is-selected"
+                    type="button"
+                    aria-pressed="true"
+                    onClick={() => setStage("village")}
+                  >
+                    <img src={`${ART}/player.svg`} width={24} height={24} alt="" />
+                    <span>Solo</span>
+                  </button>
+                  <button className="ww-mode-option" type="button" disabled>
+                    <span>With Friends</span>
+                    <span>Coming soon..</span>
+                  </button>
+                </div>
+              </div>
+              <button
+                className="ww-text-button"
+                type="button"
+                disabled={busy}
+                onClick={() => void create(undefined, true)}
+              >
+                Try a quick test · 4 players, you are the Seer
+              </button>
+            </>
+          ) : (
+            <form className="ww-village-setup" onSubmit={create}>
+              <div className="ww-village-config">
+                <div className="ww-panel ww-count-panel">
+                  <h2 id="ww-heading" tabIndex={-1}>
+                    Set up your village
+                  </h2>
+                  <div className="ww-count-setting">
+                    <div className="ww-stepper" role="group" aria-labelledby="ww-count-label">
+                      <button
+                        className="ww-step-button is-decrease"
+                        type="button"
+                        disabled={count <= MIN_VILLAGE}
+                        onClick={() => setCount((value) => Math.max(MIN_VILLAGE, value - 1))}
+                      >
+                        <img src={`${ART}/minus.svg`} width={24} height={24} alt="" />
+                        <span className="sr-only">Fewer players</span>
+                      </button>
+                      <output className="ww-count-value" aria-live="polite">
+                        {count}
+                        <span className="sr-only"> players</span>
+                      </output>
+                      <button
+                        className="ww-step-button is-increase"
+                        type="button"
+                        disabled={count >= MAX_VILLAGE}
+                        onClick={() => setCount((value) => Math.min(MAX_VILLAGE, value + 1))}
+                      >
+                        <img src={`${ART}/plus.svg`} width={24} height={24} alt="" />
+                        <span className="sr-only">More players</span>
+                      </button>
+                    </div>
+                    <p className="ww-count-label" id="ww-count-label">
+                      Players
+                    </p>
+                  </div>
+                </div>
+                <div className="ww-panel ww-roles-panel">
+                  <h3>Roles</h3>
+                  <ul>
+                    {roleTotals.map(([role, total]) => (
+                      <li key={role}>
+                        <span className="ww-role-total">{total}</span>
+                        <span className="ww-role-times">x</span>
+                        <span className="ww-role-total">{roleNames[role]}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+              <div className="ww-village-footer">
+                <label className="ww-panel ww-guidance">
+                  <input
+                    type="checkbox"
+                    checked={explainGame}
+                    onChange={(event) => setExplainGame(event.target.checked)}
+                  />
+                  <span className="ww-check-box" aria-hidden="true">
+                    <img src={`${ART}/guidance-check.svg`} width={12} height={12} alt="" />
+                  </span>
+                  Explain the game as we play
+                </label>
+                <button className="ww-start-button" type="submit" disabled={busy}>
+                  <span>Start game</span>
                 </button>
               </div>
-            </div>
+            </form>
           )}
           {error && (
-            <p className="stage-error" role="alert">
+            <p className="ww-error" role="alert">
               {error}
             </p>
           )}
-          {renderMoon()}
         </section>
         {voiceDock}
+        {dialogs}
       </main>
     );
   }
 
-  const game = presentedGame ?? session.game;
+  const game = viewGame;
   const me = game.me;
+  const interactionLocked = busy;
   const alive = game.players.filter((player) => player.alive);
   const others = alive.filter((player) => player.id !== me.id);
-  // A spoken or clicked action intentionally interrupts old narration in
-  // perform(), so it must remain available while a phase line is playing.
-  const interactionLocked = busy;
-  const roleCopy: Record<Role, { symbol: string; goal: string; short: string; detail: string }> = {
-    seer: {
-      symbol: "◆",
-      short: "You can discover the true identity of one player every night.",
-      goal: "Help the village find and eliminate every Werewolf before they take over.",
-      detail:
-        "During the night, choose one player. I will tell you whether they are a Werewolf. Keep your role secret during the discussion.",
-    },
-    werewolf: {
-      symbol: "◒",
-      short: "Choose a target with the pack every night and keep your identity hidden.",
-      goal: "Let the Werewolves outnumber the rest of the village.",
-      detail:
-        "During the night, choose a non-wolf target or say let the pack decide. During the day, blend in and direct suspicion away from the pack.",
-    },
-    witch: {
-      symbol: "✦",
-      short: "You have one healing potion and one poison potion for the whole game.",
-      goal: "Use your potions wisely to protect the village.",
-      detail:
-        "At night, say save, poison a player, pass, or choose for me. Your potions are private and each can be used only once.",
-    },
-    hunter: {
-      symbol: "✹",
-      short: "If you are eliminated, you take one final shot before the game continues.",
-      goal: "Help the village remove every Werewolf.",
-      detail:
-        "Stay alert through the discussion. If you fall, choose another living player for your final shot.",
-    },
-    cupid: {
-      symbol: "♥",
-      short: "At the start of the game, bind two villagers as lovers.",
-      goal: "Choose carefully: if one lover dies, the other dies too.",
-      detail:
-        "Name two players during the opening night. Their bond stays hidden, but their fate is linked.",
-    },
-    villager: {
-      symbol: "●",
-      short: "You have no night power, so your voice and judgement matter by day.",
-      goal: "Help the village find and eliminate every Werewolf.",
-      detail:
-        "Listen closely, question players in the discussion, and vote when the village is ready.",
-    },
-  };
-  const role = roleCopy[me.role];
-  const latestFinding = me.investigations.at(-1);
-  const accentClass = (index: number) => `accent-${(index % 6) + 1}`;
-  const displayedPlayers = [
-    ...game.players.filter((player) => player.id !== me.id),
-    game.players.find((player) => player.id === me.id),
-  ].filter((player): player is GameView["players"][number] => Boolean(player));
-  const selectTarget = (playerId: string, multiple = false) => {
+  const toggleTarget = (id: string) =>
     setSelected((current) =>
-      multiple
-        ? current.includes(playerId)
-          ? current.filter((value) => value !== playerId)
-          : [...current, playerId]
-        : [playerId],
+      current.includes(id) ? current.filter((item) => item !== id) : [...current, id],
     );
+  const roleHint =
+    me.role === "werewolf"
+      ? `Your pack: ${me.werewolfTeam?.join(", ") || "you are the lone wolf"}.`
+      : me.role === "seer"
+        ? "Choose a villager to investigate each night."
+        : me.role === "witch"
+          ? `Healing potion ${me.witchHealAvailable ? "ready" : "used"}; poison ${me.witchPoisonAvailable ? "ready" : "used"}.${me.wolfVictim ? ` The pack targeted ${me.wolfVictim}.` : ""}`
+          : me.role === "cupid"
+            ? "Choose two players to bind as lovers."
+            : me.role === "hunter"
+              ? "If eliminated, you get one final shot."
+              : "Help the village find the Werewolves.";
+  const hasDiscussion = game.feed.some(
+    (entry) => entry.kind === "speech" && entry.day === game.day,
+  );
+  const latestEvent = [...game.feed].reverse().find((entry) => entry.kind === "event");
+  const latestUpdate = latestEvent ?? game.feed.at(-1);
+  const updateIsLoss =
+    latestUpdate?.kind === "event" &&
+    /\b(eliminat\w*|exiled?|died|dies|killed|found dead|shot|did not survive)\b/iu.test(
+      latestUpdate.text,
+    );
+  const card = roleCards[me.role];
+  const colorFor = (player: PublicPlayerView) => {
+    if (player.id === me.id) return MY_COLOR;
+    const index = game.players.filter((item) => item.id !== me.id).indexOf(player);
+    return PLAYER_COLORS[index % PLAYER_COLORS.length];
   };
-  const playerStrip = (
-    options: { selectable?: boolean; multiple?: boolean; excludeSelf?: boolean } = {},
-  ) => {
-    return (
-      <div className="player-strip" aria-label="Village players">
-        {displayedPlayers
-          .filter((player) => !options.excludeSelf || player.id !== me.id)
-          .map((player, index) => {
-            const isSelected = selected.includes(player.id);
-            const selectable = Boolean(options.selectable && player.alive && !interactionLocked);
-            return (
+  const roleSymbol = (role: Role, size = 40) =>
+    role === "seer" ? (
+      <img src={`${ART}/seer-symbol.svg`} width={size} height={size} alt="" />
+    ) : role === "werewolf" ? (
+      <img src={`${ART}/werewolf.png`} width={size} height={size} alt="" />
+    ) : (
+      <span
+        className="ww-role-shape"
+        style={{ background: roleCards[role].color, width: size, height: size }}
+      />
+    );
+
+  const voteLabel = (count: number) => `${count} ${count === 1 ? "vote" : "votes"}`;
+  const playerCards = (
+    selectable: (player: PublicPlayerView) => boolean = () => false,
+    multiple = false,
+    options: {
+      isSelected?: (player: PublicPlayerView) => boolean;
+      onChoose?: (player: PublicPlayerView) => void;
+      detail?: (player: PublicPlayerView) => ReactNode;
+    } = {},
+  ) => (
+    <ul className="ww-players" aria-label="Players">
+      {game.players.map((player) => {
+        const isMe = player.id === me.id;
+        const isSelected = options.isSelected
+          ? options.isSelected(player)
+          : selected.includes(player.id);
+        const votes =
+          game.phase === "vote" && player.alive ? game.voteTally?.[player.id] : undefined;
+        const speaking = storyAudio.activeSpeaker === player.name;
+        const content = (
+          <>
+            <span className="ww-player-name">{isMe ? "You" : player.name}</span>
+            <span className="ww-dot" style={{ background: colorFor(player) }} aria-hidden="true" />
+            {/* Roles are public only after the game ends. */}
+            {/* The server reveals a role only once a player is eliminated or the game ends. */}
+            {player.revealedRole && (
+              <span className="ww-player-detail">{roleNames[player.revealedRole]}</span>
+            )}
+            {!player.alive && <span className="ww-player-detail">Eliminated</span>}
+            {options.detail?.(player)}
+            {votes !== undefined && <span className="ww-player-votes">{voteLabel(votes)}</span>}
+            {speaking && <span className="sr-only">, speaking</span>}
+          </>
+        );
+        const className = `ww-player${player.alive ? "" : " is-dead"}${speaking ? " is-speaking" : ""}${isSelected ? " is-selected" : ""}`;
+        return (
+          <li key={player.id}>
+            {selectable(player) ? (
               <button
-                className={`player-tile ${accentClass(index)} ${isSelected ? "is-selected" : ""} ${!player.alive ? "is-out" : ""}`}
-                disabled={!selectable}
-                aria-pressed={isSelected}
-                onClick={() => selectTarget(player.id, options.multiple)}
-                key={player.id}
                 type="button"
+                className={className}
+                aria-pressed={isSelected}
+                disabled={interactionLocked}
+                onClick={() =>
+                  options.onChoose
+                    ? options.onChoose(player)
+                    : multiple
+                      ? toggleTarget(player.id)
+                      : setSelected([player.id])
+                }
               >
-                <span>{player.id === me.id ? "You" : player.name}</span>
-                <i aria-hidden="true" />
-                {!player.alive && <small>Out</small>}
+                {content}
               </button>
-            );
-          })}
-      </div>
-    );
-  };
+            ) : (
+              <div className={className}>{content}</div>
+            )}
+          </li>
+        );
+      })}
+    </ul>
+  );
 
-  const playerName = (id: string | undefined) =>
-    game.players.find((player) => player.id === id)?.name;
-  const latestVoteTarget = playerName(game.lastVoteResult?.exiledPlayerId);
-  const latestVoteRole = game.players.find(
-    (player) => player.id === game.lastVoteResult?.exiledPlayerId,
-  )?.revealedRole;
+  const updateLine = (
+    <p
+      className={`ww-update${updateIsLoss ? " is-loss" : ""}${latestUpdate ? "" : " is-empty"}`}
+      role="status"
+      aria-live="polite"
+    >
+      {latestUpdate && (
+        <>
+          <span className="sr-only">
+            {latestUpdate.kind === "private" ? "Private update: " : "Village update: "}
+          </span>
+          {latestUpdate.text}
+        </>
+      )}
+    </p>
+  );
 
-  const renderNormalStage = () => {
-    if (game.paused) {
-      return (
-        <div className="phase-stack pause-card scene-enter">
-          <div className="stage-copy">
-            <h1>The village is waiting.</h1>
-            <p>The game is paused.</p>
-          </div>
-          <button className="primary-pill" type="button" onClick={() => void act("resume")}>
-            Resume game
-          </button>
+  let stageContent: ReactNode;
+  if (introView === "village") {
+    stageContent = (
+      <>
+        <div className="ww-stage-intro">
+          <h1 id="ww-heading" tabIndex={-1}>
+            Meet the Village
+          </h1>
+          <p>
+            These are the people
+            <br />
+            you’ll be playing with tonight.
+          </p>
         </div>
-      );
-    }
-    if (!me.alive && game.phase !== "over" && (game.phase !== "hunter" || !me.hunterActionPending)) {
-      const canContinue = game.phase === "day" || game.phase === "vote" || game.phase === "night";
-      return (
-        <div className="phase-stack pause-card scene-enter">
-          <div className="stage-copy">
-            <h1>You are watching</h1>
-            <p>The village continues without you.</p>
-          </div>
-          {canContinue && (
-            <button
-              className="primary-pill"
-              type="button"
-              disabled={interactionLocked}
-              onClick={() => void act("continue")}
-            >
-              Continue watching
-            </button>
-          )}
-        </div>
-      );
-    }
-    if (game.phase === "prologue") {
-      return (
-        <div className="phase-stack meet-stage scene-enter">
-          <div className="stage-copy">
-            <h1>Meet the Village</h1>
-            <p>
-              These are the people
-              <br />
-              you’ll be playing with tonight.
-            </p>
-          </div>
-          {playerStrip()}
-          <div className="speech-stack">
-            <p>
-              Some of them are villagers.
-              <br />
-              Some may be Werewolves.
-            </p>
-            <strong>Their roles are hidden.</strong>
-          </div>
-          <button className="gold-pill" type="button" onClick={() => setOnboardingStep("role")}>
+        {playerCards()}
+        <div className="ww-intro-notes">
+          <p className="ww-note">
+            Some of them are villagers.
+            <br />
+            Some may be werewolves.
+          </p>
+          <p className="ww-note is-dark">Their roles are hidden.</p>
+          <button className="ww-pill is-primary" type="button" onClick={() => setIntroStep("role")}>
             Continue
           </button>
         </div>
-      );
-    }
-    if (game.phase === "cupid") {
-      if (me.role !== "cupid") {
-        return (
-          <div className="phase-stack night-turn scene-enter">
-            <div className="stage-copy">
-              <h1>The village is waiting</h1>
-              <p>Cupid is choosing the lovers.</p>
-            </div>
+      </>
+    );
+  } else if (introView === "role" || introView === "role-details") {
+    stageContent = (
+      <>
+        <h1 id="ww-heading" className="ww-section-title" tabIndex={-1}>
+          Your Role
+        </h1>
+        <div
+          className={`ww-role-flip${introView === "role-details" ? " is-flipped" : ""}`}
+          style={{ "--role-color": card.color } as CSSProperties}
+        >
+          <div className="ww-role-inner">
+            <article
+              className="ww-role-card ww-role-face is-front"
+              aria-labelledby="ww-role-card-title"
+              aria-hidden={introView === "role-details" || undefined}
+              inert={introView === "role-details" || undefined}
+            >
+              <span className="ww-role-glow" aria-hidden="true" />
+              <div className="ww-role-front">
+                <div className="ww-role-identity">
+                  {roleSymbol(me.role)}
+                  <h2 id="ww-role-card-title" tabIndex={-1}>
+                    The {roleNames[me.role]}
+                  </h2>
+                </div>
+                <p>{card.summary}</p>
+              </div>
+              <button
+                className="ww-pill is-dark"
+                type="button"
+                onClick={() => flipRoleCard("role-details")}
+              >
+                Read about role
+              </button>
+            </article>
+            <article
+              className="ww-role-card ww-role-face is-back"
+              aria-labelledby="ww-role-back-title"
+              aria-hidden={introView !== "role-details" || undefined}
+              inert={introView !== "role-details" || undefined}
+            >
+              <span className="ww-role-glow" aria-hidden="true" />
+              <div className="ww-role-back">
+                <h2 id="ww-role-back-title" tabIndex={-1}>
+                  How your role works
+                </h2>
+                <ul>
+                  {card.howItWorks.map((line) => (
+                    <li key={line}>{line}</li>
+                  ))}
+                  {me.role === "werewolf" && <li>{roleHint}</li>}
+                  {me.lover && <li>You are bound to {me.lover}.</li>}
+                </ul>
+                <h3>Your Goal</h3>
+                <p>{card.goal}</p>
+              </div>
+              <button
+                className="ww-pill is-dark"
+                type="button"
+                onClick={() => flipRoleCard("role")}
+              >
+                Back to role
+              </button>
+            </article>
           </div>
-        );
-      }
-      return (
-        <div className="phase-stack night-turn scene-enter">
-          <div className="stage-copy">
-            <h1>Your Turn</h1>
-            <p>Who do you want to bind as lovers?</p>
-          </div>
-          {playerStrip({ selectable: true, multiple: true, excludeSelf: true })}
-          <p className="voice-prompt">Say “choose” followed by two names, or select two players.</p>
-          <button
-            className="primary-pill"
-            disabled={interactionLocked || selected.length !== 2}
-            type="button"
-            onClick={() => void act("lovers", { first: selected[0], second: selected[1] })}
-          >
-            Bind hearts
+        </div>
+        <button
+          className="ww-pill is-primary"
+          type="button"
+          disabled={interactionLocked}
+          onClick={() => {
+            if (game.phase === "prologue") void act("begin-story");
+            else setIntroStep(null);
+          }}
+        >
+          I’m ready
+        </button>
+      </>
+    );
+  } else if (voteOutcome && !voteOutcome.revealing) {
+    const { result } = voteOutcome;
+    const exiled = game.players.find((player) => player.id === result.exiledPlayerId);
+    const received = (player: PublicPlayerView) =>
+      result.tally.find((entry) => entry.target === player.id)?.votes ?? 0;
+    stageContent = (
+      <>
+        <h1 id="ww-heading" className="ww-display" tabIndex={-1}>
+          The village has voted
+        </h1>
+        {playerCards(() => false, false, {
+          detail: (player) =>
+            player.alive || player.id === exiled?.id ? (
+              <span className="ww-player-votes">{voteLabel(received(player))}</span>
+            ) : null,
+        })}
+        <p className="ww-update is-loss" role="status">
+          {exiled
+            ? `${exiled.id === me.id ? "You have" : `${exiled.name} has`} been eliminated.`
+            : "The vote was tied. No one leaves the village."}
+        </p>
+        <button
+          className="ww-pill is-primary"
+          type="button"
+          onClick={() =>
+            exiled ? setVoteOutcome({ result, revealing: true }) : setVoteOutcome(undefined)
+          }
+        >
+          Continue
+        </button>
+      </>
+    );
+  } else if (voteOutcome?.revealing) {
+    const exiled = game.players.find((player) => player.id === voteOutcome.result.exiledPlayerId);
+    const role = exiled?.revealedRole;
+    stageContent = (
+      <article className="ww-result-card" aria-labelledby="ww-heading">
+        <h1 id="ww-heading" tabIndex={-1}>
+          {exiled?.id === me.id ? "You were....." : `${exiled?.name ?? "They"} was.....`}
+        </h1>
+        {role && roleSymbol(role, 48)}
+        <h2>
+          {role
+            ? `${/^[aeiou]/iu.test(roleNames[role]) ? "An" : "A"} ${roleNames[role].toLowerCase()}`
+            : "Unknown"}
+        </h2>
+        <button className="ww-pill is-dark" type="button" onClick={() => setVoteOutcome(undefined)}>
+          Continue
+        </button>
+      </article>
+    );
+  } else if (pendingFinding) {
+    const findingPlayer = game.players.find((player) => player.name === pendingFinding.name);
+    stageContent = (
+      <article className="ww-result-card" aria-labelledby="ww-heading">
+        <h1 id="ww-heading" tabIndex={-1}>
+          {pendingFinding.name}
+        </h1>
+        {findingPlayer && (
+          <span
+            className="ww-dot"
+            style={{ background: colorFor(findingPlayer) }}
+            aria-hidden="true"
+          />
+        )}
+        <h2>{pendingFinding.result === "wolf" ? "A Werewolf" : "Not a Werewolf"}</h2>
+        <p>
+          Remember this information.
+          <br />
+          The other players don’t know
+          <br />
+          what you’ve discovered.
+        </p>
+        <button
+          className="ww-pill is-dark"
+          type="button"
+          onClick={() => setSeenInvestigations(me.investigations.length)}
+        >
+          Continue
+        </button>
+      </article>
+    );
+  } else if (transitioning) {
+    const phase = session.game.phase;
+    stageContent = (
+      <>
+        <h1 id="ww-heading" className="ww-display" tabIndex={-1}>
+          {phase === "night"
+            ? "The village falls asleep."
+            : phase === "day"
+              ? "The village wakes up."
+              : phase === "vote"
+                ? "Time to vote"
+                : phase === "over"
+                  ? "The story ends."
+                  : "The story continues."}
+        </h1>
+        {updateLine}
+        <button className="ww-pill is-dark" type="button" onClick={storyAudio.stop}>
+          Skip narration
+        </button>
+      </>
+    );
+  } else if (game.paused) {
+    stageContent = (
+      <>
+        <h1 id="ww-heading" className="ww-display" tabIndex={-1}>
+          The game is paused.
+        </h1>
+        <p className="ww-stage-copy">
+          The village will not progress until you say “resume game” or use this button.
+        </p>
+        <button
+          className="ww-pill is-primary"
+          type="button"
+          disabled={interactionLocked}
+          onClick={() => void act("resume")}
+        >
+          Resume game
+        </button>
+      </>
+    );
+  } else if (game.phase === "over") {
+    const title =
+      game.winner === "village"
+        ? "The village wins"
+        : game.winner === "lovers"
+          ? "Love survives"
+          : "The werewolves win";
+    stageContent = (
+      <>
+        <h1 id="ww-heading" className="ww-display" tabIndex={-1}>
+          {title}
+        </h1>
+        {latestEvent && <p className="ww-outcome">{latestEvent.text}</p>}
+        <div className="ww-final-role">
+          <p>{me.alive ? "You survived as" : "You played as"}</p>
+          <p className="ww-final-role-name">THE {roleNames[me.role].toUpperCase()}</p>
+        </div>
+        <div className="ww-actions">
+          <button className="ww-pill is-dark" type="button" onClick={leaveToGamePicker}>
+            Home
+          </button>
+          <button className="ww-pill is-primary" type="button" onClick={openNewGameSetup}>
+            Play again
           </button>
         </div>
-      );
-    }
-    if (game.phase === "night") {
-      const canPoison = me.role === "witch" && me.witchPoisonAvailable;
-      const canTarget = me.role === "seer" || me.role === "werewolf" || canPoison;
-      const prompt =
-        me.role === "seer"
-          ? "Who do you want to investigate?"
-          : me.role === "werewolf"
-            ? "Who do you want to choose tonight?"
-            : me.role === "witch"
-              ? "What will you do tonight?"
-              : "The village is asleep.";
-      const candidates =
-        me.role === "werewolf"
-          ? game.players.filter(
-              (player) =>
-                player.alive && player.id !== me.id && !me.werewolfTeam?.includes(player.name),
-            )
-          : me.role === "witch"
-            ? others.filter((player) => !heal || player.name !== me.wolfVictim)
-            : others;
-      return (
-        <div className="phase-stack night-turn scene-enter">
-          <div className="stage-copy">
-            <h1>Your Turn</h1>
-            <p>{prompt}</p>
-          </div>
-          {canTarget && (
-            <div className="player-strip">
-              {candidates.map((player, index) => (
-                <button
-                  className={`player-tile ${accentClass(index)} ${selected.includes(player.id) ? "is-selected" : ""}`}
-                  disabled={interactionLocked}
-                  aria-pressed={selected.includes(player.id)}
-                  onClick={() => selectTarget(player.id)}
-                  key={player.id}
-                  type="button"
-                >
-                  <span>{player.name}</span>
-                  <i aria-hidden="true" />
-                </button>
-              ))}
-            </div>
-          )}
-          {me.role === "witch" && me.witchHealAvailable && me.wolfVictim && (
-            <label className="potion-choice">
-              <input
-                type="checkbox"
-                checked={heal}
-                disabled={interactionLocked}
-                onChange={(event) => {
-                  const shouldHeal = event.target.checked;
-                  setHeal(shouldHeal);
-                  if (
-                    shouldHeal &&
-                    game.players.find((player) => player.id === selected[0])?.name === me.wolfVictim
-                  )
-                    setSelected([]);
-                }}
-              />{" "}
-              Save {me.wolfVictim}
-            </label>
-          )}
-          <p className="voice-prompt">
-            {me.role === "seer"
-              ? "Say “investigate” and a name."
-              : me.role === "werewolf"
-                ? "Say “hunt” and a name, or “let the pack decide.”"
-                : me.role === "witch"
-                  ? "Say “save”, “poison” and a name, or “pass.”"
-                  : "Say “wait for dawn” to continue."}
-          </p>
-          <div className="stage-actions">
-            {me.role === "werewolf" && (
-              <button
-                className="secondary-pill"
-                type="button"
-                disabled={interactionLocked}
-                onClick={() => void act("night")}
-              >
-                Let the pack decide
-              </button>
-            )}
+        {playerCards()}
+        {game.lastVotes && (
+          <details className="ww-final-votes">
+            <summary>Final votes</summary>
+            {game.lastVotes.map((vote, index) => (
+              <p key={index}>
+                {game.players.find((player) => player.id === vote.voter)?.name} voted for{" "}
+                {game.players.find((player) => player.id === vote.target)?.name}
+              </p>
+            ))}
+          </details>
+        )}
+      </>
+    );
+  } else if (!me.alive && !me.hunterActionPending) {
+    stageContent = (
+      <>
+        <h1 id="ww-heading" className="ww-display" tabIndex={-1}>
+          You are out
+        </h1>
+        <p className="ww-stage-copy">The village will finish the game.</p>
+        {updateLine}
+        {playerCards()}
+        <button
+          className="ww-pill is-primary"
+          type="button"
+          disabled={interactionLocked}
+          onClick={() => void act("continue")}
+        >
+          Continue watching
+        </button>
+      </>
+    );
+  } else if (game.phase === "night") {
+    const actsAtNight = me.role === "werewolf" || me.role === "seer" || me.role === "witch";
+    // The Witch's own card is included: selecting tonight's victim, including "You", uses the heal.
+    const victim =
+      me.role === "witch" && me.witchHealAvailable && me.wolfVictim
+        ? game.players.find((player) => player.alive && player.name === me.wolfVictim)
+        : undefined;
+    const poisonTarget =
+      me.role === "witch" ? game.players.find((p) => p.id === selected[0]) : undefined;
+    const victimLabel = victim ? (victim.id === me.id ? "yourself" : victim.name) : "";
+    const candidate = (player: PublicPlayerView) =>
+      me.role === "witch"
+        ? player.id === victim?.id ||
+          (me.witchPoisonAvailable &&
+            player.alive &&
+            player.id !== me.id &&
+            player.name !== me.wolfVictim)
+        : player.alive &&
+          player.id !== me.id &&
+          (me.role === "seer" ||
+            (me.role === "werewolf" && !me.werewolfTeam?.includes(player.name)));
+    const witchCards = {
+      isSelected: (player: PublicPlayerView) =>
+        player.id === victim?.id ? heal : selected.includes(player.id),
+      onChoose: (player: PublicPlayerView) => {
+        if (player.id === victim?.id) setHeal((value) => !value);
+        else setSelected((current) => (current[0] === player.id ? [] : [player.id]));
+      },
+      detail: (player: PublicPlayerView) =>
+        player.id === victim?.id ? (
+          <span className="ww-player-detail">
+            Targeted tonight
+            <span className="sr-only">. Select to save {victimLabel}.</span>
+          </span>
+        ) : candidate(player) ? (
+          <span className="sr-only">. Select to poison.</span>
+        ) : null,
+    };
+    stageContent = actsAtNight ? (
+      <>
+        <h1 id="ww-heading" className="ww-display" tabIndex={-1}>
+          Your Turn
+        </h1>
+        <h2 className="ww-question">
+          {me.role === "seer"
+            ? "Who do you want to investigate?"
+            : me.role === "werewolf"
+              ? "Who does your pack choose tonight?"
+              : victim && me.witchPoisonAvailable
+                ? "Save their target, poison someone, or let the night pass."
+                : victim
+                  ? "Save their target, or let the night pass."
+                  : me.witchPoisonAvailable
+                    ? "Use your poison, or let the night pass."
+                    : "Let the night pass."}
+        </h2>
+        {updateLine}
+        {me.role === "witch" ? playerCards(candidate, false, witchCards) : playerCards(candidate)}
+        <div className="ww-actions">
+          {me.role === "werewolf" && (
             <button
-              className="primary-pill"
+              className="ww-pill is-dark"
               type="button"
-              disabled={
-                interactionLocked ||
-                ((me.role === "seer" || me.role === "werewolf") && !selected[0])
-              }
-              onClick={() => {
-                const values =
-                  me.role === "witch"
-                    ? {
-                        ...(canPoison && selected[0] ? { poison: selected[0] } : {}),
-                        ...(heal ? { heal: true } : {}),
-                      }
-                    : selected[0]
-                      ? { target: selected[0] }
-                      : {};
-                void act("night", values);
-              }}
+              disabled={interactionLocked}
+              onClick={() => void act("night")}
             >
-              {canTarget ? "Continue" : "Wait for dawn"}
+              Let the pack decide
             </button>
-          </div>
+          )}
+          <button
+            className="ww-pill is-primary"
+            type="button"
+            disabled={
+              interactionLocked ||
+              ((me.role === "werewolf" || me.role === "seer") && selected.length !== 1)
+            }
+            onClick={() =>
+              void act(
+                "night",
+                me.role === "witch"
+                  ? {
+                      ...(poisonTarget ? { poison: poisonTarget.id } : {}),
+                      ...(heal && victim ? { save: victim.id } : {}),
+                    }
+                  : selected[0]
+                    ? { target: selected[0] }
+                    : {},
+              )
+            }
+          >
+            {me.role === "seer"
+              ? "Investigate"
+              : me.role === "werewolf"
+                ? "Choose target"
+                : heal && victim && poisonTarget
+                  ? "Use both potions"
+                  : heal && victim
+                    ? `Save ${victimLabel}`
+                    : poisonTarget
+                      ? `Poison ${poisonTarget.name}`
+                      : "Let the night pass"}
+          </button>
         </div>
+      </>
+    ) : (
+      <>
+        <h1 id="ww-heading" className="ww-display" tabIndex={-1}>
+          The village falls asleep.
+        </h1>
+        <p className="ww-stage-copy">Rest until morning.</p>
+        {updateLine}
+        <button
+          className="ww-pill is-primary"
+          type="button"
+          disabled={interactionLocked}
+          onClick={() => void act("night")}
+        >
+          Wait for dawn
+        </button>
+      </>
+    );
+  } else if (game.phase === "cupid") {
+    stageContent =
+      me.role === "cupid" ? (
+        <>
+          <h1 id="ww-heading" className="ww-display" tabIndex={-1}>
+            Your Turn
+          </h1>
+          <h2 className="ww-question">Choose two lovers.</h2>
+          {playerCards((player) => player.alive && player.id !== me.id, true)}
+          <button
+            className="ww-pill is-primary"
+            type="button"
+            disabled={interactionLocked || selected.length !== 2}
+            onClick={() => void act("lovers", { first: selected[0], second: selected[1] })}
+          >
+            Bind their hearts
+          </button>
+        </>
+      ) : (
+        <>
+          <h1 id="ww-heading" className="ww-display" tabIndex={-1}>
+            Cupid is choosing.
+          </h1>
+          {updateLine}
+        </>
       );
-    }
-    if (game.phase === "day") {
-      return (
-        <div className="phase-stack discussion-stage scene-enter">
-          <div className="stage-copy">
-            <h1>Discussion</h1>
+  } else if (game.phase === "day") {
+    const examples = others.slice(0, 3).map((player) => player.name);
+    stageContent = (
+      <>
+        <h1 id="ww-heading" className="ww-display" tabIndex={-1}>
+          {hasDiscussion ? "Discussion" : "The village wakes up."}
+        </h1>
+        {updateLine}
+        {playerCards()}
+        <p className="ww-stage-copy">Ask, accuse or listen.</p>
+        {examples.length > 0 && (
+          <div className="ww-examples">
+            <p>Examples:</p>
+            <p>“{examples[0]}, who do you suspect?”</p>
+            {examples[1] && <p>“Ask {examples[1]} where they were.”</p>}
+            {examples[2] && <p>“I think {examples[2]} is suspicious.”</p>}
           </div>
-          {playerStrip()}
-          <p className="voice-prompt">Ask, accuse, or listen.</p>
-          <p className="examples">
-            Examples:
-            <br />“{game.players.find((player) => player.id !== me.id)?.name}, who do you suspect?”
-            <br />
-            “Tell the village I am suspicious.”
-          </p>
-          <div className="stage-actions">
+        )}
+        <form
+          className="ww-speak"
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (message.trim()) void act("speak", { message });
+          }}
+        >
+          <label htmlFor="ww-message">Speak to the village</label>
+          <textarea
+            id="ww-message"
+            value={message}
+            maxLength={400}
+            placeholder="Share a thought publicly — villagers will respond…"
+            onChange={(event) => setMessage(event.target.value)}
+          />
+          <div className="ww-actions">
             <button
-              className="secondary-pill"
+              className="ww-pill is-dark"
+              type="submit"
+              disabled={interactionLocked || !message.trim()}
+            >
+              Speak
+            </button>
+            <button
+              className="ww-pill is-light"
               type="button"
               disabled={interactionLocked}
               onClick={() => void act("discuss")}
             >
-              Hear villagers
+              Hear the villagers
             </button>
             <button
-              className="primary-pill"
+              className="ww-pill is-primary"
               type="button"
               disabled={interactionLocked}
               onClick={() => void act("begin-vote")}
@@ -1773,261 +2688,84 @@ export default function WerewolfApp({
               Begin vote
             </button>
           </div>
-        </div>
-      );
-    }
-    if (game.phase === "vote") {
-      return (
-        <div className="phase-stack vote-stage scene-enter">
-          <div className="stage-copy">
-            <h1>Time to vote</h1>
-            <p>Who should leave the village?</p>
-          </div>
-          {playerStrip({ selectable: true, excludeSelf: true })}
-          <p className="voice-prompt">Say “vote for” and a player’s name.</p>
-          <button
-            className="primary-pill"
-            type="button"
-            disabled={interactionLocked || !selected[0]}
-            onClick={() => void act("vote", { target: selected[0] })}
-          >
-            Cast vote
-          </button>
-        </div>
-      );
-    }
-    if (game.phase === "hunter") {
-      if (!me.hunterActionPending) {
-        return (
-          <div className="phase-stack night-turn scene-enter">
-            <div className="stage-copy">
-              <h1>The village is waiting</h1>
-              <p>The Hunter is making a final choice.</p>
-            </div>
-          </div>
-        );
-      }
-      return (
-        <div className="phase-stack night-turn scene-enter">
-          <div className="stage-copy">
-            <h1>One last shot</h1>
-            <p>Who will you take with you?</p>
-          </div>
-          {playerStrip({ selectable: true, excludeSelf: true })}
-          <button
-            className="primary-pill"
-            type="button"
-            disabled={interactionLocked || !selected[0]}
-            onClick={() => void act("hunter-shot", { target: selected[0] })}
-          >
-            Take the shot
-          </button>
-        </div>
-      );
-    }
-    if (game.phase === "over") {
-      const villageWon = game.winner === "village";
-      return (
-        <div className={`phase-stack end-stage scene-enter ${villageWon ? "has-fireworks" : ""}`}>
-          {villageWon && (
-            <div className="fireworks" aria-hidden="true">
-              <i />
-              <i />
-              <i />
-            </div>
-          )}
-          <div className="stage-copy">
-            <h1>
-              {villageWon
-                ? "The village wins"
-                : game.winner === "lovers"
-                  ? "Love survives"
-                  : "The Werewolves win"}
-            </h1>
-            <p>
-              {villageWon
-                ? "Both Werewolves have been eliminated."
-                : "The village has reached its final night."}
-            </p>
-          </div>
-          <p className="survival-copy">You survived as</p>
-          <h2>{roleNames[me.role]}</h2>
-          <div className="stage-actions">
-            <button
-              className="secondary-pill"
-              type="button"
-              onClick={() => returnToSetup()}
-            >
-              Home
-            </button>
-            <button
-              className="gold-pill"
-              type="button"
-              onClick={() => returnToSetup("village")}
-            >
-              Play again
-            </button>
-          </div>
-        </div>
-      );
-    }
-    return (
-      <div className="phase-stack">
-        <div className="stage-copy">
-          <h1>The village waits.</h1>
-        </div>
-      </div>
+        </form>
+      </>
     );
-  };
-
-  let stage: ReactNode;
-  if (onboardingStep === "role") {
-    stage = (
-      <div className="phase-stack role-stage scene-enter">
-        <div className="stage-copy">
-          <h1>Your Role</h1>
-        </div>
-        <article className="role-card">
-          <span className="role-symbol">{role.symbol}</span>
-          <h2>The {roleNames[me.role]}</h2>
-          <div className="role-card-glow">
-            <p>{role.short}</p>
-            <button
-              className="primary-pill small-pill"
-              type="button"
-              onClick={() => setOnboardingStep("details")}
-            >
-              Read about role
-            </button>
-          </div>
-        </article>
-      </div>
-    );
-  } else if (onboardingStep === "details") {
-    stage = (
-      <div className="phase-stack role-stage scene-enter">
-        <div className="stage-copy">
-          <h1>Your Role</h1>
-        </div>
-        <article className="role-card detail-card">
-          <h2>How your role works</h2>
-          <p className="role-detail">• {role.detail}</p>
-          <div className="role-card-glow">
-            <h3>Your Goal</h3>
-            <p>{role.goal}</p>
-            <button
-              className="primary-pill small-pill"
-              type="button"
-              onClick={() => setOnboardingStep("role")}
-            >
-              Turn back
-            </button>
-          </div>
-        </article>
+  } else if (game.phase === "vote") {
+    stageContent = (
+      <>
+        <h1 id="ww-heading" className="ww-display" tabIndex={-1}>
+          Time to vote
+        </h1>
+        <h2 className="ww-question">Who should leave the village?</h2>
+        {playerCards((player) => player.alive && player.id !== me.id)}
+        {updateLine}
+        <p className="ww-stage-copy">Your vote is final.</p>
         <button
-          className="gold-pill"
+          className="ww-pill is-primary"
           type="button"
-          disabled={interactionLocked}
-          onClick={beginFirstNight}
+          disabled={interactionLocked || selected.length !== 1}
+          onClick={() => void act("vote", { target: selected[0] })}
         >
-          I’m ready
+          Cast vote
         </button>
-      </div>
+      </>
     );
-  } else if (onboardingStep === "moon") {
-    stage = <div className="moon-only scene-enter">{renderMoon(true)}</div>;
-  } else if (cinematic === "sleep") {
-    stage = (
-      <div className="cinematic-copy scene-enter">
-        <h1>The village falls asleep.</h1>
-      </div>
-    );
-  } else if (cinematic === "wake") {
-    stage = (
-      <div className="cinematic-copy scene-enter">
-        <h1>The village wakes up.</h1>
-      </div>
-    );
-  } else if (cinematic === "finding" && latestFinding) {
-    stage = (
-      <div className="finding-stage scene-enter">
-        <article className="finding-card">
-          <h2>{latestFinding.name}</h2>
-          <i className="accent-3" aria-hidden="true" />
-          <strong>{latestFinding.result === "wolf" ? "A Werewolf" : "Not a Werewolf"}</strong>
-          <p>Remember this information. The other players do not know what you discovered.</p>
-        </article>
-      </div>
-    );
-  } else if (cinematic === "vote" && game.lastVoteResult) {
-    stage = (
-      <div className="phase-stack vote-result-stage scene-enter">
-        <div className="stage-copy">
-          <h1>Time to vote</h1>
-          <p>Who should leave the village?</p>
-        </div>
-        <div className="player-strip vote-result-strip" aria-label="Vote results">
-          {displayedPlayers.map((player, index) => {
-            const votes = game.lastVoteResult?.tally.find(
-              (item) => item.target === player.id,
-            )?.votes;
-            return (
-              <div
-                className={`player-tile ${accentClass(index)} ${player.id === game.lastVoteResult?.exiledPlayerId ? "is-eliminated" : ""}`}
-                key={player.id}
-              >
-                <span>{player.id === me.id ? "You" : player.name}</span>
-                <i aria-hidden="true" />
-                {votes ? <b className="vote-count">{votes}</b> : null}
-              </div>
-            );
-          })}
-        </div>
-        <p className={`vote-outcome ${game.lastVoteResult.exiledPlayerId ? "" : "is-tie"}`}>
-          {game.lastVoteResult.exiledPlayerId
-            ? `${latestVoteTarget} has been eliminated.`
-            : "The vote is tied. No one leaves the village."}
-        </p>
-      </div>
-    );
-  } else if (cinematic === "reveal" && game.lastVoteResult && latestVoteTarget) {
-    stage = (
-      <div className="finding-stage role-reveal-stage scene-enter">
-        <article className="finding-card reveal-card">
-          <h2>{latestVoteTarget} was…</h2>
-          <span className="revealed-role-symbol" aria-hidden="true">
-            {latestVoteRole ? roleSymbols[latestVoteRole] : "?"}
-          </span>
-          <strong>{latestVoteRole ? `A ${roleNames[latestVoteRole]}` : "eliminated"}</strong>
-        </article>
-      </div>
+  } else if (game.phase === "hunter" && me.hunterActionPending) {
+    stageContent = (
+      <>
+        <h1 id="ww-heading" className="ww-display" tabIndex={-1}>
+          One last shot
+        </h1>
+        <h2 className="ww-question">Choose someone to take with you.</h2>
+        {updateLine}
+        {playerCards((player) => player.alive && player.id !== me.id)}
+        <button
+          className="ww-pill is-primary"
+          type="button"
+          disabled={interactionLocked || selected.length !== 1}
+          onClick={() => void act("hunter-shot", { target: selected[0] })}
+        >
+          Take the shot
+        </button>
+      </>
     );
   } else {
-    stage = renderNormalStage();
+    stageContent = (
+      <>
+        <h1 id="ww-heading" className="ww-display" tabIndex={-1}>
+          The story continues.
+        </h1>
+        {updateLine}
+        {playerCards()}
+      </>
+    );
   }
 
   return (
-    <main
-      className={`reference-app ${game.phase === "night" || game.phase === "cupid" || game.phase === "hunter" ? "reference-night" : "reference-day"}`}
-      id="top"
-    >
+    <main className={`pbv-root ww-app ww-scene-${scene} phase-${game.phase}`}>
+      <VillageSky
+        scene={scene === "night" || scene === "day" || scene === "victory" ? scene : "none"}
+      />
       {header}
-      {homeButton}
-      <section className="reference-stage game-stage">
-        {stage}
-        {busy && (
-          <p className="stage-progress" role="status">
-            <i aria-hidden="true" /> The guide is resolving your move…
-          </p>
-        )}
+      {rail}
+      <section
+        className={`ww-stage${introView ? " ww-intro" : " ww-phase"}`}
+        aria-labelledby="ww-heading"
+      >
+        {game.testMode && <p className="ww-test-banner">Quick test · You are the Seer</p>}
+        <p className="sr-only">
+          Day {game.day} · {phaseNames[game.phase]}
+        </p>
+        {stageContent}
         {error && (
-          <p className="stage-error" role="alert">
+          <p className="ww-error" role="alert">
             {error}
           </p>
         )}
-        {onboardingStep !== "moon" && renderMoon()}
       </section>
       {voiceDock}
+      {dialogs}
     </main>
   );
 }

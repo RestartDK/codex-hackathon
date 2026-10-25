@@ -1,5 +1,5 @@
 .pbv-root {
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: Inter, Arial, Helvetica, sans-serif;
   color: #111111;
   background: #ffffff;
   font-synthesis: none;
@@ -107,7 +107,35 @@
   .pbv-root .companion-dock::after {
     transition: opacity 150ms ease !important;
   }
-  .pbv-root .companion-orb {
+  .pbv-root .companion-liquid-orb,
+  .pbv-root .companion-orb,
+  .pbv-root .companion-liquid-orb .orb-glass {
     transform: none !important;
+    transition: none !important;
+  }
+  .pbv-root .companion-liquid-orb.liquid-glass-ready .orb-glass {
+    opacity: 1;
+  }
+  .pbv-root .start-game {
+    transition:
+      transform 0ms,
+      color 150ms ease-out,
+      background-color 150ms ease-out !important;
+  }
+  .pbv-root .start-game::before {
+    display: none;
+  }
+  .pbv-root .game-card.is-playable:hover .start-game,
+  .pbv-root .game-card-control:focus-visible .start-game {
+    background-color: #111;
+  }
+}
+
+@media (forced-colors: active) {
+  .pbv-root .companion-liquid-orb .orb-glass {
+    display: none;
+  }
+  .pbv-root .companion-liquid-orb.liquid-glass-ready > .companion-orb {
+    opacity: 1;
   }
 }

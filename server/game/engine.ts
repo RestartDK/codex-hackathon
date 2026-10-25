@@ -457,6 +457,14 @@ export function submitVote(game: Game, actorId: string, targetId: string) {
   if (actor.voteId) throw new Error("You have already voted.");
   actor.voteId = target.id;
 }
+export function voteTally(game: Game): Record<string, number> {
+  const tally: Record<string, number> = {};
+  for (const candidate of living(game)) tally[candidate.id] = 0;
+  for (const voter of living(game)) {
+    if (voter.voteId && voter.voteId in tally) tally[voter.voteId]! += 1;
+  }
+  return tally;
+}
 export function resolveVote(game: Game, random: () => number = Math.random) {
   if (game.phase !== "vote") throw new Error("Voting is not open.");
   const alive = living(game);
@@ -582,6 +590,8 @@ export function view(game: Game, viewerId: string): GameView {
       hunterActionPending: game.pendingHunters[0] === me.id,
     },
     feed: publicFeed,
+    // During a vote, expose only the current round's counts received, never who cast them.
+    ...(game.phase === "vote" ? { voteTally: voteTally(game) } : {}),
     ...(game.lastVotes ? { lastVotes: game.lastVotes } : {}),
     ...(game.lastVoteResult ? { lastVoteResult: game.lastVoteResult } : {}),
     ...(game.phase === "over" ? { winner: game.winner } : {}),
