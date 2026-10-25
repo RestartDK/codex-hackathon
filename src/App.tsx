@@ -531,6 +531,10 @@ export default function App() {
     const command = transcript.trim();
     if (!command) return;
     setVoiceTranscript(command);
+    // The Live model receives every microphone turn. Keep its remote audio
+    // quiet while the app carries out a game command and speaks the verified
+    // result. It is re-enabled below only for open-ended guide questions.
+    liveConnectionRef.current?.setGuideAudioEnabled(false);
     if (/\bpause\b.*\b(listening|voice control|microphone)\b/iu.test(command)) {
       setVoiceCommandsPaused(true);
       setVoiceStatus("Voice commands are paused. Say ‘resume listening’ to continue.");
@@ -719,7 +723,10 @@ export default function App() {
     }
     if (isGuideQuestion(command)) {
       // GPT-Live is already answering this question aloud in its own audio track.
-      if (liveConnectionRef.current) return;
+      if (liveConnectionRef.current) {
+        liveConnectionRef.current.setGuideAudioEnabled(true);
+        return;
+      }
       await askGuide(command);
       return;
     }
@@ -885,11 +892,16 @@ export default function App() {
           setVoiceTranscript(text);
           void handleVoiceCommand(text);
         },
-        onGuideReply: (reply) =>
+        onGuideReply: (reply) => {
+          // A Live reply is allowed only for an open guide question. Mute the
+          // remote track immediately afterwards so a later game command cannot
+          // overlap with an automatic model acknowledgement.
+          liveConnectionRef.current?.setGuideAudioEnabled(false);
           setGuideMessages((current) => [
             ...current,
             { role: "assistant", text: reply, mode: "model" },
-          ]),
+          ]);
+        },
         onClosed: () => {
           liveConnectionRef.current = null;
           setLiveConnected(false);

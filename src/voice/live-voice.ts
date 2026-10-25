@@ -1,4 +1,12 @@
-export type LiveVoiceSession = { stop: () => void };
+export type LiveVoiceSession = {
+  stop: () => void;
+  /**
+   * Live output is reserved for open guide questions. Game commands are spoken
+   * by the app after their result has been validated, so the two paths never
+   * narrate the same outcome.
+   */
+  setGuideAudioEnabled: (enabled: boolean) => void;
+};
 
 export type LiveVoiceCallbacks = {
   onStatus: (message: string) => void;
@@ -45,6 +53,11 @@ export async function startLiveVoice({
   let inputPauseTimer: number | undefined;
   let outputPauseTimer: number | undefined;
   let resumeAudioOnGesture: (() => void) | undefined;
+  let guideAudioEnabled = false;
+
+  const applyGuideAudioState = () => {
+    if (audio) audio.muted = !guideAudioEnabled;
+  };
 
   const flushInputTranscript = () => {
     const transcript = inputTranscript.trim();
@@ -55,7 +68,7 @@ export async function startLiveVoice({
   const flushOutputTranscript = () => {
     const transcript = outputTranscript.trim();
     outputTranscript = "";
-    if (transcript) onGuideReply(transcript);
+    if (transcript && guideAudioEnabled) onGuideReply(transcript);
     onStatus("Listening…");
   };
 
@@ -95,7 +108,7 @@ export async function startLiveVoice({
         }
         if (payload.type === "session.output_transcript.delta" && text) {
           outputTranscript += text;
-          onStatus("Guide is speaking…");
+          if (guideAudioEnabled) onStatus("Guide is speaking…");
           if (outputPauseTimer) window.clearTimeout(outputPauseTimer);
           outputPauseTimer = window.setTimeout(flushOutputTranscript, 900);
         }
@@ -110,7 +123,8 @@ export async function startLiveVoice({
             payload.type === "session.output_transcript.done") &&
           (text || outputTranscript.trim())
         ) {
-          onGuideReply((payload.transcript ?? outputTranscript).trim());
+          const transcript = (payload.transcript ?? outputTranscript).trim();
+          if (transcript && guideAudioEnabled) onGuideReply(transcript);
           outputTranscript = "";
           onStatus("Listening…");
         }
@@ -124,6 +138,7 @@ export async function startLiveVoice({
       audio = new Audio();
       audio.autoplay = true;
       audio.srcObject = event.streams[0] ?? new MediaStream([event.track]);
+      applyGuideAudioState();
       void audio.play().catch(() => {
         onStatus("Tap anywhere once to hear the guide.");
         resumeAudioOnGesture = () => {
@@ -147,7 +162,13 @@ export async function startLiveVoice({
     const data = await response.json();
     if (!response.ok) throw new Error(data.error ?? "Could not start live voice.");
     await peerConnection.setRemoteDescription({ type: "answer", sdp: data.sdp });
-    return { stop: () => stop() };
+    return {
+      stop: () => stop(),
+      setGuideAudioEnabled(enabled) {
+        guideAudioEnabled = enabled;
+        applyGuideAudioState();
+      },
+    };
   } catch (cause) {
     stop();
     throw cause;
