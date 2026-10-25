@@ -63,10 +63,9 @@ export function useChessCompanion(
     if (voice.status === "connected" && previousVoiceStatus.current !== "connected") {
       const greeting = welcome(bridgeRef.current);
       setMessage(greeting);
-      voice.announce(`Greet the player now in English. ${greeting} Then pause and listen.`);
     }
     previousVoiceStatus.current = voice.status;
-  }, [voice.status, voice.announce]);
+  }, [voice.status]);
 
   useEffect(() => {
     if (
