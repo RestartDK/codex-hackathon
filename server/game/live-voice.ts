@@ -1,0 +1,73 @@
+import { z } from "zod";
+import { guideConfig, guideContext, guideInstructions } from "./assistant.js";
+import type { Game, GameView } from "./types.js";
+
+const timedFetch = async (url: string, init: RequestInit) => {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 12_000);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+};
+
+/** Instructions for the one player-facing, real-time voice companion. */
+export function liveInstructions(context: GameView) {
+  return [
+    "You are the spoken companion for one Loups-Garous player.",
+    "Keep replies short and natural. Explain the current phase and rules.",
+    "The app independently validates spoken game commands and narrates every official change. For a game or interface request, including role actions, public messages, reading updates, describing the screen, audio settings, or pausing, stay quiet while the app checks it and reads the authoritative result. Never invent an outcome or choose an action yourself.",
+    "Never reveal or infer hidden roles. Use only this player-scoped view:",
+    JSON.stringify(context),
+  ].join("\n\n");
+}
+
+/**
+ * Server-only WebRTC session exchange. The browser sends only an SDP offer; this
+ * function keeps the provider key and player-scoped game context on the server.
+ */
+export async function createLiveSession(game: Game, actorId: string, sdp: string) {
+  const { key, voiceModel, delegationModel, voice } = guideConfig();
+  if (!key) throw new Error("Live voice needs OPENAI_API_KEY in the server environment.");
+  const context = guideContext(game, actorId);
+  const response = await timedFetch("https://api.openai.com/v1/live/sessions", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      session: {
+        model: voiceModel,
+        instructions: liveInstructions(context),
+        audio: {
+          input: {
+            noise_reduction: { type: "near_field" },
+            transcription: {
+              model: "gpt-live-transcribe",
+              languages: ["en", "fr"],
+              prompt:
+                "A voice-controlled Loups-Garous game. Player names and role names may include Werewolf, Seer, Witch, Cupid, Hunter, vote, wait for dawn, and start the game.",
+            },
+          },
+          output: { voice },
+        },
+        delegation: {
+          type: "responses",
+          responses: {
+            model: delegationModel,
+            reasoning: { effort: "low" },
+            instructions: guideInstructions(context),
+          },
+        },
+      },
+      transport: { type: "webrtc", sdp },
+    }),
+  });
+  if (!response.ok) throw new Error(`Live voice connection failed (${response.status}).`);
+  const payload = z
+    .object({
+      session: z.object({ id: z.string() }),
+      transport: z.object({ type: z.literal("webrtc"), sdp: z.string().min(1) }),
+    })
+    .parse(await response.json());
+  return { sessionId: payload.session.id, sdp: payload.transport.sdp };
+}

@@ -1,153 +1,83 @@
-# Play by Voice
+# Loups-Garous
 
-A conversational gaming companion that lets blind and low-vision people play through speech, with as much guidance or delegated play as they choose. Chess is playable today. Loups-Garous is planned. The game picker also previews Tic-Tac-Toe.
+A single-player, browser-based social deduction game. You receive one secret role and play with NPC villagers. The interface stays intentionally small: a village roster, a private role panel, available actions, and the village journal.
 
-## Problem
-
-Blind and low-vision players struggle to enjoy many video games independently because navigation, objectives, and key events rely on visual information.
-
-## Solution
-
-We're building a conversational gaming companion that lets blind and low-vision people enjoy chess and Loups-Garous entirely through speech, handling game controls and providing as much guidance or delegated play as they choose.
-
-## Intended experience
-
-1. Hear a welcome and choose a game through speech.
-2. Learn the objective and rules, and choose how much assistance you want.
-3. Play by speaking. The companion handles controls, describes events, and helps or acts when asked.
-4. Hear when the game ends and what the outcome is.
-
-Browsers require an initial action and microphone permission before live voice can start. Select the companion orb to begin. The board, keyboard controls, and typed commands also work without an API key.
-
-## Implemented
-
-- [x] Imported visual direction from the DevDay Hackathon designs. Game cards, textured backgrounds, original chess-piece artwork, blue and green companion orbs, and matching page layouts.
-- [x] Game picker, quarter-turn loading animation, chess board, move history, assistant actions, and leave-game confirmation.
-- [x] Responsive layouts, horizontally scrollable game cards, a mobile companion dock, touch controls, and reduced-motion support.
-- [x] Companion glow transitions from blue to green. The orb and glow move subtly during a connected voice session. Board contents and move history stay still.
-- [x] Audio settings with working narrator volume, game sounds, screen-reader mode, and move-confirmation preferences. Chess preferences include opponent, side, difficulty, board colors, orientation, and piece style.
-- [x] Help with spoken and typed examples, a quick guide, and keyboard instructions.
-- [x] Legal chess through `chess.js`, a local Stockfish opponent, hints, and delegated move proposals.
-- [x] Live OpenAI voice and tool reasoning through one server endpoint. The same connection stays alive across the game picker, board, settings, and help.
-- [x] Voice navigation, square and piece inspection, board descriptions, move history, and move proposals.
-- [x] Confirmations for spoken and typed moves by default, with a stale-position check. New game, undo, resignation, and leaving a game also need confirmation.
-- [x] Saved games, pause and resume, undo, resignation, promotion, game results, and move review. Leaving a game saves and pauses it rather than discarding it.
-- [x] Keyboard-operable board, labelled controls, captions, focus-managed dialogs, and optional screen-reader announcements.
-- [x] One Vite+ build for the React frontend and Nitro API. No separate frontend and backend deployment is required.
-
-Pointer and keyboard moves made directly on the board play immediately. The confirmation preference applies to companion commands. The computer responds after a committed player move. Hints describe a move without playing it. "Choose a move for me" creates a proposal that still needs confirmation.
-
-## Missing-feature checklist
-
-- [ ] Loups-Garous gameplay, roles, discussion, voting, rounds, and spoken results. Its card is a preview only.
-- [ ] Tic-Tac-Toe gameplay. Its card is a preview only and is additional scope beyond the two-game product brief.
-- [ ] A persistent assistance-level selector covering independent play, coaching, and automatic delegated play. Hints and delegation currently happen on request.
-- [ ] Voice control of every preference, including narrator volume. Voice can open settings; the controls themselves use the screen or keyboard.
-- [ ] A dedicated visual onboarding sequence and result screen supplied by the design source. The app currently uses a spoken guide and the existing game-result dialog.
-- [ ] A hands-free cold start without browser activation or permission. Browser security prevents promising this on a first visit.
-- [ ] Hands-on usability testing with blind and low-vision players, NVDA, and VoiceOver. Labelled controls and keyboard support are not an accessibility certification.
-- [ ] Physical-device microphone, interruption, speaker routing, and background-tab checks on iOS Safari and Android Chrome. Synthetic speech can exercise the live integration but cannot prove device hardware behavior.
-- [ ] Production protection for the public, no-login voice endpoint. The current in-memory session limit is a demo safeguard, not distributed abuse protection. Configure OpenAI project budgets and usage alerts before sharing a public deployment.
-- [ ] A repeatable automated regression suite if this grows beyond the hackathon. Project-owned tests, browser-test configuration, and test scripts were intentionally removed for this version.
+The project uses the supplied React, Vite+, and Nitro application. Vite+ builds the browser app and Nitro API into `.output/` for a regular Node server.
 
 ## Run locally
 
-Use Bun and a current Node.js release. The checked-in Node version is `26.12.1`.
+Use the Bun version in `package.json` (`bun@1.4.4`):
 
 ```sh
 bun install
-cp .env.example .env
-```
-
-Put your OpenAI project key in `.env` as `OPENAI_API_KEY`, then start the application.
-
-```sh
 bun run dev
 ```
 
-Open the URL printed by Vite+. Select the orb, allow microphone access, and say "Play chess." A secure HTTPS origin or localhost is required for microphone access. No account or database is needed.
+Open http://localhost:3000. Games run without a provider key; the guide responds from local game rules and NPCs use deterministic bots. To enable model-driven guide and NPC replies, copy `.env.example` to `.env` and set `OPENAI_API_KEY`. The configured defaults are `OPENAI_VOICE_MODEL=gpt-live-1`, `OPENAI_DELEGATION_MODEL=gpt-6-luna`, and `OPENAI_NPC_MODEL=gpt-6-luna`. Provider credentials are read only by Nitro and are never sent to the browser.
 
-The private key belongs only in the server environment. Never name it `VITE_OPENAI_API_KEY`, paste it into client code, or commit `.env`.
-
-### Environment variables
-
-| Variable                  | Purpose                                                                                                                                                 |
-| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `OPENAI_API_KEY`          | Required for live voice. Server-only OpenAI project key.                                                                                                |
-| `OPENAI_VOICE_MODEL`      | Optional voice-model override. Defaults to `gpt-live-1`.                                                                                                |
-| `OPENAI_DELEGATION_MODEL` | Optional reasoning-model override. Defaults to `gpt-6-luna`.                                                                                            |
-| `ALLOWED_ORIGINS`         | Optional comma-separated exact browser origins. Same-host requests and the documented localhost defaults are allowed. This check is not authentication. |
-| `NITRO_PRESET`            | Optional deployment target. Local production builds default to `node-server`; Vercel uses `vercel`.                                                     |
-| `HOST`, `PORT`            | Address and port for the built Node server.                                                                                                             |
-
-The key needs access to both configured models. Audio and raw transcripts are not stored in local storage. Game position and preferences stay on the current device.
-
-### Commands
+## Checks and production
 
 ```sh
-bun run dev
+bun run check
 bun run typecheck
-bun run lint
+bun run test
 bun run build
 bun run start
-bun run preview
 ```
 
-`postinstall` copies the matching Stockfish JavaScript, WASM, and GPL license into `public/stockfish`. Do not mix worker files from different Stockfish builds.
+The production server listens on port 3000 by default. `bun run smoke http://127.0.0.1:3000` checks the app shell, browser entry, and health route.
 
-There is no `test` command in this hackathon version. Type checking, linting, and building do not replace checking the running application.
+## Deploy to Netlify
 
-## Voice and typed commands
+The included `netlify.toml` runs the production build with Nitro's Netlify preset. It publishes the browser app from `dist/` and packages the Nitro API as Netlify Functions, so the frontend and `/api` routes deploy together.
 
-Live voice accepts natural language. The typed fallback accepts a smaller command vocabulary. Open the keyboard button beside the orb.
+Connect the repository to Netlify and deploy the branch you want to serve. The build configuration supplies `NITRO_PRESET=netlify`; add `OPENAI_API_KEY` in the site's environment variables for model-driven guide, NPC, and voice features. The game still runs with its local guide and bot fallbacks if that variable is unavailable.
 
-| Goal                  | Example                                         |
-| --------------------- | ----------------------------------------------- |
-| Open a page           | `play chess`, `home`, `audio settings`, `help`  |
-| Make a move           | `e2 to e4`, then `yes` or `cancel`              |
-| Inspect a square      | `what is on e4`                                 |
-| Describe the position | `describe the board`                            |
-| Read occupied squares | `read the board`, `read rank 4`, `read file e`  |
-| Hear recent moves     | `history`                                       |
-| Ask for help          | `hint`, `choose a move for me`, `quick guide`   |
-| Control the game      | `pause`, `resume`, `undo`, `new game`, `resign` |
+Treat only `OPENAI_API_KEY` as a secret. `OPENAI_BASE_URL`, `OPENAI_*_MODEL`, and `OPENAI_VOICE` are public configuration labels. The Netlify configuration excludes only those labels from secret-value scanning while keeping API-key scanning enabled.
 
-Tab into the board. Use arrow keys to explore squares. Press Enter or Space to select a piece, then select a destination. Move-history buttons review positions without changing the live game.
+## Rules
 
-## Deployment
+The standard village size is 4–12 players. The game assigns a balanced default role mix with at least one Werewolf. A village contains one human and NPCs. Cupid chooses two lovers at the start when present; the surviving lover dies when their partner does. At night the pack hunts, the Seer investigates, and the Witch may use one healing and one poison potion over the full game. During the day, villagers discuss and vote. A tied vote follows the selected no-exile or random-among-tied rule. A Hunter eliminated from the game gets one final shot, including after a lover-chain death.
 
-### Vercel
+The village wins when no Werewolves remain. Werewolves win when they equal or outnumber all other living players. Cross-faction lovers win if they are the only two living players. Roles remain private until the game ends. The server filters private findings, wolf teammates, and Witch night information for each authorized view.
 
-Import this repository as one project. `vercel.json` uses `bun install --frozen-lockfile` and `NITRO_PRESET=vercel bun run build`. Nitro produces the Vercel output for the frontend and server route. Do not deploy the app as static files only, and do not run the standalone `start` command on Vercel.
+## Sessions and model agents
 
-Set `OPENAI_API_KEY` as a server environment variable. Use a Node version supported by your Vercel project, such as Node 24. Set provider budgets before enabling public voice access. Test a real voice connection on the deployed origin; local verification does not prove a hosting deployment.
+Creating a game returns a cryptographically random session token once. Read and action requests require that token in `X-Game-Session`. Action writes also require a UUID `X-Request-Id`; successful retries return the saved result. Game state is held in memory and is cleared when the server restarts.
 
-### Dokploy or another Node host
+The player-facing guide uses the Responses API with a player-scoped view of the game. It can explain rules, the current phase, and strategy, but has no action route and cannot alter a game. Missing credentials or a provider failure show a labeled local guide response. The browser can optionally speak those text responses with its local speech feature.
 
-Install dependencies, build once, and run the combined server.
+The Voice Companion is always ready. On a first visit, the player taps anywhere once to approve the browser microphone, then can say “start the game” or “start a quick test” from the landing screen. After that, persistent browser transcription handles game commands, public morning conversation, and private guide questions. A spoken briefing begins every game before the public story line, covering the player's role, win condition, phase flow, and voice examples. The private guide also has a **Replay briefing** control and understands “repeat the guide.” When credentials are configured, narration uses the authenticated server-side OpenAI TTS route with the `marin` voice and falls back to browser speech if the provider is unavailable. During the day, natural messages such as “Camille, why do you suspect Noémie?” and “tell the village I trust Jules” become public village speech and prompt NPC replies. Say “voice help” for the complete phase-aware command list, including role actions, public conversation, voting, narration controls, game pause/resume, and voice-control pause/resume. Any night role can say “wait for dawn” to leave its ability unused; a human Werewolf can additionally say “let the pack decide,” “pass,” or “do nothing” to delegate the target. Commands still use the validated action route; guide questions use the player-scoped assistant route and are read by the same narrator voice. If browser transcription reports a network failure during a game, the app switches to the `gpt-live-1` WebRTC guide backed by `gpt-6-luna`. Its final transcription events use the same command router, so game actions remain validated server-side.
 
-```sh
-bun install --frozen-lockfile
-bun run build
-HOST=0.0.0.0 PORT=3000 bun run start
-```
+NPC agents are separate from the guide and voice configuration. They use `OPENAI_NPC_MODEL` only when their controller is `agent`; local `bot` players never call a model. Every NPC target remains validated against the deterministic game rules. Missing credentials, timeout, provider errors, or malformed NPC output use the local fallback.
 
-The build contains the frontend and API in `.output`. Supply the OpenAI key at runtime. Keep durable storage separate if a future version adds accounts or multiplayer state.
+## Story and audio
 
-## Code map
+A new normal game begins with a short Valombre prologue. Each NPC has a public background, personality, visual portrait, and introduction. The player can begin the first night whenever they are ready. Returning players skip the prologue after starting it once; the quick-test game also skips it so it opens directly on a playable night.
 
-- `src/app/App.tsx` owns page state and keeps one game and voice controller alive.
-- `src/components/PlayByVoice` contains the imported screens and companion dock.
-- `src/hooks/useChessGame.ts` owns authoritative chess state and Stockfish lifecycle.
-- `src/voice/chessTools.ts` bounds model actions to legal moves and confirmed controls.
-- `src/voice/useVoiceCompanion.ts` owns microphone, WebRTC, captions, and connection cleanup.
-- `server/routes/api/voice/session.post.ts` creates server-configured OpenAI sessions without exposing the key.
-- `public/artwork` contains optimized decorative artwork and piece sprites extracted from the supplied SVGs, not full-page screenshots.
+One player-facing assistant queues and reads public narration, NPC dialogue, and guide replies, always naming the speaker before their original text. It highlights the active speaker and provides automatic-reading, mute, volume, speech speed, pause/resume, repeat, and stop controls. If speech synthesis is unavailable, every line remains in the village history.
 
-## Attribution and licenses
+For a provider/ML handoff, read [the voice-system guide](docs/voice-system.md). It separates browser narration, microphone transcription, real-time guide audio, and NPC text generation, and identifies the safe integration point for a neural TTS provider.
 
-The chess implementation was adapted from [Chess by Sparsh](https://github.com/sparshsam/chess-by-sparsh), MIT licensed, at commit `ee19f22519a4afb3ec3800dac6b430e56eb8f9ab`. The original MIT notice remains in `LICENSE`.
+NPCs retain short public-conversation memories and build suspicions from accusations and public votes. They open each new day with an automatic public exchange. The model prompt receives only their role-safe information, profile, memories, and public discussion; the deterministic engine validates each game action. Once microphone permission is granted, persistent browser transcription routes spoken questions to the private guide and spoken game commands to the same validated action interface used by typed commands. The private guide never takes actions on the player's behalf.
 
-Stockfish assets come from `stockfish@19.0.1` under GNU GPL v3. The installed license is served at `/stockfish/Copying.txt`. Corresponding source and build information are available at [stockfish.js, stockfish-19](https://github.com/nmrugg/stockfish.js/tree/stockfish-19). Preserve the license, notices, and corresponding-source information when redistributing the engine.
+## Game modules
 
-Visual artwork comes from the supplied `DevDay Hackathon.zip` exports. Motion follows [Emil Kowalski's animation guidance](https://github.com/emilkowalski/skills/blob/main/skills/animate/SKILL.md). This README is the only project Markdown document in this version.
+The API is shared by registered game modules. `GET /api/games` returns the game catalog; `POST /api/games` accepts a `gameType` (defaults to `loups-garous`) and the selected module's create options. Session reads and action writes use the same authenticated routes for every registered game. A failed action runs against a private state copy and is discarded; successful actions are committed once and can be safely retried with the same request ID.
+
+To add a game, create a module under `server/game/modules/` that implements `GameModule<State, CreateInput, ActionInput, PublicView>`, then register it in `server/game/registry.ts`. Each module owns its state, validates its create/action inputs, applies its rules, and returns a player-safe view. The shared API handles game lookup, sessions, action locking, request IDs, and catalog discovery. Add a matching frontend renderer for that module's view shape; the current browser screen is still Loups-Garous-specific.
+
+Modules can advertise typed/voice-command and undo support. A module can implement `parseCommand` to translate typed text or a speech transcript into one of its validated actions; the shared action route accepts `{ "command": "..." }` and applies the resulting action transactionally. Loups-Garous supports commands such as “start the game”, “investigate Camille”, “wait for dawn”, “hear the villagers”, “I accuse Camille”, “vote Camille”, “pause game”, and “say …”. The always-on Voice Companion uses the same command path, while typed controls remain available. Undo remains unsupported in Loups-Garous; another module can expose an `undoAction` hook.
+
+The default store is still in-memory and single-process: games and session tokens are cleared on server restart, and the store is not suitable for multi-instance deployment. `GameRepository` isolates that storage choice, so a durable database adapter can be added without rewriting game rules. The existing request lock and receipt cache also live in memory, so multi-instance deployments must move those into shared storage too.
+
+## Project structure
+
+- `src/` — browser setup and gameplay interface
+- `server/api/` — Nitro game catalog, session, action, and health endpoints
+- `server/game/engine.ts` — deterministic game rules and player views
+- `server/game/module.ts` and `registry.ts` — typed module contract and game catalog
+- `server/game/modules/` — individual game implementations
+- `server/game/agents.ts` — LLM provider and fallback decisions
+- `server/game/prepare.ts` — NPC phase setup
+- `server/game/store.ts` — in-memory state, sessions, request receipts, and locks

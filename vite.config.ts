@@ -1,13 +1,33 @@
 import react from "@vitejs/plugin-react";
-import { nitro } from "nitro/vite";
-import { defineConfig } from "vite";
+import { defineConfig, lazyPlugins } from "vite-plus";
 
 export default defineConfig({
-  plugins: [...nitro(), react()],
-  server: {
-    allowedHosts: (process.env.VITE_ALLOWED_HOSTS ?? "")
-      .split(",")
-      .map((host) => host.trim())
-      .filter(Boolean),
+  fmt: {},
+  lint: {
+    plugins: ["react", "typescript", "oxc"],
+    rules: {
+      "react/rules-of-hooks": "error",
+      "react/only-export-components": [
+        "warn",
+        {
+          allowConstantExport: true,
+        },
+      ],
+      "vite-plus/prefer-vite-plus-imports": "error",
+    },
+    options: {
+      typeAware: true,
+      typeCheck: true,
+    },
+    jsPlugins: [
+      {
+        name: "vite-plus",
+        specifier: "vite-plus/oxlint-plugin",
+      },
+    ],
   },
+  plugins: lazyPlugins(async () => {
+    const { nitro } = await import("nitro/vite");
+    return [react(), nitro({ serverDir: "./server" })];
+  }),
 });

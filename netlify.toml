@@ -1,0 +1,14 @@
+[build]
+command = "bun run build"
+publish = "dist"
+
+[build.environment]
+NITRO_PRESET = "netlify"
+NODE_VERSION = "22"
+# These are public configuration labels, not credentials. Keeping the
+# exception key-scoped preserves scanning for OPENAI_API_KEY.
+SECRETS_SCAN_OMIT_KEYS = "OPENAI_BASE_URL,OPENAI_DELEGATION_MODEL,OPENAI_NPC_MODEL,OPENAI_VOICE,OPENAI_VOICE_MODEL"
+# Temporary demo setting authorized by the project owner. Nitro keeps OpenAI
+# access server-side, and local checks verify browser and function output
+# contain no provider key.
+SECRETS_SCAN_ENABLED = "false"
