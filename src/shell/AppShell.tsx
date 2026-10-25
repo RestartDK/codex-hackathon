@@ -4,7 +4,7 @@ import { useSettings } from "../hooks/useSettings";
 import WerewolfApp from "../werewolf/App";
 
 const EXPERIENCES = {
-  "play-by-voice": { title: "Play by Voice", themeColor: "#ffffff" },
+  "play-by-voice": { title: "Playora", themeColor: "#ffffff" },
   "loups-garous": { title: "Loups-Garous — A Village Game", themeColor: "#ffffff" },
 } as const;
 

@@ -215,9 +215,9 @@ export default function PlayByVoiceApp({
                 void companion.navigate("home");
               }
             }}
-            aria-label="Play by Voice, game picker"
+            aria-label="Playora, game picker"
           >
-            Play by Voice
+            Playora
           </button>
           {chessContextVisible && (
             <span className="header-game">
