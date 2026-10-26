@@ -15,6 +15,7 @@ import { isSetupStartConfirmation } from "./setupVoice";
 import { RoleRevealDelivery, roleHelpIntent } from "./roleReveal";
 import { flowGuidance } from "./flowNarration";
 import { ActionDelivery } from "./actionDelivery";
+import { VoiceCommandLane, voiceOrbAction } from "./voiceCommandLane";
 import { nextRoleAction, roleExplanation } from "../../server/game/role-guidance.js";
 import { DEFAULT_ROLE_COUNTS } from "../../server/game/rules.js";
 import type {
@@ -529,6 +530,7 @@ export default function WerewolfApp({
     setupConfirmationRef.current = setupAwaitingConfirmation;
   }, [setupAwaitingConfirmation]);
   const directConfirmationItemsRef = useRef(new Set<string>());
+  const voiceCommandLaneRef = useRef(new VoiceCommandLane());
   const voiceExecutor = useMemo<VoiceToolExecutor>(
     () => ({
       ownsToolResponse: true,
@@ -541,6 +543,7 @@ export default function WerewolfApp({
         )
           return;
         directConfirmationItemsRef.current.add(itemId);
+        voiceCommandLaneRef.current.confirmedDirectly(transcript);
         void voiceCommandHandlerRef.current(transcript);
       },
       execute: async (name, rawArguments) => {
@@ -554,6 +557,11 @@ export default function WerewolfApp({
         }
         if (typeof command !== "string" || !command.trim())
           return JSON.stringify({ status: "error", message: "Repeat the command in words." });
+        if (voiceCommandLaneRef.current.consumeDirectConfirmation(command))
+          return JSON.stringify({
+            status: "completed",
+            message: "Setup confirmation already handled.",
+          });
         await voiceCommandHandlerRef.current(command);
         return JSON.stringify({
           status: "completed",
@@ -577,8 +585,7 @@ export default function WerewolfApp({
   useEffect(() => {
     if (autoVoice) void startVoiceRef.current();
   }, [autoVoice]);
-  const commandQueueRef = useRef(Promise.resolve());
-  const lastVoiceCommandRef = useRef({ text: "", at: 0 });
+  const currentCommandHandlerRef = useRef(handleVoiceCommand);
   const actionInFlightRef = useRef(false);
   const actionDeliveryRef = useRef(new ActionDelivery());
   const guideRequestIdRef = useRef(0);
@@ -698,6 +705,7 @@ export default function WerewolfApp({
   }
 
   function leaveToGamePicker() {
+    voiceCommandLaneRef.current.reset();
     cancelCreation();
     villageIntroductionRef.current.skip();
     storyAudio.stop();
@@ -706,6 +714,7 @@ export default function WerewolfApp({
   }
 
   function openNewGameSetup() {
+    voiceCommandLaneRef.current.reset();
     cancelCreation();
     cancelPendingGuide();
     voice.interrupt();
@@ -1747,6 +1756,7 @@ export default function WerewolfApp({
 
   /** Recover cleanly if a local/dev server has restarted and lost its in-memory match. */
   function recoverExpiredSession() {
+    voiceCommandLaneRef.current.reset();
     storyAudio.stop();
     cancelCreation();
     villageIntroductionRef.current.skip();
@@ -1776,34 +1786,24 @@ export default function WerewolfApp({
   }
 
   useEffect(() => {
+    currentCommandHandlerRef.current = handleVoiceCommand;
     voiceCommandHandlerRef.current = async (transcript) => {
       const text = transcript.trim();
       if (!text) return;
       setVoiceTranscript(text);
-      const normalized = normalizeVoiceCommand(text);
-      const now = Date.now();
-      if (
-        lastVoiceCommandRef.current.text === normalized &&
-        now - lastVoiceCommandRef.current.at < 2_200
-      )
-        return;
-      lastVoiceCommandRef.current = { text: normalized, at: now };
       // A slow open-ended guide answer must not make an immediate game command
       // wait in line. Actions still share their ordered command lane.
       if (isGuideQuestion(text) && !looksLikeGameAction(text, latestGameRef.current)) {
         void handleVoiceCommand(text);
         return;
       }
-      const queued = commandQueueRef.current
-        .catch(() => undefined)
-        .then(() => handleVoiceCommand(text));
-      commandQueueRef.current = queued;
-      await queued;
+      await voiceCommandLaneRef.current.enqueue(text, () => currentCommandHandlerRef.current);
     };
   });
 
   useEffect(() => {
     const prime = () => primeBrowserNarration();
+    const commandLane = voiceCommandLaneRef.current;
     window.addEventListener("pointerdown", prime, { passive: true });
     return () => {
       window.removeEventListener("pointerdown", prime);
@@ -1812,6 +1812,7 @@ export default function WerewolfApp({
       createControllerRef.current = null;
       guideAbortRef.current?.abort();
       guideAbortRef.current = undefined;
+      commandLane.reset();
     };
   }, []);
 
@@ -1819,6 +1820,13 @@ export default function WerewolfApp({
   const voiceBusy =
     (voice.status === "connecting" && !voice.needsAudioActivation) || voice.status === "closing";
   const voiceActive = voiceConnected && !voiceCommandsPaused;
+  const orbAction = voiceOrbAction({
+    needsAudioActivation: voice.needsAudioActivation,
+    connected: voiceConnected,
+    busy: voiceBusy,
+    microphoneMuted: voice.microphoneMuted,
+    commandsPaused: voiceCommandsPaused,
+  });
   const narratorSpeaking = Boolean(storyAudio.activeSpeaker || voice.isSpeaking);
   const voiceActivity = narratorSpeaking
     ? "speaking"
@@ -1858,7 +1866,11 @@ export default function WerewolfApp({
       return;
     }
     if (voiceConnected) {
-      if (voiceCommandsPaused) {
+      if (orbAction === "unmute") {
+        voice.toggleMicrophone();
+        setVoiceCommandsPaused(false);
+        setVoiceStatus("Microphone is on. Voice guide is listening.");
+      } else if (voiceCommandsPaused) {
         setVoiceCommandsPaused(false);
         setVoiceStatus("Voice guide is listening");
       } else {
@@ -1887,9 +1899,11 @@ export default function WerewolfApp({
           className="orb-button"
           aria-label={
             voiceConnected
-              ? voiceCommandsPaused
-                ? "Resume voice commands"
-                : "Pause voice commands"
+              ? orbAction === "unmute"
+                ? "Unmute microphone"
+                : voiceCommandsPaused
+                  ? "Resume voice commands"
+                  : "Pause voice commands"
               : voiceBusy || voice.status === "error"
                 ? voiceDockStatus
                 : "Start voice companion"
@@ -1903,6 +1917,11 @@ export default function WerewolfApp({
           </span>
         </button>
       </div>
+      {voiceConnected && voice.microphoneMuted && (
+        <div className="voice-error" role="status">
+          <p>Your microphone is muted. Choose the voice orb to unmute it.</p>
+        </div>
+      )}
       {voice.error && (
         <div className="voice-error" role="alert">
           <p>{voice.error}</p>

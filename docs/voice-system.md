@@ -104,6 +104,10 @@ For a provider-specific voice ID, add it to the one `assistant` profile. The que
 
 ## Fast troubleshooting
 
+Loups-Garous input recovery: a connected but muted microphone is visible, and the orb offers Unmute microphone instead of only toggling command pause. Capture interruption/removal and command-channel closure have explicit recovery guidance. Late playback callbacks cannot resurrect an old connection or overwrite a newer mute choice. Speech fragments use the documented Live timeline (there is no completed-turn/item-ID contract), with fresh grouping identities after reconnect. Only validated tool commands change gameplay; a 12-second missing-command warning never guesses a move from partial text. Queued commands select the latest screen handler after the previous transition commits; intentional repeats are not discarded by a text cooldown. The setup transcript fast path deduplicates its tool counterpart separately.
+
+The input regressions use simulated media tracks, data channels and a mocked session endpoint; unexpected network calls fail. No paid voice requests are needed to run these tests. They do not establish live microphone recognition quality or provider latency.
+
 - **Every NPC sounds identical:** expected. The assistant identifies each speaker in words and deliberately uses one voice identity for every public line.
 - **Two speakers overlap:** check that a custom backend calls `onFinished()` only after audio playback ends, and that `cancel()` stops its active audio.
 - **Guide does not answer a spoken question:** check `src/werewolf/App.tsx` routing and the `/assistant` route response. The Voice Guide speaks guide replies with the same narration queue.
