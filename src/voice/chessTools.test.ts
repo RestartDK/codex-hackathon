@@ -175,6 +175,46 @@ describe("immediate chess commands", () => {
     expect(game.get("h1")).toBeUndefined();
   });
 
+  it("applies en passant from the authoritative legal-move list", async () => {
+    const { game, bridge, executor } = setup();
+    game.load("4k3/8/8/3pP3/8/8/8/4K3 w - d6 0 2");
+    const result = JSON.parse(
+      await executor.execute(
+        "make_move",
+        '{"from":"e5","to":"d6","piece":"pawn","promotion":null}',
+      ),
+    );
+    expect(result.status).toBe("completed");
+    expect(game.get("d6")).toMatchObject({ type: "p", color: "w" });
+    expect(game.get("d5")).toBeUndefined();
+    expect(bridge.history).toEqual(["exd6"]);
+  });
+
+  it("reports checkmate, stalemate, and supported draw positions from chess.js", async () => {
+    const { game, executor } = setup();
+    game.load("7k/6Q1/6K1/8/8/8/8/8 b - - 0 1");
+    let position = JSON.parse(await executor.execute("get_position", "{}"));
+    expect(position.gameOver).toBe(true);
+    expect(game.isCheckmate()).toBe(true);
+
+    game.load("7k/5Q2/6K1/8/8/8/8/8 b - - 0 1");
+    position = JSON.parse(await executor.execute("get_position", "{}"));
+    expect(position.gameOver).toBe(true);
+    expect(game.isStalemate()).toBe(true);
+
+    game.load("8/8/8/8/8/8/6k1/6K1 w - - 0 1");
+    expect(game.isInsufficientMaterial()).toBe(true);
+    expect(game.isDraw()).toBe(true);
+  });
+
+  it("does not apply a repeated move tool call after the turn changes", async () => {
+    const { game, executor } = setup();
+    const request = '{"from":"e2","to":"e4","piece":"pawn","promotion":null}';
+    expect(JSON.parse(await executor.execute("make_move", request)).status).toBe("completed");
+    expect(JSON.parse(await executor.execute("make_move", request)).status).toBe("error");
+    expect(game.history()).toEqual(["e4"]);
+  });
+
   it.each([
     { preference: "confirmMoves", value: true },
     { preference: "voiceVolume" },
@@ -273,5 +313,20 @@ describe("immediate chess commands", () => {
     bridge.view = "home";
     expect(JSON.parse(await executor.execute("review_move", '{"move":0}')).status).toBe("error");
     expect(bridge.review).toBeNull();
+  });
+
+  it("routes guided Chess setup choices through the visible setup bridge", async () => {
+    const { bridge, executor } = setup();
+    const configureSetup = vi.fn(() => ({ ok: true, message: "Black selected." }));
+    bridge.view = "chess-setup";
+    bridge.configureSetup = configureSetup;
+    const result = JSON.parse(
+      await executor.execute(
+        "configure_chess_setup",
+        JSON.stringify({ action: null, difficulty: null, color: "b", timer: null, rules: null }),
+      ),
+    );
+    expect(result.status).toBe("completed");
+    expect(configureSetup).toHaveBeenCalledWith({ color: "b" });
   });
 });

@@ -36,10 +36,17 @@ export default function CompanionDock({
     const element = captionRef.current;
     if (element && followCaption.current) element.scrollTop = element.scrollHeight;
   }, [voice.caption, companion.message]);
-  const active = voice.status === "connected";
+  const active = voice.status === "connected" && !voice.needsAudioActivation;
+  const activity = voice.isSpeaking
+    ? "speaking"
+    : active && !voice.microphoneMuted
+      ? "listening"
+      : voice.status;
   const waiting = voice.status === "connecting" || voice.status === "closing";
   const label =
-    voice.status === "connecting"
+    voice.needsAudioActivation
+      ? "Start voice"
+      : voice.status === "connecting"
       ? "Connecting voice"
       : voice.status === "closing"
         ? "Ending voice"
@@ -52,15 +59,18 @@ export default function CompanionDock({
             : "Start voice";
   return (
     <footer
-      className={`companion-dock${green ? " dock-green" : ""}${active ? " voice-connected" : ""}`}
+      className={`companion-dock${green ? " dock-green" : ""}${active ? " voice-connected" : ""} voice-${activity}`}
       aria-label="Voice companion"
+      data-voice-activity={activity}
     >
       <div className="companion-orb-row">
         <button
           type="button"
           className="orb-button"
           aria-label={
-            active
+            voice.needsAudioActivation
+              ? "Start voice"
+              : active
               ? voice.microphoneMuted
                 ? "Unmute microphone"
                 : "Mute microphone"
@@ -68,9 +78,10 @@ export default function CompanionDock({
                 ? label
                 : "Start voice companion"
           }
-          disabled={waiting}
+          disabled={waiting && !voice.needsAudioActivation}
           onClick={() => {
-            if (active) voice.toggleMicrophone();
+            if (voice.needsAudioActivation) void voice.activateAudio();
+            else if (active) voice.toggleMicrophone();
             else void voice.start();
           }}
         >
@@ -92,7 +103,7 @@ export default function CompanionDock({
         >
           <Keyboard size={20} aria-hidden="true" />
         </button>
-        {(active || voice.status === "connecting") && (
+        {(active || voice.status === "connecting" || voice.needsAudioActivation) && (
           <button
             className="dock-icon end-voice"
             aria-label="End voice"

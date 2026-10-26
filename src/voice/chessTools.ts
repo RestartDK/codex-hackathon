@@ -2,6 +2,7 @@ import type { Chess, Color, Move, PieceSymbol, Square } from "chess.js";
 import { appSettingsSchema, describePreference, type AppSettings } from "../lib/preferences";
 import { moveArgumentsSchema, squareSchema } from "./chessActions";
 import { parseDestination, PLAYABLE_GAMES_LABEL, type AvailableDestination } from "./navigation";
+import type { ChessSetupCommand } from "../components/PlayByVoice/ChessSetup";
 
 const pieceNames: Record<PieceSymbol, string> = {
   p: "pawn",
@@ -56,6 +57,8 @@ export interface ChessToolBridge {
   >;
   newGame: () => void;
   startDefaultGame?: () => void;
+  configureSetup?: (command: ChessSetupCommand) => { ok: boolean; message: string };
+  setupGuidance?: { key: string; message: string } | null;
   pendingPromotion?: { from: Square; to: Square } | null;
   promote?: (piece: "q" | "r" | "b" | "n") => void;
   cancelPromotion?: () => void;
@@ -116,6 +119,58 @@ export function createChessToolExecutor(getBridge: () => ChessToolBridge) {
       return json({ status: "error", message: "The tool arguments were not valid JSON." });
     }
     const fields = new Map<string, unknown>(Object.entries(args));
+
+    if (name === "control_voice_guidance") {
+      const rawAction = fields.get("action");
+      const action = typeof rawAction === "string" ? rawAction : "";
+      if (action === "home") {
+        cancelRequests();
+        return json({ status: "completed", message: bridge.navigate("home") });
+      }
+      if (action === "back") {
+        if (bridge.view === "chess-setup" && bridge.configureSetup)
+          return json(bridge.configureSetup({ action: "back" }));
+        return json({
+          status: "error",
+          message: "There is no previous step here. Say go home to open the game picker.",
+        });
+      }
+      if (action === "defaults" || action === "start") {
+        if (bridge.view !== "chess-setup" || !bridge.configureSetup)
+          return json({
+            status: "error",
+            message: "Open Chess setup before changing or confirming setup.",
+          });
+        return json(
+          bridge.configureSetup({ action: action === "defaults" ? "defaults" : "start" }),
+        );
+      }
+      const current =
+        bridge.setupGuidance?.message ??
+        (bridge.view === "chess"
+          ? `You are playing Chess as ${colorName(bridge.playerColor)}. ${colorName(bridge.game.turn())} to move.`
+          : `You are on the ${bridge.view} screen.`);
+      if (action === "location")
+        return json({
+          status: "ok",
+          message: `You are in ${bridge.view === "chess-setup" ? "Chess setup" : bridge.view}. ${current}`,
+        });
+      if (action === "capabilities")
+        return json({
+          status: "ok",
+          message: `${current} You can ask for available actions, repeat, an explanation, go back, go home, or continue with the current choice.`,
+        });
+      if (action === "explain")
+        return json({
+          status: "ok",
+          message:
+            bridge.view === "chess-setup"
+              ? `Chess setup chooses opponent strength, piece color, timer, and guidance. ${current}`
+              : `${current} Ask for the quick guide for rules and move examples.`,
+        });
+      if (action === "repeat") return json({ status: "ok", message: current });
+      return json({ status: "error", message: "Unknown guidance command." });
+    }
 
     if (name === "navigate_app") {
       const destination = parseDestination(fields.get("destination"));
@@ -490,6 +545,25 @@ export function createChessToolExecutor(getBridge: () => ChessToolBridge) {
         status: result?.ok === false ? "error" : "completed",
         message: result?.message ?? message,
       });
+    }
+
+    if (name === "configure_chess_setup") {
+      if (bridge.view !== "chess-setup" || !bridge.configureSetup)
+        return json({ status: "error", message: "Chess setup is not open." });
+      const command: ChessSetupCommand = {};
+      const action = fields.get("action");
+      if (["back", "defaults", "start", "repeat", "explain"].includes(String(action)))
+        command.action = action as ChessSetupCommand["action"];
+      const difficulty = fields.get("difficulty");
+      if (["beginner", "casual", "club"].includes(String(difficulty)))
+        command.difficulty = difficulty as ChessSetupCommand["difficulty"];
+      const color = fields.get("color");
+      if (["w", "b", "random"].includes(String(color)))
+        command.color = color as "w" | "b" | "random";
+      if (fields.get("timer") === "off") command.timer = "off";
+      if (typeof fields.get("rules") === "boolean") command.rules = fields.get("rules") as boolean;
+      const result = bridge.configureSetup(command);
+      return json({ status: result.ok ? "completed" : "error", message: result.message });
     }
 
     return json({ status: "error", message: `Unknown tool: ${name}` });

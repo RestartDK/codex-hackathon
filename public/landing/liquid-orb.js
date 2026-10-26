@@ -165,6 +165,18 @@ export async function enhanceLiquidOrbs(onReady, root = document) {
           [1, 0.95, 0.76, 1, 0.99, 0.79, 0.42, 1, 0.95, 0.58, 0.2, 1, 0.82, 0.38, 0.09, 1],
           40,
         );
+      } else if (host.classList.contains("orb-violet")) {
+        // Tic-Tac-Toe shares the liquid motion with a violet companion palette.
+        values.set(
+          [0.96, 0.84, 1, 1, 0.76, 0.46, 0.94, 1, 0.52, 0.2, 0.72, 1, 0.28, 0.08, 0.46, 1],
+          40,
+        );
+      } else if (host.classList.contains("orb-red")) {
+        // The Intercept uses the shared liquid motion with its signal-red palette.
+        values.set(
+          [1, 0.84, 0.84, 1, 1, 0.48, 0.5, 1, 0.94, 0.18, 0.2, 1, 0.58, 0.03, 0.06, 1],
+          40,
+        );
       }
       const buffer = device.createBuffer({
         size: values.byteLength,

@@ -3,10 +3,20 @@ import { Chess } from "chess.js";
 import { useChessGame, type GameResult } from "../hooks/useChessGame";
 import type { Preferences } from "../hooks/useSettings";
 import { useChessCompanion } from "../voice/useChessCompanion";
-import { PLAYABLE_GAMES_LABEL, type AvailableDestination } from "../voice/navigation";
+import { shouldAutoStartVoice } from "../voice/useVoiceCompanion";
+import {
+  PLAYABLE_GAMES_LABEL,
+  shouldCarryVoiceOnNavigation,
+  type AvailableDestination,
+} from "../voice/navigation";
+import { primeBrowserNarration } from "../voice/browser-narration";
 import GamePicker from "../components/PlayByVoice/GamePicker";
 import ChessView from "../components/PlayByVoice/ChessView";
-import ChessSetup, { type ChessSetupSelection } from "../components/PlayByVoice/ChessSetup";
+import ChessSetup, {
+  type ChessSetupGuidance,
+  type ChessSetupHandle,
+  type ChessSetupSelection,
+} from "../components/PlayByVoice/ChessSetup";
 import AudioSettings from "../components/PlayByVoice/AudioSettings";
 import Help from "../components/PlayByVoice/Help";
 import CompanionDock from "../components/PlayByVoice/CompanionDock";
@@ -22,16 +32,6 @@ type View =
   | { kind: "chess" }
   | { kind: "audio" | "help"; returnTo: "home" | "loading" | "chess-setup" | "chess" };
 
-function defaultChessSetup(): ChessSetupSelection {
-  return {
-    gameMode: "computer",
-    difficulty: "beginner",
-    playerColor: "w",
-    timerMinutes: null,
-    explainRules: false,
-  };
-}
-
 export default function PlayByVoiceApp({
   preferences,
   initialDestination = "home",
@@ -44,7 +44,7 @@ export default function PlayByVoiceApp({
   preferences: Preferences;
   initialDestination?: AvailableDestination;
   autoVoice?: boolean;
-  onPlayLoupsGarous: () => void;
+  onPlayLoupsGarous: (autoVoice?: boolean) => void;
   onPlayLudo: (autoVoice?: boolean) => void;
   onPlayIntercept: (autoVoice?: boolean) => void;
   onPlayTicTacToe: (autoVoice?: boolean) => void;
@@ -60,6 +60,8 @@ export default function PlayByVoiceApp({
   const session = useChessGame({ settings, active: view.kind === "chess" });
   const [flipped, setFlipped] = useState(settings.playerColor === "b");
   const [dismissedResult, setDismissedResult] = useState<GameResult>(null);
+  const chessSetupRef = useRef<ChessSetupHandle>(null);
+  const [chessSetupGuidance, setChessSetupGuidance] = useState<ChessSetupGuidance | null>(null);
   const result = session.gameResult;
   const resultMessage = result
     ? result.winner
@@ -70,7 +72,10 @@ export default function PlayByVoiceApp({
   function navigate(destination: AvailableDestination): string {
     switch (destination) {
       case "chess":
-        if (view.kind !== "chess") setView({ kind: "loading" });
+        if (view.kind !== "chess") {
+          setChessSetupGuidance(null);
+          setView({ kind: "loading" });
+        }
         if (view.kind !== "chess")
           return "Opening the chessboard. Your saved position will resume. Say new game to change the setup.";
         if ((session.awaitingStartChoice || session.isPaused) && !resultMessage) {
@@ -83,7 +88,14 @@ export default function PlayByVoiceApp({
           return `Chess is open. ${resultMessage} You can review the moves or request a new game.`;
         return `Chess is ready. ${settings.gameMode === "local" ? "This is a local two-player game." : `You play ${settings.playerColor === "w" ? "White" : "Black"}.`} ${session.history.length > 0 ? "Ask about the current board or request your next move." : "Say a move to play it immediately, or say quick guide to hear the rules."}`;
       case "loups-garous":
-        onPlayLoupsGarous();
+        {
+          const carryVoice = shouldCarryVoiceOnNavigation(
+            companion.voice.status,
+            shouldAutoStartVoice(),
+          );
+          if (carryVoice) primeBrowserNarration();
+          onPlayLoupsGarous(carryVoice);
+        }
         return "Loups-Garous is open. Say start the game. Use Games to return to the game picker.";
       case "ludo":
         onPlayLudo(companion.voice.status === "connected");
@@ -149,13 +161,21 @@ export default function PlayByVoiceApp({
       getHint: session.getHint,
       newGame: () => {
         session.pauseGame();
+        setChessSetupGuidance(null);
         setView({ kind: "chess-setup" });
       },
       startDefaultGame: () => {
-        if (view.kind === "chess-setup") startChess({ ...defaultChessSetup(), ...settings });
+        if (view.kind === "chess-setup") chessSetupRef.current?.execute({ action: "defaults" });
       },
+      configureSetup: (command) =>
+        chessSetupRef.current?.execute(command) ?? {
+          ok: false,
+          message: "Chess setup is not ready yet.",
+        },
+      setupGuidance: chessSetupGuidance,
       resumeGame: () => {
         if (view.kind !== "chess") {
+          setChessSetupGuidance(null);
           setView({ kind: "loading" });
           return { ok: true, message: "Opening the saved chessboard." };
         }
@@ -183,23 +203,21 @@ export default function PlayByVoiceApp({
     setFlipped(applied.gameMode === "computer" && applied.playerColor === "b");
     setDismissedResult(null);
     setView({ kind: "chess" });
-    const color = selection.playerColor === "w" ? "White" : "Black";
-    const turn = selection.playerColor === "b" ? "White" : color;
-    companion.announce(
-      `You play ${color}. ${turn} to move.${selection.explainRules ? " Use the board or say a move such as e2 to e4. You can ask for a hint, board description, undo, pause, or help." : ""}`,
-    );
   }
 
   const startVoice = useRef(companion.voice.start);
   startVoice.current = companion.voice.start;
+  const attemptedArrivalVoice = useRef(false);
   useEffect(() => {
-    if (autoVoice) void startVoice.current();
-  }, [autoVoice]);
+    if (attemptedArrivalVoice.current) return;
+    if (autoVoice || (view.kind === "home" && shouldAutoStartVoice())) {
+      attemptedArrivalVoice.current = true;
+      void startVoice.current();
+    }
+  }, [autoVoice, view.kind]);
 
   const stockfishStatus = session.stockfishStatus;
   const prepareStockfish = session.prepareStockfish;
-  const announce = companion.announce;
-
   useEffect(() => {
     if (view.kind !== "loading") return;
     if (stockfishStatus === "unloaded") {
@@ -208,14 +226,10 @@ export default function PlayByVoiceApp({
     }
     if (stockfishStatus === "loading" || stockfishStatus === "error") return;
     const frame = requestAnimationFrame(() => {
-      if (session.awaitingStartChoice || session.isPaused) session.resumeGame();
-      announce(
-        `Chess is ready. You play ${settings.playerColor === "w" ? "White" : "Black"}. ${session.game.turn() === "w" ? "White" : "Black"} to move. Say your move, or new game to change the setup.`,
-      );
-      setView({ kind: "chess" });
+      setView({ kind: "chess-setup" });
     });
     return () => cancelAnimationFrame(frame);
-  }, [view.kind, stockfishStatus, prepareStockfish, announce]);
+  }, [view.kind, stockfishStatus, prepareStockfish]);
 
   useEffect(() => {
     window.scrollTo(0, 0);
@@ -340,11 +354,14 @@ export default function PlayByVoiceApp({
           )}
           {view.kind === "chess-setup" && (
             <ChessSetup
+              ref={chessSetupRef}
               onCancel={() => {
                 companion.cancelRequests();
                 setView({ kind: "home" });
               }}
               onStart={startChess}
+              onGuidanceChange={setChessSetupGuidance}
+              onSpeak={companion.announce}
             />
           )}
           {view.kind === "chess" && (

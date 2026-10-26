@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useRef, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import type { Preferences } from "../hooks/useSettings";
 import { localIntent } from "./commands";
 import { parseDestination, type AvailableDestination } from "./navigation";
@@ -15,6 +15,20 @@ export function useLibraryVoice(executor: VoiceToolExecutor, gameId: string) {
   if (!context) throw new Error("The game must be opened from the game library.");
   const current = useRef({ context, executor });
   const voiceActive = useRef(false);
+  const guidanceHandler = useRef<
+    | ((
+        action:
+          | "capabilities"
+          | "location"
+          | "repeat"
+          | "explain"
+          | "back"
+          | "home"
+          | "defaults"
+          | "start",
+      ) => { ok: boolean; message: string } | Promise<{ ok: boolean; message: string }>)
+    | null
+  >(null);
   current.current = { context, executor };
   const [shared] = useState<VoiceToolExecutor>(() => ({
     invalidatePending: () => current.current.executor.invalidatePending?.(),
@@ -36,11 +50,40 @@ export function useLibraryVoice(executor: VoiceToolExecutor, gameId: string) {
         if (!destination)
           return JSON.stringify({ status: "error", message: "Choose a game from the library." });
         game.invalidatePending?.();
+        voiceControl.current?.interrupt();
         // Deliver the tool reply before unmounting the current voice connection.
         window.setTimeout(() => bridge.navigate(destination, voiceActive.current), 0);
         return JSON.stringify({
           status: "completed",
           message: `Opening ${destination}. Your progress is saved.`,
+        });
+      }
+      if (name === "control_voice_guidance") {
+        const action = args.action;
+        if (
+          typeof action !== "string" ||
+          ![
+            "capabilities",
+            "location",
+            "repeat",
+            "explain",
+            "back",
+            "home",
+            "defaults",
+            "start",
+          ].includes(action)
+        )
+          return JSON.stringify({ status: "error", message: "Unknown guidance command." });
+        const handler = guidanceHandler.current;
+        if (!handler)
+          return JSON.stringify({
+            status: "error",
+            message: "Guidance is not ready on this screen.",
+          });
+        const result = await handler(action as Parameters<NonNullable<typeof handler>>[0]);
+        return JSON.stringify({
+          status: result.ok ? "completed" : "error",
+          message: result.message,
         });
       }
       if (name === "get_preferences") {
@@ -82,12 +125,17 @@ export function useLibraryVoice(executor: VoiceToolExecutor, gameId: string) {
     "home",
     context.preferences.settings.voiceVolume,
   );
+  const voiceControl = useRef<typeof voice | null>(null);
+  voiceControl.current = voice;
   voiceActive.current = voice.status === "connected";
   const startVoice = useRef(voice.start);
   startVoice.current = voice.start;
   useEffect(() => {
     if (context.autoVoice) void startVoice.current();
   }, [context.autoVoice, gameId]);
+  const setGuidanceHandler = useCallback((handler: typeof guidanceHandler.current) => {
+    guidanceHandler.current = handler;
+  }, []);
   async function runGlobalCommand(command: string): Promise<string | null> {
     if (/^help$/i.test(command.trim())) return null;
     const intent = localIntent(command);
@@ -99,5 +147,5 @@ export function useLibraryVoice(executor: VoiceToolExecutor, gameId: string) {
     if (voice.status === "connected") voice.announce(result.message);
     return result.message;
   }
-  return { voice, runGlobalCommand };
+  return { voice, runGlobalCommand, setGuidanceHandler };
 }

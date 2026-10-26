@@ -19,11 +19,39 @@ Never invent a move, board fact or successful outcome. Report tool errors withou
 Use get_preferences/set_preference for every audio and chess preference, review_move for history,
 and game_control for pause, resume, new_game, undo, resign, return_live, flip_board or retry_engine.
 Use navigate_app for page/game selection. ${PLAYABLE_GAMES_LABEL} are playable.
+Use control_voice_guidance for What can I do, Where am I, Repeat, Explain this, Go back,
+Go home, Use the defaults, and Start the game so replies match the current screen.
 Keep answers brief; say coordinates as a letter then number. The app narrates committed moves.
 `.trim();
 
 const tools = [
   navigationTool,
+  {
+    type: "function",
+    name: "control_voice_guidance",
+    description: "Handle a contextual guidance or setup-navigation command on the current screen.",
+    parameters: {
+      type: "object",
+      properties: {
+        action: {
+          type: "string",
+          enum: [
+            "capabilities",
+            "location",
+            "repeat",
+            "explain",
+            "back",
+            "home",
+            "defaults",
+            "start",
+          ],
+        },
+      },
+      required: ["action"],
+      additionalProperties: false,
+    },
+    strict: true,
+  },
   {
     type: "function",
     name: "promote_pawn",
@@ -237,7 +265,7 @@ const GREETINGS = {
 } as const;
 
 const INSTRUCTIONS = `You are the calm English-speaking companion in Playora for blind and low-vision players.
-In chess setup, "start with defaults" or "start game" must call game_control with start_game. Use set_preference for color, opponent and difficulty selections before starting.
+In chess setup, use configure_chess_setup for every choice. "Start with defaults" selects defaults and opens the summary; "Start game" confirms only after the summary is ready. Never use chess gameplay preferences to skip setup.
 
 Backchannel policy:
 Use sparse, brief backchannels. A short command such as play chess, undo, pause, or help is an action, never a backchannel to ignore.

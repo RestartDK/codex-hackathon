@@ -5,9 +5,11 @@ import { ArrowLeft, ArrowUp, Keyboard, X } from "lucide-react";
 import LiquidOrb from "../components/PlayByVoice/LiquidOrb";
 import { useDialogFocus } from "../hooks/useDialogFocus";
 import VillageSky from "./VillageSky";
+import { isEligibleSeerTarget } from "./targeting";
 import { usePresence } from "../hooks/usePresence";
 import { localIntent } from "../voice/commands";
 import { parseDestination, type AvailableDestination } from "../voice/navigation";
+import { LiveGuidanceDelivery, parseGuidanceCommand } from "../voice/guidance";
 import { DEFAULT_ROLE_COUNTS } from "../../server/game/rules.js";
 import type {
   FeedEntry,
@@ -503,16 +505,18 @@ export default function WerewolfApp({
   onNarrationVolumeChange,
   onShowGamePicker,
   onNavigateGame,
+  autoVoice = false,
 }: {
   narrationVolume: number;
   onNarrationVolumeChange: (volume: number) => void;
   onShowGamePicker: () => void;
   onNavigateGame?: (destination: AvailableDestination) => void;
+  autoVoice?: boolean;
 }) {
   const [session, setSession] = useState<Session>();
   const [presentedGame, setPresentedGame] = useState<GameView>();
   const [name] = useState("You");
-  const [count, setCount] = useState(8);
+  const [count, setCount] = useState(6);
   const [tieRule] = useState("no-exile");
   const [selected, setSelected] = useState<string[]>([]);
   const [message, setMessage] = useState("");
@@ -525,10 +529,12 @@ export default function WerewolfApp({
   const [guideMessages, setGuideMessages] = useState<GuideMessage[]>([]);
   const [guideText, setGuideText] = useState("");
   const [voiceTranscript, setVoiceTranscript] = useState("");
+  const [narrationError, setNarrationError] = useState("");
   const [openingAudio, setOpeningAudio] = useState<{ gameId: string; text: string }>();
   const [stage, setStage] = useState<SetupStage>("preparing");
   const [prepareAttempt, setPrepareAttempt] = useState(0);
   const [explainGame, setExplainGame] = useState(true);
+  const [setupAwaitingConfirmation, setSetupAwaitingConfirmation] = useState(false);
   const [introStep, setIntroStep] = useState<IntroStep | null>(null);
   const [seenInvestigations, setSeenInvestigations] = useState(0);
   const [voteOutcome, setVoteOutcome] = useState<{ result: VoteResult; revealing: boolean }>();
@@ -572,15 +578,20 @@ export default function WerewolfApp({
     }),
     [],
   );
-  // One ordered narrator reads this game. The live companion supplies the
-  // microphone and command routing, so its own audio stays muted.
+  // The live session owns setup guidance and voice commands. Authored gameplay
+  // scenes continue through the story narrator after a village starts.
   const voice = useVoiceCompanion(
     voiceExecutor,
-    true,
+    false,
     "loups-garous",
     "home",
     Math.round(narrationVolume * 100),
   );
+  const startVoiceRef = useRef(voice.start);
+  startVoiceRef.current = voice.start;
+  useEffect(() => {
+    if (autoVoice) void startVoiceRef.current();
+  }, [autoVoice]);
   const commandQueueRef = useRef(Promise.resolve());
   const lastVoiceCommandRef = useRef({ text: "", at: 0 });
   const actionInFlightRef = useRef(false);
@@ -588,7 +599,7 @@ export default function WerewolfApp({
   const guideAbortRef = useRef<AbortController | undefined>(undefined);
   // One browser narrator is deliberately used for every line. It starts without
   // a network round trip and never changes identity if a remote TTS request fails.
-  const narrationBackend = useMemo(() => createBrowserNarrationBackend(), []);
+  const narrationBackend = useMemo(() => createBrowserNarrationBackend(setNarrationError), []);
   const revealNarratedPhase = useCallback(() => {
     const latestGame = latestGameRef.current;
     if (!latestGame) return;
@@ -670,6 +681,8 @@ export default function WerewolfApp({
 
   function leaveToGamePicker() {
     cancelCreation();
+    storyAudio.stop();
+    voice.interrupt();
     onShowGamePicker();
   }
 
@@ -821,6 +834,10 @@ export default function WerewolfApp({
     options: { instant?: boolean } = {},
   ) {
     appendAssistantCaption(text, mode);
+    if (!session && voice.status === "connected") {
+      storyAudio.stop();
+      if (voice.announce(text)) return;
+    }
     storyAudio.enqueue({
       id: crypto.randomUUID(),
       speaker: "Assistant",
@@ -829,6 +846,67 @@ export default function WerewolfApp({
       duringLive: true,
       instant: options.instant ?? voice.status === "connected",
     });
+  }
+
+  const setupGuidanceDelivery = useRef(new LiveGuidanceDelivery());
+  const currentSetupGuidanceRef = useRef("");
+  const liveAnnounce = voice.announce;
+  const livePlaybackSequence = voice.playbackSequence;
+  const liveSessionSequence = voice.sessionSequence;
+  const liveStatus = voice.status;
+  const stopStoryAudio = storyAudio.stop;
+  useEffect(() => {
+    if (session) return;
+    const key = `${stage}:${count}:${explainGame}:${setupAwaitingConfirmation}`;
+    const message =
+      stage === "prepare-error"
+        ? "Loups-Garous could not load. Choose Retry or return home."
+        : stage === "mode"
+          ? "Welcome to Loups-Garous. Setup has two steps. First choose who to play with. Solo is selected and is the only available mode. Say Solo or choose it to continue."
+          : stage === "village"
+            ? setupAwaitingConfirmation
+              ? `Your settings are ${count} players with explain-as-you-play ${explainGame ? "on" : "off"}. Say Start the game or choose Confirm and start.`
+              : `Now set up your village. Choose from ${MIN_VILLAGE} to ${MAX_VILLAGE} players; ${count} is selected and six is the default. Explain-as-you-play is ${explainGame ? "on" : "off"}, and on is the default. Say a player count, say explanation on or off, or say Start the game to review.`
+            : "";
+    if (!message) return;
+    currentSetupGuidanceRef.current = message;
+    setupGuidanceDelivery.current.sync(key, message);
+    if (liveStatus !== "connected") return;
+    const guidance = setupGuidanceDelivery.current.request(
+      liveSessionSequence,
+      livePlaybackSequence,
+    );
+    if (!guidance) return;
+    appendAssistantCaption(guidance);
+    stopStoryAudio();
+    if (!liveAnnounce(guidance)) setupGuidanceDelivery.current.requestFailed(liveSessionSequence);
+  }, [
+    count,
+    explainGame,
+    session,
+    setupAwaitingConfirmation,
+    stage,
+    liveAnnounce,
+    livePlaybackSequence,
+    liveSessionSequence,
+    liveStatus,
+    stopStoryAudio,
+  ]);
+
+  useEffect(() => {
+    setupGuidanceDelivery.current.confirmPlayback(livePlaybackSequence);
+  }, [livePlaybackSequence]);
+
+  function recoverNarration() {
+    primeBrowserNarration();
+    setNarrationError("");
+    storyAudio.stop();
+    const currentGuidance = currentSetupGuidanceRef.current;
+    if (!session && voice.status === "connected" && currentGuidance) {
+      queueAssistant(currentGuidance);
+      return;
+    }
+    storyAudio.repeatLast();
   }
 
   /** Read structured, player-safe information immediately without waiting for Live Voice. */
@@ -934,9 +1012,93 @@ export default function WerewolfApp({
     }
     if (voiceCommandsPaused) return;
     if (!session) {
-      if (startsNewGameNaturally(command) || /\bstart\b.*\bdefaults?\b/iu.test(command)) {
+      const guidanceCommand = parseGuidanceCommand(command);
+      if (guidanceCommand === "repeat") {
+        storyAudio.repeatLast();
+        return;
+      }
+      if (guidanceCommand === "location") {
+        queueAssistant(
+          `You are in Loups-Garous ${stage === "mode" ? "game mode setup" : stage === "village" ? "village setup" : "loading"}.`,
+        );
+        return;
+      }
+      if (guidanceCommand === "capabilities") {
+        queueAssistant(
+          stage === "mode"
+            ? "Choose Solo to continue. You can also repeat, ask for an explanation, go back, use defaults, or go home."
+            : `Choose ${MIN_VILLAGE} to ${MAX_VILLAGE} players and explanation on or off. You can also repeat, go back, use defaults, or start the game.`,
+        );
+        return;
+      }
+      if (guidanceCommand === "explain") {
+        queueAssistant(
+          "Loups-Garous alternates private night actions with public day discussion and voting. Your role stays private. Complete setup one question at a time.",
+        );
+        return;
+      }
+      if (guidanceCommand === "back") {
+        if (stage === "village") {
+          setSetupAwaitingConfirmation(false);
+          setStage("mode");
+        } else leaveToGamePicker();
+        return;
+      }
+      if (guidanceCommand === "defaults") {
+        setCount(6);
+        setExplainGame(true);
+        setStage("village");
+        setSetupAwaitingConfirmation(true);
+        return;
+      }
+      if (stage === "mode" && /\bsolo\b/iu.test(command)) {
+        setStage("village");
+        return;
+      }
+      const countAnswer = command.match(/\b(5|6|7|8|9|10|11|12)\b/);
+      if (stage === "village" && countAnswer) {
+        setCount(Number(countAnswer[1]));
+        setSetupAwaitingConfirmation(false);
+        return;
+      }
+      if (
+        stage === "village" &&
+        /\b(?:explanation|explain as you play|guidance)\b.*\b(on|yes)\b/iu.test(command)
+      ) {
+        setExplainGame(true);
+        setSetupAwaitingConfirmation(false);
+        return;
+      }
+      if (
+        stage === "village" &&
+        /\b(?:explanation|explain as you play|guidance)\b.*\b(off|no)\b/iu.test(command)
+      ) {
+        setExplainGame(false);
+        setSetupAwaitingConfirmation(false);
+        return;
+      }
+      if (
+        (guidanceCommand === "start" || /^(?:yes|start)$/iu.test(command)) &&
+        setupAwaitingConfirmation
+      ) {
         queueAssistant("Starting a new village. I will introduce the characters first.");
-        await create(undefined, /\b(quick|test)\b/iu.test(command));
+        await create();
+        return;
+      }
+      if (guidanceCommand === "start" && stage === "village") {
+        setSetupAwaitingConfirmation(true);
+        return;
+      }
+      if (startsNewGameNaturally(command)) {
+        if (/\b(quick|test)\b/iu.test(command)) {
+          await create(undefined, true);
+          return;
+        }
+        setStage("village");
+        setSetupAwaitingConfirmation(true);
+        queueAssistant(
+          `Your village has ${count} players, and explain-as-you-play is ${explainGame ? "on" : "off"}. Say confirm to start.`,
+        );
         return;
       }
       if (isGuideQuestion(command)) {
@@ -946,6 +1108,38 @@ export default function WerewolfApp({
         return;
       }
       queueAssistant("Tell me when you want to play, and I will start a new village.");
+      return;
+    }
+
+    const activeGuidanceCommand = parseGuidanceCommand(command);
+    if (activeGuidanceCommand === "repeat") {
+      storyAudio.repeatLast();
+      return;
+    }
+    if (activeGuidanceCommand === "location") {
+      queueAssistant(
+        `You are in Loups-Garous, ${phaseNames[session.game.phase]}. ${currentActionHelp(session.game)}`,
+      );
+      return;
+    }
+    if (activeGuidanceCommand === "capabilities") {
+      queueAssistant(currentActionHelp(session.game));
+      return;
+    }
+    if (activeGuidanceCommand === "explain") {
+      queueAssistant(
+        `Your role and legal actions are shown for ${phaseNames[session.game.phase]}. ${currentActionHelp(session.game)}`,
+      );
+      return;
+    }
+    if (activeGuidanceCommand === "back") {
+      queueAssistant(
+        "A live village cannot move back to an earlier phase. Continue with the available action, or say go home to leave the village.",
+      );
+      return;
+    }
+    if (activeGuidanceCommand === "defaults" || activeGuidanceCommand === "start") {
+      queueAssistant(`The village is already active. ${currentActionHelp(session.game)}`);
       return;
     }
 
@@ -1287,23 +1481,35 @@ export default function WerewolfApp({
     };
   }, []);
 
-  const voiceConnected = voice.status === "connected";
-  const voiceBusy = voice.status === "connecting" || voice.status === "closing";
+  const voiceConnected = voice.status === "connected" && !voice.needsAudioActivation;
+  const voiceBusy =
+    (voice.status === "connecting" && !voice.needsAudioActivation) || voice.status === "closing";
   const voiceActive = voiceConnected && !voiceCommandsPaused;
-  const voiceDockStatus =
-    voice.status === "connecting"
-      ? "Connecting voice"
-      : voice.status === "closing"
-        ? "Ending voice"
-        : voiceConnected
-          ? voiceCommandsPaused
-            ? "Voice commands paused"
-            : voice.microphoneMuted
-              ? "Microphone muted"
-              : "Listening and answering"
-          : voice.status === "error"
-            ? "Retry voice"
-            : "Voice is off";
+  const narratorSpeaking = Boolean(storyAudio.activeSpeaker || voice.isSpeaking);
+  const voiceActivity = narratorSpeaking
+    ? "speaking"
+    : busy
+      ? "thinking"
+      : voiceActive && !voice.microphoneMuted
+        ? "listening"
+        : voice.status;
+  const voiceDockStatus = narratorSpeaking
+    ? "Companion speaking"
+    : busy
+      ? "Companion thinking"
+      : voice.status === "connecting"
+        ? "Connecting voice"
+        : voice.status === "closing"
+          ? "Ending voice"
+          : voiceConnected
+            ? voiceCommandsPaused
+              ? "Voice commands paused"
+              : voice.microphoneMuted
+                ? "Microphone muted"
+                : "Listening and answering"
+            : voice.status === "error"
+              ? "Retry voice"
+              : "Voice is off";
   const latestGuideReply = [...guideMessages].reverse().find((entry) => entry.role === "assistant");
 
   function closeCommands() {
@@ -1313,6 +1519,10 @@ export default function WerewolfApp({
 
   function toggleVoiceFromOrb() {
     primeBrowserNarration();
+    if (voice.needsAudioActivation) {
+      void voice.activateAudio();
+      return;
+    }
     if (voiceConnected) {
       if (voiceCommandsPaused) {
         setVoiceCommandsPaused(false);
@@ -1333,8 +1543,9 @@ export default function WerewolfApp({
   // The same dock, orb, and typed-command panel as Chess (src/components/PlayByVoice/CompanionDock.tsx).
   const voiceDock = (
     <footer
-      className={`companion-dock ww-companion-dock${voiceActive ? " voice-connected" : ""}`}
+      className={`companion-dock ww-companion-dock${voiceActive ? " voice-connected" : ""} voice-${voiceActivity}`}
       aria-label="Voice companion"
+      data-voice-activity={voiceActivity}
     >
       <div className="companion-orb-row">
         <button
@@ -1362,6 +1573,14 @@ export default function WerewolfApp({
         <p className="voice-error" role="alert">
           {voice.error}
         </p>
+      )}
+      {narrationError && (
+        <div className="voice-error" role="alert">
+          <p>{narrationError}</p>
+          <button type="button" onClick={recoverNarration}>
+            Start narration
+          </button>
+        </div>
       )}
       {commandPanel.mounted && (
         <form
@@ -1865,7 +2084,14 @@ export default function WerewolfApp({
               </button>
             </>
           ) : (
-            <form className="ww-village-setup" onSubmit={create}>
+            <form
+              className="ww-village-setup"
+              onSubmit={(event) => {
+                event.preventDefault();
+                if (setupAwaitingConfirmation) void create();
+                else setSetupAwaitingConfirmation(true);
+              }}
+            >
               <div className="ww-village-config">
                 <div className="ww-panel ww-count-panel">
                   <h2 id="ww-heading" tabIndex={-1}>
@@ -1927,7 +2153,7 @@ export default function WerewolfApp({
                   Explain the game as we play
                 </label>
                 <button className="ww-start-button" type="submit" disabled={busy}>
-                  <span>Start game</span>
+                  <span>{setupAwaitingConfirmation ? "Confirm and start" : "Start game"}</span>
                 </button>
               </div>
             </form>
@@ -2326,18 +2552,6 @@ export default function WerewolfApp({
             Play again
           </button>
         </div>
-        {playerCards()}
-        {game.lastVotes && (
-          <details className="ww-final-votes">
-            <summary>Final votes</summary>
-            {game.lastVotes.map((vote, index) => (
-              <p key={index}>
-                {game.players.find((player) => player.id === vote.voter)?.name} voted for{" "}
-                {game.players.find((player) => player.id === vote.target)?.name}
-              </p>
-            ))}
-          </details>
-        )}
       </>
     );
   } else if (!me.alive && !me.hunterActionPending) {
@@ -2378,7 +2592,7 @@ export default function WerewolfApp({
             player.name !== me.wolfVictim)
         : player.alive &&
           player.id !== me.id &&
-          (me.role === "seer" ||
+          ((me.role === "seer" && isEligibleSeerTarget(player, me.id, me.investigations)) ||
             (me.role === "werewolf" && !me.werewolfTeam?.includes(player.name)));
     const witchCards = {
       isSelected: (player: PublicPlayerView) =>

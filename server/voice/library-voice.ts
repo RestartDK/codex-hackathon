@@ -5,6 +5,9 @@ You are the reasoning layer for a voice-first chess companion. The browser owns 
 authoritative chess state. Always use a chess function before stating current board
 facts or attempting a game action. Never invent a legal move, square, piece, capture,
 check, result, or evaluation. A specific move ordered by the player is committed immediately.
+During Chess setup, use configure_chess_setup for every choice, back, defaults, repeat,
+explanation, and start request. Starting first presents the application summary; only a
+separate confirmation starts the match.
 Only a move selected or suggested by the companion requires later confirmation. Keep spoken answers concise and
 say coordinates as a letter followed by a number.
 After a move tool reports completion, acknowledge it briefly without repeating the
@@ -24,6 +27,30 @@ function exceedsSessionLimit(request: Request): boolean {
 }
 
 const tools = [
+  {
+    type: "function",
+    name: "configure_chess_setup",
+    description: "Change the visible Chess setup step or control its guided flow.",
+    parameters: {
+      type: "object",
+      properties: {
+        action: {
+          type: ["string", "null"],
+          enum: ["back", "defaults", "start", "repeat", "explain", null],
+        },
+        difficulty: {
+          type: ["string", "null"],
+          enum: ["beginner", "casual", "club", null],
+        },
+        color: { type: ["string", "null"], enum: ["w", "b", "random", null] },
+        timer: { type: ["string", "null"], enum: ["off", null] },
+        rules: { type: ["boolean", "null"] },
+      },
+      required: ["action", "difficulty", "color", "timer", "rules"],
+      additionalProperties: false,
+    },
+    strict: true,
+  },
   {
     type: "function",
     name: "get_position",
@@ -363,6 +390,41 @@ const INTERCEPT_INSTRUCTIONS = `You are the reasoning layer for The Intercept, a
 const ticTacToeTools = [
   {
     type: "function",
+    name: "configure_tic_tac_toe_setup",
+    description: "Choose the opponent, difficulty, player mark, or first turn while setup is open.",
+    parameters: {
+      type: "object",
+      properties: {
+        opponent: { type: ["string", "null"], enum: ["computer", "friend", null] },
+        difficulty: { type: ["string", "null"], enum: ["easy", "medium", "hard", null] },
+        playerMark: { type: ["string", "null"], enum: ["X", "O", "random", null] },
+        firstTurn: { type: ["string", "null"], enum: ["player", "opponent", null] },
+      },
+      required: ["opponent", "difficulty", "playerMark", "firstTurn"],
+      additionalProperties: false,
+    },
+    strict: true,
+  },
+  {
+    type: "function",
+    name: "control_tic_tac_toe_setup",
+    description:
+      "Go back, use defaults, repeat or explain a step, start, or cancel Tic-Tac-Toe setup.",
+    parameters: {
+      type: "object",
+      properties: {
+        action: {
+          type: "string",
+          enum: ["back", "start", "cancel", "defaults", "repeat", "explain"],
+        },
+      },
+      required: ["action"],
+      additionalProperties: false,
+    },
+    strict: true,
+  },
+  {
+    type: "function",
     name: "get_tic_tac_toe_state",
     description: "Get the authoritative board, turn, result, difficulty, and scoreboard.",
     parameters: { type: "object", properties: {}, additionalProperties: false },
@@ -371,7 +433,7 @@ const ticTacToeTools = [
   {
     type: "function",
     name: "inspect_tic_tac_toe_cell",
-    description: "Report whether a named square is empty, human X, or computer O.",
+    description: "Report whether a named square is empty and who owns its configured mark.",
     parameters: {
       type: "object",
       properties: {
@@ -404,7 +466,7 @@ const ticTacToeTools = [
     type: "function",
     name: "place_tic_tac_toe_mark",
     description:
-      "Immediately place X in a square explicitly ordered by the player. Do not ask for confirmation.",
+      "Immediately place the player's configured mark in a square explicitly ordered by the player. Do not ask for confirmation.",
     parameters: {
       type: "object",
       properties: { position: { type: "string", description: "The explicitly requested square." } },
@@ -471,7 +533,7 @@ const ticTacToeTools = [
   },
 ];
 
-const TIC_TAC_TOE_INSTRUCTIONS = `You are the reasoning layer for a voice-first Tic-Tac-Toe game. The browser owns the authoritative board, rules, AI, turn, and score. Never invent a mark, empty square, legal move, result, or computer action. Use a Tic-Tac-Toe function before stating current game facts. The human is X and the computer is O. A square explicitly ordered by the player uses place_tic_tac_toe_mark and plays immediately without confirmation. Use suggest_tic_tac_toe_move only when the player asks you to choose; follow its confirmation requirement. Board, cell, available-square, history, undo, pause, and resume requests need no confirmation. New round and reset match follow the tool result. Keep move acknowledgements brief because the browser supplies authoritative paced narration.`;
+const TIC_TAC_TOE_INSTRUCTIONS = `You are the reasoning layer for a voice-first Tic-Tac-Toe game. The browser owns the authoritative setup, board, rules, AI, turn, and score. Never invent a mark, empty square, legal move, result, or computer action. Use a Tic-Tac-Toe function before stating current game facts. During setup, use configure_tic_tac_toe_setup for opponent, difficulty, mark, and first-turn requests, and control_tic_tac_toe_setup for back, defaults, repeat, explain, start, or cancel. Starting must follow the visible settings summary and the player's confirmation. During play, a square explicitly ordered by the player uses place_tic_tac_toe_mark and plays immediately without confirmation. Use suggest_tic_tac_toe_move only when the player asks you to choose; follow its confirmation requirement. Board, cell, available-square, history, undo, pause, and resume requests need no confirmation. New round and reset match follow the tool result. Keep acknowledgements brief because the browser supplies authoritative narration.`;
 
 const WEREWOLF_INSTRUCTIONS = `You are the routing layer for a Loups-Garous companion. The application owns the rules, hidden information, navigation, audio settings, and narration. For every player utterance, call submit_player_command with the player's exact words. Never answer a game question, reveal a fact, invent an outcome, or act on your own. Do not speak after a tool call.`;
 
@@ -493,6 +555,33 @@ const werewolfTools = [
 
 const sharedLibraryTools = [
   navigationTool,
+  {
+    type: "function",
+    name: "control_voice_guidance",
+    description:
+      "Handle contextual guidance commands using the application's current screen and setup state.",
+    parameters: {
+      type: "object",
+      properties: {
+        action: {
+          type: "string",
+          enum: [
+            "capabilities",
+            "location",
+            "repeat",
+            "explain",
+            "back",
+            "home",
+            "defaults",
+            "start",
+          ],
+        },
+      },
+      required: ["action"],
+      additionalProperties: false,
+    },
+    strict: true,
+  },
   {
     type: "function",
     name: "get_preferences",
@@ -636,7 +725,7 @@ export async function handleLibraryVoiceSession(request: Request): Promise<Respo
       : gameId === "intercept"
         ? `The Intercept is a solo authored mystery. The application supplies a spoiler-free introduction plus exact passages and choices. Use get_game_introduction when asked about the premise, goal, winning, losing, or endings. Speak each passage once, faithfully and in order. Do not summarize unless asked for a recap, and do not reveal or predict unseen consequences. Explicit choices play immediately; a choice you select for the player requires confirmation. Use get_story_state when a choice is unclear. Repeat, recap, undo, pause, and resume need no confirmation.`
         : gameId === "tic-tac-toe"
-          ? `The human is X and moves first against computer O. Use natural positions or square numbers one through nine. An explicit square plays immediately; only a move you select for the player requires confirmation. Describe the full board only when asked. The browser announces each committed move and result. Use Tic-Tac-Toe tools for every current fact and action.`
+          ? `Read the configured mark, opponent, difficulty, and first turn from tool results; never assume them. Use natural positions or square numbers one through nine. An explicit square plays immediately; only a move you select for the player requires confirmation. Describe the full board only when asked. The browser announces each committed move and result. Use Tic-Tac-Toe tools for every current fact and action.`
           : `If a saved game exists, ask resume or new game and wait. Resume immediately through the game-control tool; confirm only a new game that discards progress. An explicit move order plays immediately. A companion-selected move follows the tool's confirmation requirement. Board questions, rolling, pause, and resume need no confirmation.`;
 
   let upstream: Response;
@@ -654,9 +743,9 @@ export async function handleLibraryVoiceSession(request: Request): Promise<Respo
           audio: { output: { voice: process.env.OPENAI_VOICE ?? "marin" } },
           instructions: `You are a calm English voice companion for a blind ${gameId} player. Be brief, accept interruptions, and delegate every current game fact and game action. Never claim an action succeeded until its tool result says so.
 
-Generate <|SpawnThinking|> before responding to every game action, navigation request, preference change, or question about current state. Short commands such as roll, token two, choice one, center, pause, or continue are actions to execute, not backchannels to ignore. Stop speaking immediately if the player interrupts. Wait for tool results before reporting success.
+Generate <|SpawnThinking|> before responding to every game action, navigation request, preference change, or question about current state. Short commands such as roll, token two, choice one, center, pause, or continue are actions to execute, not backchannels to ignore. Stop speaking immediately if the player interrupts. Wait for tool results before reporting success. Treat only microphone input as player speech; never interpret your own output audio or an application announcement as a command.
 
-At the beginning, use the application's brief welcome. Offer help in one short phrase; explain rules or the dashboard only when asked. ${experienceInstructions}
+Application commentary is authoritative screen guidance. When the application sends commentary, speak that supplied text verbatim and in full. Do not shorten it, replace it with a generic welcome, append an offer of help, or omit its current setting and choices. Otherwise, at the beginning use the application's brief welcome and explain rules or the dashboard only when asked. ${experienceInstructions}
 
 Keep ordinary replies to one short sentence. For a requested guide or board configuration, provide the detail requested using current tool results. Speak each application update once in order, without adding tutorials or repeating a completed roll or move. A computer turn update says what is happening now; do not speculate about its next roll or move.
 
@@ -669,7 +758,7 @@ Honor requests to repeat, add detail, speak more slowly, pause, or stop speaking
               instructions: `${activeInstructions} ${
                 gameId === "loups-garous"
                   ? "Route every utterance, including navigation and audio requests, through submit_player_command."
-                  : "Use navigate_app to open the game library, another game, audio settings or help. Use get_preferences and set_preference for narrator volume or screen-reader mode."
+                  : "Use control_voice_guidance for What can I do, Where am I, Repeat, Explain this, Go back, Go home, Use the defaults, and Start the game. Use navigate_app for other page or game selection. Use get_preferences and set_preference for narrator volume or screen-reader mode."
               }`,
               tools: [...activeTools, ...(gameId === "loups-garous" ? [] : sharedLibraryTools)],
               tool_choice: "auto",

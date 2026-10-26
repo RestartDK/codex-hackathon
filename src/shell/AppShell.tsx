@@ -2,6 +2,8 @@ import { lazy, Suspense, useCallback, useEffect, useState } from "react";
 import PlayByVoiceApp from "../app/App";
 import { useSettings } from "../hooks/useSettings";
 import WerewolfApp from "../werewolf/App";
+import InterceptPage from "../components/InterceptGame/InterceptPage";
+import TicTacToePage from "../components/TicTacToeGame/TicTacToePage";
 import "../styles/library-games.css";
 import { LibraryVoiceContext } from "../voice/useLibraryVoice";
 import type { AvailableDestination } from "../voice/navigation";
@@ -16,8 +18,6 @@ const EXPERIENCES = {
 
 type Experience = keyof typeof EXPERIENCES;
 const LudoPage = lazy(() => import("../components/LudoGame/LudoPage"));
-const InterceptPage = lazy(() => import("../components/InterceptGame/InterceptPage"));
-const TicTacToePage = lazy(() => import("../components/TicTacToeGame/TicTacToePage"));
 
 export default function AppShell() {
   const preferences = useSettings();
@@ -36,7 +36,10 @@ export default function AppShell() {
       setExperience("play-by-voice");
     } else setExperience(destination);
   }, []);
-  const playLoupsGarous = useCallback(() => setExperience("loups-garous"), []);
+  const playLoupsGarous = useCallback((voice = false) => {
+    setAutoVoice(voice);
+    setExperience("loups-garous");
+  }, []);
   const playLudo = useCallback((voice = false) => {
     setAutoVoice(voice);
     setExperience("ludo");
@@ -74,6 +77,7 @@ export default function AppShell() {
         onNarrationVolumeChange={changeNarrationVolume}
         onShowGamePicker={showGamePicker}
         onNavigateGame={navigateLibrary}
+        autoVoice={autoVoice}
       />
     );
 
@@ -94,17 +98,13 @@ export default function AppShell() {
   if (experience === "intercept")
     return (
       <LibraryVoiceContext.Provider value={shared}>
-        <Suspense fallback={loading}>
-          <InterceptPage onExit={showGamePicker} preferences={preferences} />
-        </Suspense>
+        <InterceptPage onExit={showGamePicker} preferences={preferences} />
       </LibraryVoiceContext.Provider>
     );
   if (experience === "tic-tac-toe")
     return (
       <LibraryVoiceContext.Provider value={shared}>
-        <Suspense fallback={loading}>
-          <TicTacToePage onExit={showGamePicker} preferences={preferences} />
-        </Suspense>
+        <TicTacToePage onExit={showGamePicker} preferences={preferences} />
       </LibraryVoiceContext.Provider>
     );
 

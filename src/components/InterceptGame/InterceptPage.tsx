@@ -8,14 +8,45 @@ import {
 } from "../../games/intercept/interceptTools";
 import { useInterceptGame } from "../../games/intercept/useInterceptGame";
 import { useLibraryVoice } from "../../voice/useLibraryVoice";
+import { GuidanceTracker, parseGuidanceCommand } from "../../voice/guidance";
 import { Button } from "../ui/Button";
 import { Card } from "../ui/Card";
+import LiquidOrb from "../PlayByVoice/LiquidOrb";
 import "./InterceptPage.css";
 
 const DASHBOARD =
   "The dashboard has voice controls, typed commands, the current story passage, numbered choices, a transcript, repeat, recap, undo, pause, and new story controls.";
 const GUIDE =
   "Listen to each scene, then say a number such as choice two, speak the exact choice text, or use a numbered button. You can ask me to repeat the passage, list the choices, recap recent events, pause, resume, or undo your last choice. A choice you order happens immediately. If you ask me to choose for you, I will ask before committing it.";
+
+const INTERCEPT_LOADING_ASSETS = [
+  "/assets/figma/intercept-loading-base.png",
+  "/assets/figma/intercept-loading-light.png",
+  "/assets/figma/intercept-loading-texture.png",
+  "/assets/figma/intercept-loading-overlay.png",
+  "/assets/figma/intercept-loading-shape.svg",
+  "/assets/figma/intercept-companion.png",
+];
+
+function loadImage(src: string, signal: AbortSignal) {
+  return new Promise<void>((resolve, reject) => {
+    const image = new Image();
+    const abort = () => {
+      image.src = "";
+      reject(new DOMException("Loading cancelled", "AbortError"));
+    };
+    signal.addEventListener("abort", abort, { once: true });
+    image.onload = () => {
+      signal.removeEventListener("abort", abort);
+      resolve();
+    };
+    image.onerror = () => {
+      signal.removeEventListener("abort", abort);
+      reject(new Error(`Could not load ${src}`));
+    };
+    image.src = src;
+  });
+}
 
 function responseMessage(raw: string): string {
   try {
@@ -46,24 +77,57 @@ export default function InterceptPage({
     );
   }
   const executor = executorRef.current;
-  const { voice, runGlobalCommand } = useLibraryVoice(executor, "intercept");
+  const { voice, runGlobalCommand, setGuidanceHandler } = useLibraryVoice(executor, "intercept");
   const [typedCommand, setTypedCommand] = useState("");
   const [panel, setPanel] = useState<"audio" | "help" | null>(null);
   const [response, setResponse] = useState(
     "Ready. Start the voice companion or choose with the controls below.",
   );
-  const previousVoiceStatus = useRef(voice.status);
+  const [loadAttempt, setLoadAttempt] = useState(0);
+  const [loadState, setLoadState] = useState<"loading" | "ready" | "error">("loading");
+  const [loadError, setLoadError] = useState("");
+  const guidanceTracker = useRef(new GuidanceTracker());
 
   useEffect(() => {
-    if (voice.status === "connected" && previousVoiceStatus.current !== "connected") {
-      const welcome = game.awaitingStartChoice
-        ? "Welcome back to The Intercept. Resume your saved story or start a new story? You can ask what the game is about at any time."
-        : `Welcome to The Intercept. ${INTERCEPT_INTRODUCTION} ${DASHBOARD} ${game.repeat()}`;
-      setResponse(welcome);
-      voice.announce(welcome);
+    const controller = new AbortController();
+    setLoadState("loading");
+    setLoadError("");
+    void Promise.all(
+      INTERCEPT_LOADING_ASSETS.map((asset) => loadImage(asset, controller.signal)),
+    ).then(
+      () => {
+        if (!controller.signal.aborted) setLoadState("ready");
+      },
+      (cause) => {
+        if (controller.signal.aborted) return;
+        setLoadError(cause instanceof Error ? cause.message : "The story artwork could not load.");
+        setLoadState("error");
+      },
+    );
+    return () => controller.abort();
+  }, [loadAttempt]);
+
+  useEffect(() => {
+    if (voice.status !== "connected") return;
+    const message =
+      loadState === "loading"
+        ? "The Intercept selected. I am preparing the story."
+        : loadState === "error"
+          ? "The Intercept could not load. Choose Retry or Back."
+          : game.awaitingStartChoice
+            ? "Welcome back to The Intercept. There is no setup. Resume your saved story or start a new story."
+            : `Welcome to The Intercept. There is no setup, so the story is ready. ${INTERCEPT_INTRODUCTION} ${game.repeat()} Say a numbered choice to continue.`;
+    const guidance = guidanceTracker.current.take({
+      key: `${loadState}:${game.awaitingStartChoice ? "saved" : "fresh"}`,
+      message,
+      location: loadState === "ready" ? "The Intercept story" : `The Intercept ${loadState}`,
+      capabilities: GUIDE,
+    });
+    if (guidance) {
+      setResponse(guidance);
+      voice.announce(guidance);
     }
-    previousVoiceStatus.current = voice.status;
-  }, [game, voice.announce, voice.status]);
+  }, [game.awaitingStartChoice, loadState, voice.announce, voice.status]);
 
   async function execute(name: string, args: object = {}, narrate = true) {
     const raw = await executor.execute(name, JSON.stringify(args));
@@ -88,6 +152,31 @@ export default function InterceptPage({
       .replace(/\s+/g, " ");
     setTypedCommand("");
     if (!normalized) return;
+    const guidanceCommand = parseGuidanceCommand(normalized);
+    if (guidanceCommand === "repeat") return void execute("repeat_story_passage");
+    if (guidanceCommand === "location") {
+      const message = `You are in The Intercept, at the current story choice. ${game.repeat()}`;
+      setResponse(message);
+      if (voice.status === "connected") voice.announce(message);
+      return;
+    }
+    if (guidanceCommand === "capabilities") {
+      const message = `${game.choices()} You can also ask to repeat, recap, undo, pause, or go home.`;
+      setResponse(message);
+      if (voice.status === "connected") voice.announce(message);
+      return;
+    }
+    if (guidanceCommand === "explain") {
+      setResponse(GUIDE);
+      if (voice.status === "connected") voice.announce(GUIDE);
+      return;
+    }
+    if (guidanceCommand === "defaults" || guidanceCommand === "start") {
+      const message = `The Intercept has no setup choices. The story is ready. ${game.repeat()}`;
+      setResponse(message);
+      if (voice.status === "connected") voice.announce(message);
+      return;
+    }
     const global = await runGlobalCommand(normalized);
     if (global !== null) {
       setResponse(global);
@@ -141,6 +230,78 @@ export default function InterceptPage({
 
   const pending = executor.getPending();
   const disabled = game.awaitingStartChoice || game.state.status !== "playing";
+
+  useEffect(() => {
+    setGuidanceHandler(async (action) => {
+      let message: string;
+      if (action === "repeat") message = game.repeat();
+      else if (action === "location")
+        message = `You are in The Intercept at the current story choice. ${game.repeat()}`;
+      else if (action === "capabilities")
+        message = `${game.choices()} You can also repeat, recap, undo, pause, or go home.`;
+      else if (action === "explain") message = `${INTERCEPT_INTRODUCTION} ${GUIDE}`;
+      else if (action === "home") {
+        message = "Returning to the game picker.";
+        window.setTimeout(() => {
+          voice.interrupt();
+          onExit();
+        }, 0);
+      } else if (action === "back") {
+        message = await execute("undo_story_choice", {}, false);
+      } else message = `The Intercept has no setup choices. The story is ready. ${game.repeat()}`;
+      setResponse(message);
+      return { ok: true, message };
+    });
+    return () => setGuidanceHandler(null);
+  }, [execute, game, onExit, setGuidanceHandler, voice]);
+
+  if (loadState !== "ready") {
+    return (
+      <main
+        className="intercept-loading"
+        aria-labelledby="intercept-loading-title"
+        aria-busy={loadState === "loading"}
+      >
+        <div className="intercept-loading-art" aria-hidden="true">
+          <img src="/assets/figma/intercept-loading-base.png" alt="" />
+          <img src="/assets/figma/intercept-loading-light.png" alt="" />
+          <img src="/assets/figma/intercept-loading-texture.png" alt="" />
+          <img src="/assets/figma/intercept-loading-overlay.png" alt="" />
+        </div>
+        <header className="intercept-loading-header">
+          <strong>Playora</strong>
+          <nav aria-label="Intercept loading options">
+            <span>Audio Settings</span>
+            <span>Help</span>
+          </nav>
+        </header>
+        <div className="intercept-loading-center">
+          <img src="/assets/figma/intercept-loading-shape.svg" alt="" />
+          <h1 id="intercept-loading-title" tabIndex={-1}>
+            {loadState === "error" ? "Intercept could not load" : "Loading"}
+          </h1>
+          {loadState === "error" ? (
+            <div className="intercept-loading-error" role="alert">
+              <p>{loadError}</p>
+              <button type="button" onClick={() => setLoadAttempt((value) => value + 1)}>
+                Retry
+              </button>
+              <button type="button" onClick={onExit}>
+                Back
+              </button>
+            </div>
+          ) : (
+            <span className="sr-only" role="status">
+              Preparing The Intercept story and artwork.
+            </span>
+          )}
+        </div>
+        <button type="button" className="intercept-loading-back" onClick={onExit}>
+          Go back to main
+        </button>
+      </main>
+    );
+  }
 
   return (
     <div className="app intercept-app">
@@ -206,10 +367,13 @@ export default function InterceptPage({
                         : "Voice is off"}
               </p>
             </div>
-            {voice.status !== "connected" ? (
+            {voice.status !== "connected" || voice.needsAudioActivation ? (
               <Button
-                onClick={voice.start}
-                disabled={voice.status === "connecting" || voice.status === "closing"}
+                onClick={voice.needsAudioActivation ? voice.activateAudio : voice.start}
+                disabled={
+                  (voice.status === "connecting" && !voice.needsAudioActivation) ||
+                  voice.status === "closing"
+                }
                 aria-describedby="intercept-dashboard"
                 autoFocus
               >
@@ -302,7 +466,9 @@ export default function InterceptPage({
               </Button>
               <Button
                 className="secondary-button"
-                onClick={() => void execute("propose_story_control", { action: "new_story" }, false)}
+                onClick={() =>
+                  void execute("propose_story_control", { action: "new_story" }, false)
+                }
               >
                 New story
               </Button>
@@ -452,21 +618,36 @@ export default function InterceptPage({
         </p>
         <button
           type="button"
-          className={`figma-voice-orb${voice.status === "connected" ? " is-connected" : ""}`}
+          className={`figma-voice-orb voice-${voice.isSpeaking ? "speaking" : voice.status === "connected" && !voice.microphoneMuted ? "listening" : voice.status}`}
           onClick={() => {
-            if (voice.status === "connected") voice.toggleMicrophone();
+            if (voice.needsAudioActivation) void voice.activateAudio();
+            else if (voice.status === "connected") voice.toggleMicrophone();
             else void voice.start();
           }}
-          disabled={voice.status === "connecting" || voice.status === "closing"}
+          disabled={
+            (voice.status === "connecting" && !voice.needsAudioActivation) ||
+            voice.status === "closing"
+          }
           aria-label={
-            voice.status === "connected"
-              ? voice.microphoneMuted
-                ? "Unmute voice companion"
-                : "Mute voice companion"
-              : "Start voice companion"
+            voice.needsAudioActivation
+              ? "Start voice"
+              : voice.status === "connected"
+                ? voice.microphoneMuted
+                  ? "Unmute voice companion"
+                  : "Mute voice companion"
+                : "Start voice companion"
           }
         >
-          <img src="/assets/figma/intercept-companion.png" alt="" />
+          <LiquidOrb tone="red" />
+          <span className="sr-only" aria-live="polite">
+            {voice.isSpeaking
+              ? "Companion speaking"
+              : voice.status === "connected" && !voice.microphoneMuted
+                ? "Listening"
+                : voice.status === "connecting"
+                  ? "Connecting voice"
+                  : "Voice is off"}
+          </span>
         </button>
       </main>
     </div>

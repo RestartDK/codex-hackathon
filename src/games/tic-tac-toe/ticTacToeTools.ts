@@ -6,6 +6,7 @@ import {
   POSITION_NAMES,
   type TicTacToeActionResult,
   type TicTacToeDifficulty,
+  type TicTacToeSetup,
   type TicTacToeState,
 } from "./ticTacToe";
 
@@ -20,6 +21,21 @@ export interface TicTacToeToolBridge {
   pause: () => TicTacToeActionResult;
   resume: () => TicTacToeActionResult;
   changeDifficulty: (difficulty: TicTacToeDifficulty) => TicTacToeActionResult;
+  phase?: "loading" | "setup" | "game";
+  setup?: Omit<TicTacToeSetup, "playerMark"> & {
+    playerMark: TicTacToeSetup["playerMark"] | "random";
+  };
+  configureSetup?: (
+    patch: Partial<
+      Omit<TicTacToeSetup, "playerMark"> & {
+        playerMark: TicTacToeSetup["playerMark"] | "random";
+      }
+    >,
+  ) => TicTacToeActionResult;
+  setupBack?: () => TicTacToeActionResult;
+  startConfiguredGame?: () => TicTacToeActionResult;
+  cancelSetup?: () => TicTacToeActionResult;
+  controlSetup?: (action: "repeat" | "explain" | "defaults") => TicTacToeActionResult;
 }
 
 type PendingAction = {
@@ -71,15 +87,65 @@ export function createTicTacToeToolExecutor(
     }
 
     if (name === "get_tic_tac_toe_state") {
+      if (bridge.phase === "setup")
+        return json({
+          status: "ok",
+          phase: "setup",
+          setup: bridge.setup,
+          message:
+            "Tic-Tac-Toe setup is open. Choose an opponent, difficulty, mark, and who moves first.",
+        });
       return json({
         status: "ok",
         message: describeTicTacToeBoard(bridge.state),
-        turn: bridge.state.turn === "X" ? "human" : "computer",
+        turn:
+          bridge.state.turn === bridge.state.playerMark
+            ? "player"
+            : bridge.state.opponent === "computer"
+              ? "computer"
+              : "player two",
         gameStatus: bridge.state.status,
         score: bridge.state.score,
         difficulty: bridge.state.difficulty,
         revision: bridge.state.revision,
       });
+    }
+
+    if (name === "configure_tic_tac_toe_setup") {
+      if (bridge.phase !== "setup" || !bridge.configureSetup)
+        return json({ status: "error", message: "Tic-Tac-Toe setup is not open." });
+      const patch: Partial<
+        Omit<TicTacToeSetup, "playerMark"> & {
+          playerMark: TicTacToeSetup["playerMark"] | "random";
+        }
+      > = {};
+      if (args.opponent === "computer" || args.opponent === "friend")
+        patch.opponent = args.opponent;
+      if (args.difficulty === "easy" || args.difficulty === "medium" || args.difficulty === "hard")
+        patch.difficulty = args.difficulty;
+      if (args.playerMark === "X" || args.playerMark === "O" || args.playerMark === "random")
+        patch.playerMark = args.playerMark;
+      if (args.firstTurn === "player" || args.firstTurn === "opponent")
+        patch.firstTurn = args.firstTurn;
+      if (!Object.keys(patch).length)
+        return json({ status: "error", message: "Name the setup option you want to change." });
+      return json(bridge.configureSetup(patch));
+    }
+
+    if (name === "control_tic_tac_toe_setup") {
+      if (bridge.phase !== "setup")
+        return json({ status: "error", message: "Tic-Tac-Toe setup is not open." });
+      const action = String(args.action ?? "");
+      if (action === "back" && bridge.setupBack) return json(bridge.setupBack());
+      if (action === "start" && bridge.startConfiguredGame)
+        return json(bridge.startConfiguredGame());
+      if (action === "cancel" && bridge.cancelSetup) return json(bridge.cancelSetup());
+      if (
+        (action === "repeat" || action === "explain" || action === "defaults") &&
+        bridge.controlSetup
+      )
+        return json(bridge.controlSetup(action));
+      return json({ status: "error", message: "Unknown setup control." });
     }
 
     if (name === "inspect_tic_tac_toe_cell") {
@@ -94,7 +160,7 @@ export function createTicTacToeToolExecutor(
         status: "ok",
         position: POSITION_NAMES[index],
         mark,
-        message: `${POSITION_NAMES[index]} is ${mark === "X" ? "your X" : mark === "O" ? "computer O" : "empty"}.`,
+        message: `${POSITION_NAMES[index]} is ${mark === null ? "empty" : mark === bridge.state.playerMark ? `your ${mark}` : bridge.state.opponent === "computer" ? `computer ${mark}` : `player two ${mark}`}.`,
       });
     }
 
@@ -113,7 +179,7 @@ export function createTicTacToeToolExecutor(
     if (name === "get_tic_tac_toe_history") {
       const history = bridge.state.moves.map(
         (move, index) =>
-          `${index + 1}. ${move.mark === "X" ? "You played X" : "Computer played O"} in ${POSITION_NAMES[move.index]}`,
+          `${index + 1}. ${move.mark === bridge.state.playerMark ? `You played ${move.mark}` : bridge.state.opponent === "computer" ? `Computer played ${move.mark}` : `Player two played ${move.mark}`} in ${POSITION_NAMES[move.index]}`,
       );
       return json({
         status: "ok",
@@ -139,7 +205,7 @@ export function createTicTacToeToolExecutor(
         return json({ status: "error", message: "Choose Resume Saved Round or New Round first." });
       if (bridge.paused)
         return json({ status: "error", message: "Resume the round before asking for a move." });
-      if (bridge.state.status !== "playing" || bridge.state.turn !== "X")
+      if (bridge.state.status !== "playing" || bridge.state.turn !== bridge.state.playerMark)
         return json({
           status: "error",
           message:
@@ -147,13 +213,13 @@ export function createTicTacToeToolExecutor(
               ? "Wait for the computer to move."
               : "This round is over.",
         });
-      const index = chooseBestMove(bridge.state.board, "X");
+      const index = chooseBestMove(bridge.state.board, bridge.state.playerMark);
       if (index === null) return json({ status: "error", message: "There is no legal move." });
       return propose({
         kind: "move",
         index,
         revision: bridge.state.revision,
-        description: `Place your X in ${POSITION_NAMES[index]}`,
+        description: `Place your ${bridge.state.playerMark} in ${POSITION_NAMES[index]}`,
       });
     }
 
@@ -172,7 +238,11 @@ export function createTicTacToeToolExecutor(
           status: "completed",
           message: `${difficulty} difficulty is already selected.`,
         });
-      if (bridge.state.status === "playing" && bridge.state.turn === "O")
+      if (
+        bridge.state.opponent === "computer" &&
+        bridge.state.status === "playing" &&
+        bridge.state.turn !== bridge.state.playerMark
+      )
         return json({
           status: "wait",
           message: "The computer is moving now. Change difficulty when your turn begins.",
@@ -192,7 +262,11 @@ export function createTicTacToeToolExecutor(
       if (action === "pause") return json(bridge.pause());
       if (action === "resume") return json(bridge.resume());
       if (action === "new_round") {
-        if (bridge.state.status === "playing" && bridge.state.turn === "O")
+        if (
+          bridge.state.opponent === "computer" &&
+          bridge.state.status === "playing" &&
+          bridge.state.turn !== bridge.state.playerMark
+        )
           return json({
             status: "wait",
             message: "The computer is moving now. Start a new round when your turn begins.",
@@ -206,7 +280,11 @@ export function createTicTacToeToolExecutor(
         return json(bridge.newRound());
       }
       if (action === "reset_match") {
-        if (bridge.state.status === "playing" && bridge.state.turn === "O")
+        if (
+          bridge.state.opponent === "computer" &&
+          bridge.state.status === "playing" &&
+          bridge.state.turn !== bridge.state.playerMark
+        )
           return json({
             status: "wait",
             message: "The computer is moving now. Reset the match when your turn begins.",
@@ -267,4 +345,3 @@ export function createTicTacToeToolExecutor(
     getPending: () => (pending ? { id: pending.id, description: pending.description } : null),
   };
 }
-

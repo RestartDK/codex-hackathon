@@ -96,7 +96,13 @@ describe("chess voice session endpoint", () => {
       "help",
       "chess",
       "loups-garous",
+      "ludo",
+      "intercept",
+      "tic-tac-toe",
     ]);
+    expect(payload.session.delegation.responses.tools.map((tool) => tool.name)).toContain(
+      "control_voice_guidance",
+    );
     expect(request.body).not.toContain("sk-test-only-key");
   });
 

@@ -40,6 +40,10 @@ describe("library voice sessions", () => {
     expect(toolNames).not.toContain("navigate_app");
     expect(toolNames).not.toContain("get_preferences");
     expect(payload.session.instructions).toMatch(/submit_player_command/u);
+    expect(payload.session.instructions).toMatch(
+      /Application commentary is authoritative screen guidance/u,
+    );
+    expect(payload.session.instructions).toMatch(/speak that supplied text verbatim and in full/u);
     expect(body).not.toContain("sk-test-only-key");
   });
 
@@ -51,5 +55,21 @@ describe("library voice sessions", () => {
     const response = await handleLibraryVoiceSession(offerRequest("unknown"));
     expect(response.status).toBe(400);
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("delegates shared guidance commands to application state", async () => {
+    vi.stubEnv("OPENAI_API_KEY", "sk-test-only-key");
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(Response.json({ transport: { type: "webrtc", sdp: "v=0 answer" } }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const response = await handleLibraryVoiceSession(offerRequest("tic-tac-toe"));
+    expect(response.status).toBe(200);
+    const body = fetchMock.mock.calls[0]![1]!.body as string;
+    const payload = JSON.parse(body) as ProviderPayload;
+    const toolNames = payload.session.delegation.responses.tools.map((tool) => tool.name);
+    expect(toolNames).toContain("control_voice_guidance");
+    expect(payload.session.instructions).toMatch(/current game fact and game action/u);
   });
 });

@@ -91,7 +91,9 @@ export function selectBrowserVoice(voiceKey: string | undefined, voices: SpeechS
 }
 
 /** Default local fallback. Replace this factory to use recorded or server-generated audio. */
-export function createBrowserNarrationBackend(): NarrationBackend {
+export function createBrowserNarrationBackend(
+  onPlaybackError?: (message: string) => void,
+): NarrationBackend {
   const isSupported = () => typeof window !== "undefined" && "speechSynthesis" in window;
   // Resolve the assistant voice once for this game. If the browser exposes an
   // empty voice list at first, retain its default choice for the whole session
@@ -115,6 +117,9 @@ export function createBrowserNarrationBackend(): NarrationBackend {
     isSupported,
     speak({ line, voice, volume, onFinished }) {
       if (!isSupported()) {
+        onPlaybackError?.(
+          "Speech playback is unavailable in this browser. Typed commands remain available.",
+        );
         onFinished();
         return;
       }
@@ -130,10 +135,20 @@ export function createBrowserNarrationBackend(): NarrationBackend {
       utterance.pitch = voice.pitch;
       utterance.voice = voiceFor(line.voiceKey);
       utterance.onend = finish;
-      utterance.onerror = finish;
+      utterance.onerror = (event) => {
+        if (event.error !== "canceled" && event.error !== "interrupted") {
+          onPlaybackError?.(
+            event.error === "not-allowed"
+              ? "Your browser blocked automatic narration. Choose Start narration to continue."
+              : "Narration could not play. Choose Start narration to try again.",
+          );
+        }
+        finish();
+      };
       try {
         window.speechSynthesis.speak(utterance);
       } catch {
+        onPlaybackError?.("Narration could not play. Choose Start narration to try again.");
         finish();
       }
     },
