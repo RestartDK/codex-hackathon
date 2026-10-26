@@ -12,6 +12,7 @@ dist-ssr
 .output
 .nitro
 .netlify
+.wrangler
 .env
 .env.*
 !.env.example
