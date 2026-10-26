@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { AvailableDestination } from "./navigation";
+import { hasRemoteSpeech } from "./remote-audio";
 
 export type VoiceToolExecutor = {
+  /** The app delivers result audio; don't invent a speaking indicator for tool work. */
+  ownsToolResponse?: boolean;
   execute: (name: string, rawArguments: string) => Promise<string>;
   onUserTranscript?: (transcript: string, itemId: string) => void | Promise<void>;
   cancelRequests?: () => void;
@@ -140,6 +143,17 @@ export function useVoiceCompanion(
   const channelRef = useRef<RTCDataChannel | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const outputSuppressedRef = useRef(false);
+  const outputVolumeRef = useRef(volume / 100);
+  useEffect(() => {
+    outputVolumeRef.current = volume / 100;
+  }, [volume]);
+  // Authored local narration temporarily owns the speaker without closing the
+  // command session or changing the player's microphone preference.
+  const setOutputSuppressed = useCallback((suppressed: boolean) => {
+    outputSuppressedRef.current = suppressed;
+    if (audioRef.current) audioRef.current.volume = suppressed ? 0 : outputVolumeRef.current;
+  }, []);
   const requestRef = useRef<AbortController | null>(null);
   const generation = useRef(0);
   const starting = useRef(false);
@@ -343,7 +357,7 @@ export function useVoiceCompanion(
               message: "The request could not finish. Ask the player to try again.",
             });
           }
-          if (!audioMuted) {
+          if (!audioMuted && !executor.ownsToolResponse) {
             speechDeadlineRef.current = Date.now() + 8_000;
             setIsSpeaking(true);
           }
@@ -353,6 +367,8 @@ export function useVoiceCompanion(
             event_id: crypto.randomUUID(),
             item: { type: "function_call_output", call_id: event.callId, output },
           });
+          // Always release the delegated backend after tool output. Omitting
+          // continuation leaves the session waiting for results on later turns.
           send({ type: "response.create", event_id: crypto.randomUUID() });
         }
       }
@@ -401,7 +417,7 @@ export function useVoiceCompanion(
       const audio = new Audio();
       audio.autoplay = true;
       audio.muted = audioMuted;
-      audio.volume = volume / 100;
+      audio.volume = outputSuppressedRef.current ? 0 : volume / 100;
       audioRef.current = audio;
       peer.ontrack = (event) => {
         audio.srcObject = event.streams[0];
@@ -542,7 +558,7 @@ export function useVoiceCompanion(
   useEffect(() => {
     if (audioRef.current) {
       audioRef.current.muted = audioMuted;
-      audioRef.current.volume = volume / 100;
+      audioRef.current.volume = outputSuppressedRef.current ? 0 : volume / 100;
     }
   }, [audioMuted, volume]);
 
@@ -553,13 +569,13 @@ export function useVoiceCompanion(
       setIsSpeaking(false);
       return;
     }
-    const samples = new Uint8Array(256);
+    const samples = new Float32Array(256);
     const timer = window.setInterval(() => {
       const analyser = speechAnalyserRef.current;
       let hasAudio = false;
       if (analyser) {
-        analyser.getByteTimeDomainData(samples);
-        hasAudio = samples.some((sample) => Math.abs(sample - 128) > 3);
+        analyser.getFloatTimeDomainData(samples);
+        hasAudio = hasRemoteSpeech(samples);
         if (hasAudio) {
           speechDeadlineRef.current = Date.now() + REMOTE_SPEECH_RELEASE_MS;
           if (!playbackActiveRef.current) {
@@ -590,5 +606,6 @@ export function useVoiceCompanion(
     activateAudio,
     interrupt,
     announce,
+    setOutputSuppressed,
   };
 }

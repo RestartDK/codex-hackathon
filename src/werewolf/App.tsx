@@ -12,6 +12,10 @@ import { localIntent } from "../voice/commands";
 import { parseDestination, type AvailableDestination } from "../voice/navigation";
 import { LiveGuidanceDelivery, parseGuidanceCommand } from "../voice/guidance";
 import { isSetupStartConfirmation } from "./setupVoice";
+import { RoleRevealDelivery, roleHelpIntent } from "./roleReveal";
+import { flowGuidance } from "./flowNarration";
+import { ActionDelivery } from "./actionDelivery";
+import { nextRoleAction, roleExplanation } from "../../server/game/role-guidance.js";
 import { DEFAULT_ROLE_COUNTS } from "../../server/game/rules.js";
 import type {
   FeedEntry,
@@ -21,7 +25,7 @@ import type {
   VoteResult,
 } from "../../server/game/types.js";
 import {
-  createBrowserNarrationBackend,
+  createRoleAwareNarrationBackend,
   primeBrowserNarration,
   useStoryAudio,
 } from "../voice/browser-narration.js";
@@ -107,7 +111,7 @@ const roleCards: Record<
     color: "#a77bfa",
     summary: "You hold one healing potion and one poison potion for the whole game.",
     howItWorks: [
-      "At night, you learn who the Werewolves targeted.",
+      "While your heal remains, you learn the Werewolves’ target.",
       "You may save them, poison someone else, or pass.",
       "Each potion can be used only once.",
     ],
@@ -297,53 +301,7 @@ function readableFeedEntry(entry: FeedEntry) {
 }
 
 function currentActionHelp(game: GameView) {
-  const { me } = game;
-  if (game.paused) return "The game is paused. Say ‘resume game’ when you are ready.";
-  if (game.phase === "over")
-    return "This game is over. Say ‘start a new game’ to open another village.";
-  if (!me.alive && !me.hunterActionPending)
-    return "You are out of this village. Say ‘continue watching’ to let the story move on.";
-  if (game.phase === "prologue")
-    return "The village is being introduced. Say ‘begin the first night’ when you are ready.";
-  if (game.phase === "cupid")
-    return "You are Cupid. Say ‘pair’ followed by two living player names, for example ‘pair Emma and Lucas’.";
-  if (game.phase === "night") {
-    if (me.role === "werewolf")
-      return "It is night. Say ‘hunt’ and a living player’s name, or say ‘let the pack decide’.";
-    if (me.role === "seer")
-      return "It is night. Say ‘choose’ or ‘investigate’ followed by a living player’s name.";
-    if (me.role === "witch")
-      return "It is night. Say ‘save’, ‘poison’ and a living player’s name, or ‘pass’.";
-    return "It is night. Say ‘wait for dawn’ to continue.";
-  }
-  if (game.phase === "day")
-    return "It is day. Speak to the village naturally, say ‘hear the villagers’, or say ‘begin vote’.";
-  if (game.phase === "vote")
-    return "Voting is open. Say ‘choose’, ‘select’, or ‘vote for’ and a living player’s name. Your vote is final.";
-  if (game.phase === "hunter")
-    return "You have one final shot. Say ‘shoot’ and a living player’s name.";
-  return "Ask the guide to describe the current phase.";
-}
-
-function voiceActionFeedback(game: GameView, command: string) {
-  const normalized = normalizeVoiceText(command);
-  const newestPrivate = [...game.feed].reverse().find((entry) => entry.kind === "private");
-  const newestEvent = [...game.feed].reverse().find((entry) => entry.kind === "event");
-
-  if (
-    /\b(choose|pick|select|investigate|check|inspect|hunt|attack|kill|poison|save|heal)\b/u.test(
-      normalized,
-    )
-  ) {
-    return `Done. ${newestPrivate?.text ?? newestEvent?.text ?? "Your choice has been recorded."} ${currentActionHelp(game)}`;
-  }
-  if (/\b(vote|eliminate|exile|remove|kick out)\b/u.test(normalized)) {
-    return `Done. ${newestEvent?.text ?? "Your vote has been recorded."} ${currentActionHelp(game)}`;
-  }
-  if (/^(?:say|speak|tell|ask|message)\b/u.test(normalized)) {
-    return `Done. Your message has been sent to the village. ${currentActionHelp(game)}`;
-  }
-  return `Done. ${currentActionHelp(game)}`;
+  return nextRoleAction(game);
 }
 
 function roleStateSummary(game: GameView) {
@@ -354,9 +312,11 @@ function roleStateSummary(game: GameView) {
   ];
   if (me.role === "werewolf")
     details.push(
-      me.werewolfTeam?.length
-        ? `Your pack is ${me.werewolfTeam.join(", ")}.`
-        : "You are the lone Werewolf.",
+      !me.alive
+        ? "You are eliminated; living pack information is unavailable."
+        : me.werewolfTeam?.length
+          ? `Your pack is ${me.werewolfTeam.join(", ")}.`
+          : "You are the lone Werewolf.",
     );
   if (me.role === "witch")
     details.push(
@@ -550,6 +510,9 @@ export default function WerewolfApp({
   const villageIntroductionRef = useRef(new VillageIntroductionSequence());
   const introductionFeedIdsRef = useRef(new Set<string>());
   const [introductionRevision, setIntroductionRevision] = useState(0);
+  const roleRevealRef = useRef(new RoleRevealDelivery());
+  const [roleRevealRevision, setRoleRevealRevision] = useState(0);
+  const [roleVoiceWaitExpired, setRoleVoiceWaitExpired] = useState(false);
 
   // Reopening during the closing animation reuses the panel, so focus the input explicitly.
   useEffect(() => {
@@ -568,6 +531,7 @@ export default function WerewolfApp({
   const directConfirmationItemsRef = useRef(new Set<string>());
   const voiceExecutor = useMemo<VoiceToolExecutor>(
     () => ({
+      ownsToolResponse: true,
       onUserTranscript: (transcript, itemId) => {
         if (
           sessionRef.current ||
@@ -616,11 +580,15 @@ export default function WerewolfApp({
   const commandQueueRef = useRef(Promise.resolve());
   const lastVoiceCommandRef = useRef({ text: "", at: 0 });
   const actionInFlightRef = useRef(false);
+  const actionDeliveryRef = useRef(new ActionDelivery());
   const guideRequestIdRef = useRef(0);
   const guideAbortRef = useRef<AbortController | undefined>(undefined);
-  // One browser narrator is deliberately used for every line. It starts without
-  // a network round trip and never changes identity if a remote TTS request fails.
-  const narrationBackend = useMemo(() => createBrowserNarrationBackend(setNarrationError), []);
+  // Preserve ordinary story speech. Essential private role guidance uses an
+  // explicit audio element, with local speech as the offline fallback.
+  const narrationBackend = useMemo(
+    () => createRoleAwareNarrationBackend(session?.game.id, session?.token, setNarrationError),
+    [session?.game.id, session?.token],
+  );
   const revealNarratedPhase = useCallback(() => {
     const latestGame = latestGameRef.current;
     if (!latestGame) return;
@@ -631,6 +599,19 @@ export default function WerewolfApp({
     () => session?.game.feed.filter((entry) => !introductionFeedIdsRef.current.has(entry.id)) ?? [],
     [session?.game.feed],
   );
+  const flowLine = useMemo(() => {
+    const game = session?.game;
+    if (!game || introStep || game.phase === "prologue") return undefined;
+    const finding =
+      game.me.investigations.length > seenInvestigations
+        ? game.me.investigations.at(-1)
+        : undefined;
+    return {
+      id: `flow:${game.id}:${game.feed.at(-1)?.id}:${game.phase}:${game.paused}:${voteOutcome?.result.day}:${voteOutcome?.revealing}:${finding?.day}:${seenInvestigations}`,
+      speaker: "Guide",
+      text: flowGuidance(game, { vote: voteOutcome, finding }),
+    };
+  }, [session?.game, introStep, voteOutcome, seenInvestigations]);
   const storyAudio = useStoryAudio({
     initialVolume: narrationVolume,
     onVolumeChange: onNarrationVolumeChange,
@@ -639,7 +620,26 @@ export default function WerewolfApp({
     phase: session?.game.phase,
     onPhaseBoundaryStart: revealNarratedPhase,
     backend: narrationBackend,
+    closingLine: flowLine,
+    onNarrationStarted: () => setNarrationError(""),
+    onNarrationFailed: () =>
+      setNarrationError(
+        "Narration could not finish. The game has not taken another action. Open Audio Settings and choose Repeat, or choose Start narration to retry. You can also ask What do I do next, or read the current instructions in Help.",
+      ),
   });
+
+  useEffect(() => {
+    if (!session || introStep === "village") return;
+    const speaking = Boolean(storyAudio.activeSpeaker);
+    voice.setOutputSuppressed(speaking);
+    if (speaking) voice.interrupt();
+  }, [
+    session?.game.id,
+    introStep,
+    storyAudio.activeSpeaker,
+    voice.setOutputSuppressed,
+    voice.interrupt,
+  ]);
 
   useEffect(() => {
     storyAudio.updateVolume(narrationVolume);
@@ -707,6 +707,8 @@ export default function WerewolfApp({
 
   function openNewGameSetup() {
     cancelCreation();
+    cancelPendingGuide();
+    voice.interrupt();
     storyAudio.stop();
     setSession(undefined);
     setPresentedGame(undefined);
@@ -791,8 +793,34 @@ export default function WerewolfApp({
   async function perform(input: Record<string, unknown>, announceFailure = false) {
     const activeSession = sessionRef.current;
     if (!activeSession) return undefined;
+    if ((voteOutcome || pendingFinding) && input.type !== "pause" && input.type !== "resume") {
+      narrateAccessibility([
+        flowGuidance(activeSession.game, { vote: voteOutcome, finding: pendingFinding }),
+      ]);
+      return undefined;
+    }
+    if (
+      (introStep === "role" || introStep === "role-details") &&
+      !roleRevealRef.current.canContinue() &&
+      input.type !== "pause" &&
+      input.type !== "resume"
+    ) {
+      setNarrationError(
+        "Your role explanation is still pending. Say Repeat my role to hear it, or skip role explanation to continue now.",
+      );
+      return undefined;
+    }
     if (actionInFlightRef.current || busy) {
       if (announceFailure) queueAssistant("One moment. I am still resolving the previous command.");
+      return undefined;
+    }
+    let delivery;
+    try {
+      delivery = actionDeliveryRef.current.request(activeSession.game.id, input);
+    } catch (cause) {
+      const message = cause instanceof Error ? cause.message : "Say retry last move.";
+      setError(message);
+      narrateAccessibility([message]);
       return undefined;
     }
     cancelPendingGuide();
@@ -809,24 +837,24 @@ export default function WerewolfApp({
         headers: {
           "Content-Type": "application/json",
           "X-Game-Session": activeSession.token,
-          "X-Request-Id": crypto.randomUUID(),
+          "X-Request-Id": delivery.requestId,
         },
         body: JSON.stringify(input),
+        signal: AbortSignal.timeout(20_000),
       });
       const data = await response.json();
+      if (sessionRef.current?.game.id !== activeSession.game.id) return undefined;
+      if (response.status !== 409) actionDeliveryRef.current.confirmed(delivery.requestId);
       if (!response.ok) throw new Error(data.error ?? "That action could not be completed.");
       const game = data as GameView;
       commitGame(game, activeSession.token);
-      if (announceFailure) {
-        const command = typeof input.command === "string" ? input.command : "";
-        queueAssistant(voiceActionFeedback(game, command), "local", {
-          instant: true,
-        });
-      }
+      // The state-driven narration queue reads the result and next action once.
+      // A second imperative confirmation here raced the phase-cleanup effect.
       setSelected([]);
       setHeal(false);
       return game;
     } catch (cause) {
+      if (sessionRef.current?.game.id !== activeSession.game.id) return undefined;
       const message =
         cause instanceof Error ? cause.message : "That action could not be completed.";
       if (message === "Game not found.") {
@@ -834,13 +862,11 @@ export default function WerewolfApp({
         queueAssistant("That village is no longer open. Say ‘start the game’ to begin a new one.");
         return undefined;
       }
-      // A spoken mis-hearing should be read back, not left as a persistent red
-      // error that obscures the next reference slide. Click actions still keep
-      // the visible message for sighted players.
-      if (announceFailure) {
-        setError("");
-        queueAssistant(message);
-      } else setError(message);
+      const recovery = actionDeliveryRef.current.pending
+        ? `${message} Your move's result is not confirmed. Say retry last move; the same request will be checked without taking the action twice.`
+        : `${message} No action was taken. ${flowGuidance(activeSession.game)}`;
+      setError(recovery);
+      narrateAccessibility([recovery]);
       return undefined;
     } finally {
       actionInFlightRef.current = false;
@@ -884,6 +910,123 @@ export default function WerewolfApp({
   const liveSessionSequence = voice.sessionSequence;
   const liveStatus = voice.status;
   const stopStoryAudio = storyAudio.stop;
+  const suppressLiveOutput = voice.setOutputSuppressed;
+
+  const roleRevealVisible = Boolean(
+    session && (introStep === "role" || introStep === "role-details"),
+  );
+  const roleRevealKey = session?.game.me?.role
+    ? `${session.game.id}:${session.game.me.id}:${session.game.me.role}`
+    : undefined;
+
+  useEffect(() => {
+    setRoleVoiceWaitExpired(false);
+    if (!roleRevealVisible || liveStatus !== "connecting") return;
+    const timer = window.setTimeout(() => setRoleVoiceWaitExpired(true), 8_000);
+    return () => window.clearTimeout(timer);
+  }, [roleRevealVisible, liveStatus, roleRevealKey]);
+
+  // This effect runs after useStoryAudio's game/phase cleanup. Both mouse and
+  // voice navigation converge here, after the reveal has actually rendered.
+  useEffect(() => {
+    if (!roleRevealVisible || !session || !roleRevealKey) return;
+    roleRevealRef.current.sync(roleRevealKey);
+    const attempt = roleRevealRef.current.request(
+      (liveStatus !== "connecting" || roleVoiceWaitExpired) &&
+        !voice.needsAudioActivation &&
+        !storyAudio.muted &&
+        storyAudio.autoRead &&
+        storyAudio.volume > 0,
+    );
+    if (attempt === null) return;
+    stopStoryAudio();
+    voice.interrupt();
+    suppressLiveOutput(true);
+    setNarrationError("");
+    const text = `${roleExplanation(session.game)} ${nextRoleAction(session.game, true)}`;
+    appendAssistantCaption(text);
+    setRoleRevealRevision((value) => value + 1);
+    storyAudio.enqueue({
+      id: `${roleRevealKey}:reveal:${attempt}`,
+      speaker: "Private role guide",
+      text,
+      voiceKey: "assistant",
+      instant: true,
+      duringLive: true,
+      privateRole: true,
+      onPlaybackStarted: () => {
+        setNarrationError("");
+        roleRevealRef.current.started(attempt);
+        setRoleRevealRevision((value) => value + 1);
+      },
+      onPlaybackFinished: (outcome) => {
+        if (!roleRevealRef.current.finish(attempt, outcome)) return;
+        suppressLiveOutput(false);
+        if (outcome === "completed") setNarrationError("");
+        if (outcome !== "completed")
+          setNarrationError(
+            "Your role explanation did not finish. Say Repeat my role, choose Start narration to retry, or explicitly skip the explanation. Your role and abilities are also available in Help.",
+          );
+        setRoleRevealRevision((value) => value + 1);
+      },
+    });
+  }, [
+    roleRevealVisible,
+    roleRevealKey,
+    roleRevealRevision,
+    session,
+    liveStatus,
+    roleVoiceWaitExpired,
+    voice.needsAudioActivation,
+    storyAudio.muted,
+    storyAudio.autoRead,
+    storyAudio.volume,
+    stopStoryAudio,
+    suppressLiveOutput,
+  ]);
+
+  useEffect(() => () => suppressLiveOutput(false), [suppressLiveOutput]);
+
+  function repeatRoleExplanation() {
+    if (!session) return;
+    if (introStep === "village") {
+      villageIntroductionRef.current.skip();
+      setIntroductionRevision((value) => value + 1);
+      voice.interrupt();
+      setIntroStep("role");
+      return;
+    }
+    if (roleRevealVisible) {
+      storyAudio.stop();
+      roleRevealRef.current.sync(
+        `${session.game.id}:${session.game.me.id}:${session.game.me.role}`,
+      );
+      roleRevealRef.current.retry();
+      setRoleRevealRevision((value) => value + 1);
+    } else
+      narrateAccessibility(
+        [`${roleExplanation(session.game)} ${nextRoleAction(session.game)}`],
+        true,
+      );
+  }
+
+  async function continueAfterRole(skip = false) {
+    if (!session) return;
+    if (skip) roleRevealRef.current.skip();
+    if (!roleRevealRef.current.canContinue()) {
+      setNarrationError(
+        "Please let your role explanation finish. To move on now, say skip role explanation or choose Skip role explanation.",
+      );
+      return;
+    }
+    storyAudio.stop();
+    suppressLiveOutput(false);
+    setNarrationError("");
+    if (session.game.phase === "prologue") {
+      setIntroStep(null);
+      await act("begin-story");
+    } else setIntroStep(null);
+  }
   useEffect(() => {
     if (session) return;
     const key = `${stage}:${count}:${explainGame}:${setupAwaitingConfirmation}`;
@@ -995,10 +1138,27 @@ export default function WerewolfApp({
   function recoverNarration() {
     primeBrowserNarration();
     setNarrationError("");
+    if (!storyAudio.autoRead) storyAudio.toggleAutoRead();
+    if (storyAudio.muted) storyAudio.toggleMuted();
+    if (storyAudio.volume === 0) storyAudio.updateVolume(0.8);
+    if (roleRevealVisible) {
+      if (!storyAudio.autoRead) storyAudio.toggleAutoRead();
+      if (storyAudio.muted) storyAudio.toggleMuted();
+      if (storyAudio.volume === 0) storyAudio.updateVolume(0.8);
+      if (voice.needsAudioActivation) void voice.activateAudio();
+      repeatRoleExplanation();
+      return;
+    }
     if (villageIntroductionActive) {
       if (voice.needsAudioActivation) void voice.activateAudio();
       else if (voice.status !== "connected") void voice.start();
       else setIntroductionRevision((value) => value + 1);
+      return;
+    }
+    if (session) {
+      narrateAccessibility([
+        flowGuidance(session.game, { vote: voteOutcome, finding: pendingFinding }),
+      ]);
       return;
     }
     storyAudio.stop();
@@ -1011,12 +1171,15 @@ export default function WerewolfApp({
   }
 
   /** Read structured, player-safe information immediately without waiting for Live Voice. */
-  function narrateAccessibility(lines: string[]) {
+  function narrateAccessibility(lines: string[], privateRole = false) {
     const readableLines = lines.filter((line) => line.trim());
     if (!readableLines.length) return;
     storyAudio.stop();
+    voice.interrupt();
+    suppressLiveOutput(true);
+    setNarrationError("");
     appendAssistantCaption(readableLines.join(" "));
-    for (const text of readableLines) {
+    for (const [index, text] of readableLines.entries()) {
       storyAudio.enqueue({
         id: crypto.randomUUID(),
         speaker: "Guide",
@@ -1024,6 +1187,10 @@ export default function WerewolfApp({
         voiceKey: "assistant",
         instant: true,
         duringLive: true,
+        privateRole,
+        onPlaybackFinished: () => {
+          if (index === readableLines.length - 1) suppressLiveOutput(false);
+        },
       });
     }
   }
@@ -1208,7 +1375,35 @@ export default function WerewolfApp({
       return;
     }
 
+    const helpIntent = roleHelpIntent(command);
+    if (/^retry (?:my |the |last )?(?:move|action|command)[.!]?$/iu.test(command)) {
+      const pending = actionDeliveryRef.current.pending;
+      if (pending?.gameId === session.game.id) await perform(pending.input, true);
+      else narrateAccessibility(["There is no unconfirmed move. " + flowGuidance(session.game)]);
+      return;
+    }
+    if (helpIntent === "role" || helpIntent === "abilities") {
+      repeatRoleExplanation();
+      return;
+    }
+    if (helpIntent === "next") {
+      narrateAccessibility(
+        [
+          roleRevealVisible
+            ? nextRoleAction(session.game, true)
+            : flowGuidance(session.game, { vote: voteOutcome, finding: pendingFinding }),
+        ],
+        true,
+      );
+      return;
+    }
+    if (roleRevealVisible && /\bskip\b.*\b(?:role|explanation|reveal)\b/iu.test(command)) {
+      await continueAfterRole(true);
+      return;
+    }
     const activeGuidanceCommand = parseGuidanceCommand(command);
+    const currentScreenGuidance = () =>
+      flowGuidance(session.game, { vote: voteOutcome, finding: pendingFinding });
     if (
       session.game.phase === "prologue" &&
       introStep === "village" &&
@@ -1236,6 +1431,10 @@ export default function WerewolfApp({
       return;
     }
     if (activeGuidanceCommand === "repeat") {
+      if (roleRevealVisible) {
+        repeatRoleExplanation();
+        return;
+      }
       if (villageIntroductionActive) {
         repeatVillageIntroduction();
         return;
@@ -1245,17 +1444,19 @@ export default function WerewolfApp({
     }
     if (activeGuidanceCommand === "location") {
       queueAssistant(
-        `You are in Loups-Garous, ${phaseNames[session.game.phase]}. ${currentActionHelp(session.game)}`,
+        `You are in Loups-Garous. ${roleRevealVisible ? nextRoleAction(session.game, true) : currentScreenGuidance()}`,
       );
       return;
     }
     if (activeGuidanceCommand === "capabilities") {
-      queueAssistant(currentActionHelp(session.game));
+      queueAssistant(
+        roleRevealVisible ? nextRoleAction(session.game, true) : currentScreenGuidance(),
+      );
       return;
     }
     if (activeGuidanceCommand === "explain") {
       queueAssistant(
-        `Your role and legal actions are shown for ${phaseNames[session.game.phase]}. ${currentActionHelp(session.game)}`,
+        roleRevealVisible ? nextRoleAction(session.game, true) : currentScreenGuidance(),
       );
       return;
     }
@@ -1275,7 +1476,7 @@ export default function WerewolfApp({
       session.game.phase !== "prologue"
     ) {
       if (introStep) {
-        setIntroStep(null);
+        await continueAfterRole();
         return;
       }
       if (voteOutcome) {
@@ -1300,12 +1501,13 @@ export default function WerewolfApp({
     // role details, then the first night.
     if (session.game.phase === "prologue") {
       const wantsToAdvance =
-        /\b(continue|ready|begin|start|next|go on|move on|i(?:'m| am) done|let(?:'s| us) go|get started)\b/iu.test(
+        !/\b(?:narration|audio|talking|speaking)\b/iu.test(command) &&
+        (/\b(continue|ready|begin|start|next|go on|move on|i(?:'m| am) done|let(?:'s| us) go|get started)\b/iu.test(
           command,
         ) ||
-        /\b(show|read|hear|tell me about|explain)\b.*\b(role|card|details?|instructions?)\b/iu.test(
-          command,
-        );
+          /\b(show|read|hear|tell me about|explain)\b.*\b(role|card|details?|instructions?)\b/iu.test(
+            command,
+          ));
       if (wantsToAdvance) {
         if (villageIntroductionActive) {
           setVoiceStatus(
@@ -1316,17 +1518,10 @@ export default function WerewolfApp({
         const step = introStep ?? "village";
         if (step === "village") {
           setIntroStep("role");
-          narrateAccessibility([
-            `Your role is ${roleNames[session.game.me.role]}. Say continue to hear how it works.`,
-          ]);
           return;
         }
-        if (step === "role") {
-          flipRoleCard("role-details");
-          narrateAccessibility([
-            roleStateSummary(session.game),
-            "Say I am ready when you want the first night to begin.",
-          ]);
+        if (step === "role" || step === "role-details") {
+          await continueAfterRole();
           return;
         }
         await act("begin-story");
@@ -1451,6 +1646,10 @@ export default function WerewolfApp({
     }
     if (/\b(resume|continue)\b.*\b(narration|conversation|audio|talking)\b/iu.test(command)) {
       storyAudio.resume();
+      return;
+    }
+    if (/\bplay again\b/iu.test(command)) {
+      openNewGameSetup();
       return;
     }
     if (startsNewGameNaturally(command) || /\b(?:restart|start over|new round)\b/iu.test(command)) {
@@ -1804,6 +2003,36 @@ export default function WerewolfApp({
     viewGame && !introView && viewGame.me.investigations.length > seenInvestigations
       ? viewGame.me.investigations.at(-1)
       : undefined;
+  // Once eliminated, no game choice belongs to this player. Leave time for
+  // narration and acknowledgements, then let the NPC-only round proceed.
+  useEffect(() => {
+    if (
+      !session ||
+      session.game.me.alive ||
+      session.game.me.hunterActionPending ||
+      session.game.phase === "over" ||
+      session.game.paused ||
+      introView ||
+      voteOutcome ||
+      pendingFinding ||
+      storyAudio.activeSpeaker ||
+      storyAudio.paused ||
+      narrationError ||
+      busy
+    )
+      return;
+    const timer = window.setTimeout(() => void act("continue"), 1_500);
+    return () => window.clearTimeout(timer);
+  }, [
+    session,
+    introView,
+    voteOutcome,
+    pendingFinding,
+    storyAudio.activeSpeaker,
+    storyAudio.paused,
+    narrationError,
+    busy,
+  ]);
   const screenKey = !viewGame
     ? stage
     : [
@@ -1977,6 +2206,21 @@ export default function WerewolfApp({
       </div>
       {session && (
         <div className="audio-buttons">
+          <button className="plain-button" type="button" onClick={recoverNarration}>
+            Start narration
+          </button>
+          {roleRevealVisible && (
+            <button
+              className="plain-button"
+              type="button"
+              onClick={() => {
+                setDialog(null);
+                void continueAfterRole(true);
+              }}
+            >
+              Skip role explanation
+            </button>
+          )}
           <button className="plain-button" type="button" onClick={storyAudio.toggleAutoRead}>
             {storyAudio.autoRead ? "Auto-read on" : "Auto-read off"}
           </button>
@@ -1995,6 +2239,10 @@ export default function WerewolfApp({
             className="plain-button"
             type="button"
             onClick={() => {
+              if (roleRevealVisible) {
+                repeatRoleExplanation();
+                return;
+              }
               if (
                 session.game.phase !== "prologue" ||
                 introStep !== "village" ||
@@ -2095,6 +2343,23 @@ export default function WerewolfApp({
                     .join(" ")}
                 </p>
                 <p>{currentActionHelp(session.game)}</p>
+                <p>{roleExplanation(session.game)}</p>
+                <p>{nextRoleAction(session.game)}</p>
+                <button type="button" className="plain-button" onClick={repeatRoleExplanation}>
+                  Repeat my role
+                </button>
+                {roleRevealVisible && (
+                  <button
+                    type="button"
+                    className="plain-button"
+                    onClick={() => {
+                      setDialog(null);
+                      void continueAfterRole(true);
+                    }}
+                  >
+                    Skip role explanation
+                  </button>
+                )}
               </>
             )}
             {helpBasics}
@@ -2552,7 +2817,6 @@ export default function WerewolfApp({
                     <li key={line}>{line}</li>
                   ))}
                   {me.role === "werewolf" && <li>{roleHint}</li>}
-                  {me.lover && <li>You are bound to {me.lover}.</li>}
                 </ul>
                 <h3>Your Goal</h3>
                 <p>{card.goal}</p>
@@ -2562,22 +2826,35 @@ export default function WerewolfApp({
                 type="button"
                 onClick={() => flipRoleCard("role")}
               >
-                Back to role
+                Turn back
               </button>
             </article>
           </div>
         </div>
-        <button
-          className="ww-pill is-primary"
-          type="button"
-          disabled={interactionLocked}
-          onClick={() => {
-            if (game.phase === "prologue") void act("begin-story");
-            else setIntroStep(null);
-          }}
-        >
-          I’m ready
-        </button>
+        {introView === "role-details" && (
+          <button
+            className="ww-pill is-primary"
+            type="button"
+            disabled={interactionLocked || !roleRevealRef.current.canContinue()}
+            onClick={() => void continueAfterRole()}
+          >
+            I’m ready
+          </button>
+        )}
+        <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">
+          {roleRevealRef.current.status === "completed"
+            ? "Role explanation finished. Say I am ready when you want to continue."
+            : roleRevealRef.current.status === "speaking"
+              ? "Reading your private role explanation. The village will wait."
+              : roleRevealRef.current.status === "interrupted" ||
+                  roleRevealRef.current.status === "failed"
+                ? "Role explanation did not finish. Choose Repeat my role or explicitly skip."
+                : voice.needsAudioActivation
+                  ? "Voice audio needs your permission. Choose Start voice or Start narration."
+                  : storyAudio.muted || storyAudio.volume === 0 || !storyAudio.autoRead
+                    ? "Role narration is muted or automatic reading is off. Choose Start narration to hear your role."
+                    : "Preparing your private role explanation. The village will wait."}
+        </p>
       </>
     );
   } else if (voteOutcome && !voteOutcome.revealing) {
@@ -3015,7 +3292,7 @@ export default function WerewolfApp({
       {header}
       {rail}
       <section
-        className={`ww-stage${introView ? " ww-intro" : " ww-phase"}`}
+        className={`ww-stage${introView ? " ww-intro" : " ww-phase"}${introView === "role" || introView === "role-details" ? " ww-role-stage" : ""}`}
         aria-labelledby="ww-heading"
       >
         {game.testMode && <p className="ww-test-banner">Quick test · You are the Seer</p>}
@@ -3024,9 +3301,22 @@ export default function WerewolfApp({
         </p>
         {stageContent}
         {error && (
-          <p className="ww-error" role="alert">
-            {error}
-          </p>
+          <div className="ww-error" role="alert">
+            <p>{error}</p>
+            {actionDeliveryRef.current.pending?.gameId === game.id && (
+              <button
+                type="button"
+                className="ww-pill"
+                disabled={busy}
+                onClick={() => {
+                  const pending = actionDeliveryRef.current.pending;
+                  if (pending) void perform(pending.input);
+                }}
+              >
+                Retry last move
+              </button>
+            )}
+          </div>
         )}
       </section>
       {voiceDock}

@@ -14,6 +14,9 @@ import {
 } from "./engine.js";
 import { defaultRoleCounts } from "./rules.js";
 import type { Game, Role, TieRule, Winner } from "./types.js";
+import { introduceStory } from "./engine.js";
+import { loupsGarous } from "./modules/loups-garous.js";
+import { flowGuidance } from "../../src/werewolf/flowNarration.js";
 
 type Strategy = "village" | "wolves";
 
@@ -96,7 +99,8 @@ function playVote(game: Game, strategy: Strategy, tie = false) {
   const voters = living(game);
   if (tie) {
     const [first, second] = voters.filter((candidate) => candidate.id !== "human").slice(0, 2);
-    if (!first || !second || voters.length % 2 !== 0) throw new Error("Tie fixture needs two targets and an even electorate");
+    if (!first || !second || voters.length % 2 !== 0)
+      throw new Error("Tie fixture needs two targets and an even electorate");
     let firstVotes = 0;
     let secondVotes = 0;
     for (const voter of voters) {
@@ -172,6 +176,72 @@ function completeMatch(options: {
 }
 
 describe("Loups-Garous complete-match regression matrix", () => {
+  it("completes all six human roles through the real command/action module", async () => {
+    const roles: Role[] = ["werewolf", "villager", "seer", "witch", "hunter", "cupid"];
+    const outcomes: Winner[] = [];
+    for (const role of roles) {
+      const game = createGame("You", 8, {
+        roleCounts: { werewolf: 1, villager: 3, seer: 1, witch: 1, hunter: 1, cupid: 1 },
+        fixedRoles: [role, ...roles.filter((r) => r !== role), "villager", "villager"],
+      });
+      for (const npc of game.players.filter((p) => p.controller !== "human"))
+        npc.memory.suspicion = { human: -100, "npc-6": 20, "npc-7": 19 };
+      introduceStory(game);
+      const command = async (text: string) => {
+        const action = await loupsGarous.parseCommand!(text, game, "human");
+        await loupsGarous.applyAction(game, "human", action);
+        assertPrivateView(game);
+        expect(flowGuidance(view(game, "human")).length).toBeGreaterThan(20);
+      };
+      await command("begin the first night");
+      let steps = 0;
+      while (game.phase !== "over" && steps++ < 40) {
+        const human = game.players[0]!;
+        if (game.phase === "cupid") await command("pair Emma and Lucas");
+        else if (game.phase === "hunter") {
+          expect(game.pendingHunters[0]).toBe("human");
+          const target = living(game).find((p) => p.role === "werewolf") ?? living(game)[0]!;
+          await command(`shoot ${target.name}`);
+        } else if (!human.alive) await command("continue watching");
+        else if (game.phase === "night") {
+          const target = living(game).find(
+            (p) =>
+              p.id !== human.id &&
+              (role !== "werewolf" || p.role !== "werewolf") &&
+              (role !== "seer" || !human.investigations.some((i) => i.targetId === p.id)),
+          );
+          await command(
+            role === "werewolf"
+              ? `hunt ${target!.name}`
+              : role === "seer" && target
+                ? `investigate ${target.name}`
+                : "pass",
+          );
+        } else if (game.phase === "day") {
+          await command("hear the villagers");
+          await command("begin vote");
+        } else if (game.phase === "vote") {
+          const target =
+            living(game).find((p) => p.id !== human.id && p.role === "werewolf") ??
+            living(game).find((p) => p.id !== human.id)!;
+          // Controlled ballots reach outcomes without teaching bots hidden roles.
+          for (const npc of living(game).filter((p) => p.id !== human.id))
+            npc.voteId = npc.id === target.id ? human.id : target.id;
+          await command(`vote for ${target.name}`);
+        } else throw new Error(`Unexpected ${game.phase}`);
+      }
+      expect(game.phase, `${role} did not finish`).toBe("over");
+      outcomes.push(game.winner!);
+      // Replay is a fresh authoritative game, with no potions/votes carried over.
+      const replay = await loupsGarous.create(loupsGarous.parseCreate({ testMode: true }));
+      expect(replay.id).not.toBe(game.id);
+      expect(replay.witchHealAvailable).toBe(true);
+      expect(replay.lastVotes).toBeUndefined();
+    }
+    expect(outcomes).toHaveLength(6);
+    expect(outcomes).toContain("village");
+    expect(outcomes).toContain("wolves");
+  });
   it("completes twelve varied matches through a terminal winner", () => {
     const scenarios: Array<{
       count: number;
@@ -258,9 +328,9 @@ describe("Loups-Garous complete-match regression matrix", () => {
     game.phase = "night";
     game.players[0]!.nightAction = undefined;
     game.wolfVictimId = "human";
-    expect(() =>
-      submitNightAction(game, "human", { kind: "witch", heal: true }),
-    ).toThrow("healing potion has already been used");
+    expect(() => submitNightAction(game, "human", { kind: "witch", heal: true })).toThrow(
+      "healing potion has already been used",
+    );
     expect(() =>
       submitNightAction(game, "human", { kind: "witch", poisonTargetId: "npc-3" }),
     ).toThrow("poison potion has already been used");

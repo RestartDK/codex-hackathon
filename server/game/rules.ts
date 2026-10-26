@@ -29,7 +29,7 @@ export const RULES = [
   "At day, the living village may discuss and each living player votes once. Ties follow the selected rule: no exile, or random exile among tied targets.",
   "A living Hunter eliminated at night or by vote gets one final shot before the next phase. Lover deaths also trigger a living Hunter's shot.",
   "The village wins when all Werewolves are eliminated. Werewolves win when they equal or outnumber every other living player. Cross-faction lovers win together if they are the only two living players.",
-  "Roles are revealed publicly only after the game ends. Each player and each agent receives only its authorized private information before then.",
+  "An eliminated player's role is revealed publicly; surviving roles stay hidden until the game ends. Each player and each agent receives only its authorized private information before then.",
 ] as const;
 
 export function defaultRoleCounts(count: number): RoleCounts {

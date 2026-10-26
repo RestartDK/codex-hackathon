@@ -55,7 +55,12 @@ export async function prepareGame(game: Game) {
     if (target) submitNightAction(game, seer.id, { kind: "seer", targetId: target.id });
   }
   const witch = game.players.find(
-    (p) => p.alive && p.role === "witch" && p.controller !== "human" && !p.nightAction,
+    (p) =>
+      p.alive &&
+      p.role === "witch" &&
+      p.controller !== "human" &&
+      !p.nightAction &&
+      game.wolfVictimId,
   );
   if (witch) {
     submitNightAction(game, witch.id, {

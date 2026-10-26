@@ -1996,6 +1996,58 @@ button.ww-player:active:not(:disabled) {
   width: min(369px, 100%);
   perspective: 1400px;
 }
+.ww-role-stage {
+  gap: 34px;
+  padding-top: 93px;
+}
+.ww-role-stage .ww-pill {
+  /* Override the shared button font reset, not just the base pill rule. */
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 20px;
+}
+.ww-app:has(.ww-role-stage) .typed-toggle:not(:focus),
+.ww-app:has(.ww-role-stage) .ww-rail .ww-round-control:not(:first-child):not(:focus) {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+.ww-role-stage .ww-role-face.is-front {
+  height: 386px;
+  align-self: start;
+}
+.ww-role-stage .ww-role-face.is-back {
+  min-height: 414px;
+}
+.ww-role-stage .ww-role-inner {
+  /* Size each face independently without abandoning the 180-degree flip. */
+  height: 386px;
+}
+.ww-role-stage .is-flipped .ww-role-inner {
+  height: auto;
+  min-height: 414px;
+}
+.ww-role-stage .ww-role-card {
+  border-color: #f1f1f1;
+}
+.ww-app.pbv-root:has(.ww-role-stage) .companion-dock {
+  min-height: 190px;
+  padding-bottom: 60px;
+}
+.ww-app.pbv-root:has(.ww-role-stage) .companion-orb-row,
+.ww-app.pbv-root:has(.ww-role-stage) .orb-button,
+.ww-app.pbv-root:has(.ww-role-stage) .companion-liquid-orb {
+  width: 130px;
+  height: 130px;
+}
+.ww-app.pbv-root:has(.ww-role-stage) .companion-orb-row {
+  width: 100%;
+}
+.ww-app.pbv-root:has(.ww-role-stage) .companion-liquid-orb {
+  left: 0;
+}
 .ww-role-inner {
   display: grid;
   transform-style: preserve-3d;

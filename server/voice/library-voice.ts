@@ -722,7 +722,7 @@ export async function handleLibraryVoiceSession(request: Request): Promise<Respo
             : TOOL_INSTRUCTIONS;
   const experienceInstructions =
     gameId === "loups-garous"
-      ? `Every player utterance is a command or a question for the application, including navigation and audio requests. Call submit_player_command with the player's exact words and let the application validate, apply, and narrate the result. Never answer from your own knowledge.`
+      ? `Every player utterance is a command or a question for the application, including navigation and audio requests. Call submit_player_command with the player's exact words and let the application validate, apply, and narrate the result. Never answer from your own knowledge. After a tool result, remain silent: the application supplies the authoritative audio. Do not acknowledge, repeat, or paraphrase that result. Speak only application commentary explicitly supplied for playback.`
       : gameId === "intercept"
         ? `The Intercept is a solo authored mystery. The application supplies a spoiler-free introduction plus exact passages and choices. Use get_game_introduction when asked about the premise, goal, winning, losing, or endings. Speak each passage once, faithfully and in order. Do not summarize unless asked for a recap, and do not reveal or predict unseen consequences. Explicit choices play immediately; a choice you select for the player requires confirmation. Use get_story_state when a choice is unclear. Repeat, recap, undo, pause, and resume need no confirmation.`
         : gameId === "tic-tac-toe"

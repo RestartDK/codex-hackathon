@@ -95,9 +95,15 @@ function playerAliases(candidate: Game["players"][number]) {
   ];
 }
 
-function mentionedPlayers(game: Game, text: string, actorId: string) {
+function mentionedPlayers(
+  game: Game,
+  text: string,
+  actorId: string,
+  includeSelf = false,
+  includeDead = false,
+) {
   const candidates = game.players.filter(
-    (candidate) => candidate.alive && candidate.id !== actorId,
+    (candidate) => (includeDead || candidate.alive) && (includeSelf || candidate.id !== actorId),
   );
   const aliases = new Map<string, number>();
   for (const candidate of candidates) {
@@ -153,7 +159,9 @@ function parseGameCommand(text: string, game: Game, actorId: string): ActionInpu
       command,
     );
   const healIntent =
-    /\b(save|heal|rescue|protect|keep .* alive|use .* potion|help .* survive)\b/u.test(command);
+    /\b(save|heal|rescue|protect|keep .* alive|use .*healing potion|help .* survive)\b/u.test(
+      command,
+    );
   const poisonIntent = /\b(poison|dose|kill|go after|get rid of|take out|finish off)\b/u.test(
     command,
   );
@@ -176,6 +184,11 @@ function parseGameCommand(text: string, game: Game, actorId: string): ActionInpu
   if (/\b(resume|continue|unpause|carry on)\b.*\b(game|match|play|village)\b/u.test(command))
     return { type: "resume" };
   if (game.paused) throw new Error("The game is paused. Say ‘resume game’ when you are ready.");
+  if (
+    /\b(don't|do not|never|cancel)\b/u.test(command) &&
+    (choosesTarget || huntIntent || healIntent || poisonIntent || voteIntent)
+  )
+    throw new Error("No action was taken. Say one affirmative choice when you are ready.");
 
   if (game.phase === "prologue") {
     if (
@@ -187,8 +200,10 @@ function parseGameCommand(text: string, game: Game, actorId: string): ActionInpu
   }
 
   if (game.phase === "cupid") {
-    if (targets.length >= 2)
-      return { type: "lovers", first: targets[0]!.id, second: targets[1]!.id };
+    const lovers = mentionedPlayers(game, command, actorId, true);
+    if (/\b(me|myself)\b/u.test(command) && !lovers.some((p) => p.id === actorId))
+      lovers.unshift(actor);
+    if (lovers.length === 2) return { type: "lovers", first: lovers[0]!.id, second: lovers[1]!.id };
     if (chooseForMe) {
       const choices = game.players
         .filter((candidate) => candidate.alive && candidate.id !== actorId)
@@ -232,6 +247,31 @@ function parseGameCommand(text: string, game: Game, actorId: string): ActionInpu
     }
     if (actor.role === "witch") {
       const victimId = game.witchHealAvailable ? game.wolfVictimId : undefined;
+      const poisonClause = command.match(/\b(?:poison|dose|kill|take out)\s+(.+)$/u)?.[1];
+      const poisonTarget = poisonClause
+        ? mentionedPlayers(game, poisonClause, actorId)[0]
+        : undefined;
+      if (poisonClause && /\b(me|myself)\b/u.test(poisonClause))
+        throw new Error("You cannot poison yourself. No action was taken.");
+      const healClause = command
+        .match(
+          /\b(?:save|heal|rescue|protect)\b(.*?)(?=\b(?:and|then)\s+(?:poison|dose|kill)\b|$)/u,
+        )?.[1]
+        ?.trim();
+      if (poisonIntent && poisonClause && !poisonTarget)
+        throw new Error("Name another living player to poison. No action was taken.");
+      const savedTarget =
+        healClause && /\b(me|myself)\b/u.test(healClause)
+          ? actor
+          : healClause
+            ? mentionedPlayers(game, healClause, actorId, true, true)[0]
+            : undefined;
+      if (healIntent && poisonIntent && poisonTarget)
+        return savedTarget
+          ? { type: "night", save: savedTarget.id, poison: poisonTarget.id }
+          : { type: "night", heal: true, poison: poisonTarget.id };
+      if (poisonIntent && !healIntent && poisonTarget)
+        return { type: "night", poison: poisonTarget.id };
       // Naming tonight's victim, including “me” when the Witch is the victim, uses the heal,
       // matching the victim's card on screen.
       const savesSelf =
@@ -241,6 +281,7 @@ function parseGameCommand(text: string, game: Game, actorId: string): ActionInpu
       if (savesSelf) return { type: "night", save: actor.id };
       if (victimId && target?.id === victimId && (choosesTarget || healIntent))
         return { type: "night", save: victimId };
+      if (healIntent && savedTarget) return { type: "night", save: savedTarget.id };
       if (healIntent)
         return victimId ? { type: "night", save: victimId } : { type: "night", heal: true };
       if (target && (choosesTarget || poisonIntent)) return { type: "night", poison: target.id };
@@ -352,7 +393,10 @@ async function resolveAiNight(game: Game) {
   const wolves = game.players.filter(
     (candidate) => candidate.alive && candidate.role === "werewolf",
   );
-  if (!wolves.some((candidate) => candidate.nightAction?.kind === "wolf")) {
+  if (
+    !wolves.some((candidate) => candidate.controller === "human") &&
+    !wolves.some((candidate) => candidate.nightAction?.kind === "wolf")
+  ) {
     const wolf = wolves[0];
     if (wolf) {
       const pack = new Set(wolves.map((candidate) => candidate.id));
@@ -371,7 +415,14 @@ async function resolveAiNight(game: Game) {
     }
   }
   await prepareGame(game);
-  if (game.phase === "night" && !player(game, "human")?.alive) resolveNight(game);
+  const human = player(game, "human");
+  // Do not manufacture a human choice. Passive roles have no private input to
+  // wait for; active roles retain their deliberate choice (including passing).
+  if (
+    game.phase === "night" &&
+    (!human?.alive || !["werewolf", "seer", "witch"].includes(human.role))
+  )
+    resolveNight(game);
 }
 
 async function fillAiVotes(game: Game) {
@@ -476,6 +527,9 @@ export const loupsGarous: GameModule<Game, CreateInput, ActionInput, GameView> =
         await prepareGame(game);
         break;
       case "night":
+        if (game.phase !== "night") throw new Error("It is not night.");
+        if (!human.alive) throw new Error("Only a living player can act at night.");
+        if (human.nightAction) throw new Error("Your night action is already locked in.");
         if (human.role === "werewolf") {
           const selectedByPlayer = Boolean(action.target);
           let targetId = action.target;
@@ -498,10 +552,11 @@ export const loupsGarous: GameModule<Game, CreateInput, ActionInput, GameView> =
           const target = player(game, targetId);
           if (!target?.alive || target.role === "werewolf")
             throw new Error("Choose a living player outside the pack.");
+          submitNightAction(game, human.id, { kind: "wolf", targetId });
           for (const wolf of game.players.filter(
             (candidate) => candidate.alive && candidate.role === "werewolf",
           ))
-            wolf.nightAction = { kind: "wolf", targetId };
+            if (wolf.id !== human.id) submitNightAction(game, wolf.id, { kind: "wolf", targetId });
           game.wolfVictimId = targetId;
           game.feed.push({
             id: crypto.randomUUID(),
@@ -526,6 +581,9 @@ export const loupsGarous: GameModule<Game, CreateInput, ActionInput, GameView> =
             poisonTargetId: action.poison,
           });
         } else submitNightAction(game, human.id, { kind: "pass" });
+        // NPC abilities, especially the Witch's heal, depend on the pack's actual
+        // target and must run before resolving a human Werewolf's hunt.
+        await prepareGame(game);
         if (
           game.players.some(
             (candidate) =>
@@ -547,6 +605,7 @@ export const loupsGarous: GameModule<Game, CreateInput, ActionInput, GameView> =
         break;
       }
       case "begin-vote":
+        if (!human.alive) throw new Error("Only living players can open voting.");
         beginVote(game);
         await fillAiVotes(game);
         break;
