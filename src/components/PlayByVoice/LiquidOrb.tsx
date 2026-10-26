@@ -7,12 +7,14 @@ type LiquidOrbModule = {
   ) => Promise<(() => void) | undefined>;
 };
 
-type OrbTone = "blue" | "green" | "amber";
+type OrbTone = "blue" | "green" | "amber" | "violet" | "red";
 
 const ORB_IMAGES: Record<OrbTone, string> = {
   blue: "/artwork/orb-blue.webp",
   green: "/artwork/orb-green.webp",
   amber: "/artwork/loups-garous/voice-companion.png",
+  violet: "/assets/figma/ttt-companion.png",
+  red: "/assets/figma/intercept-companion.png",
 };
 
 export default function LiquidOrb({ green = false, tone }: { green?: boolean; tone?: OrbTone }) {
@@ -26,7 +28,7 @@ export default function LiquidOrb({ green = false, tone }: { green?: boolean; to
     let dispose: (() => void) | undefined;
     let moduleObjectUrl: string | undefined;
 
-    const moduleUrl = "/landing/liquid-orb.js";
+    const moduleUrl = "/artwork/game-liquid-orb.js";
     void fetch(moduleUrl)
       .then((response) => {
         if (!response.ok) throw new Error("Liquid orb module is unavailable.");
@@ -59,7 +61,7 @@ export default function LiquidOrb({ green = false, tone }: { green?: boolean; to
   return (
     <span
       ref={hostRef}
-      className={`companion-liquid-orb orb${orbTone === "green" ? " orb-demo" : ""}${orbTone === "amber" ? " orb-amber" : ""}`}
+      className={`companion-liquid-orb orb${orbTone === "green" ? " orb-demo" : ""}${orbTone === "amber" ? " orb-amber" : ""}${orbTone === "violet" ? " orb-violet" : ""}${orbTone === "red" ? " orb-red" : ""}`}
     >
       <img
         className="companion-orb"

@@ -1,73 +1,334 @@
-import { useEffect, useRef, useState, type KeyboardEvent } from "react";
-import { Mic, MicOff, Square, Volume2 } from "lucide-react";
-import { Button } from "../ui/Button";
-import { Card } from "../ui/Card";
+import { ArrowLeft, ArrowUp, Check, Keyboard, Square, X as CloseIcon } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import type { Preferences } from "../../hooks/useSettings";
-import { useLibraryVoice } from "../../voice/useLibraryVoice";
-import { useTicTacToeGame } from "../../games/tic-tac-toe/useTicTacToeGame";
 import {
+  DEFAULT_TIC_TAC_TOE_SETUP,
   parseTicTacToePosition,
   POSITION_NAMES,
   TIC_TAC_TOE_DASHBOARD,
-  TIC_TAC_TOE_INTRODUCTION,
-  type TicTacToeDifficulty,
+  type TicTacToeFirstTurn,
+  type TicTacToeMark,
+  type TicTacToeOpponent,
+  type TicTacToeSetup,
 } from "../../games/tic-tac-toe/ticTacToe";
+import { useTicTacToeGame } from "../../games/tic-tac-toe/useTicTacToeGame";
 import {
   createTicTacToeToolExecutor,
   type TicTacToeToolBridge,
 } from "../../games/tic-tac-toe/ticTacToeTools";
+import { useLibraryVoice } from "../../voice/useLibraryVoice";
+import { GuidanceTracker, isCurrentSetupAnswer, parseGuidanceCommand } from "../../voice/guidance";
+import LiquidOrb from "../PlayByVoice/LiquidOrb";
 import "./TicTacToePage.css";
 
-function localIntent(
-  command: string,
-): { name: string; args: Record<string, unknown>; announce?: boolean } | null {
-  const value = command
-    .trim()
-    .toLowerCase()
-    .replace(/[,.!?]/g, "")
-    .replace(/\s+/g, " ");
-  if (/^(yes|confirm|do it|play it)$/.test(value))
-    return { name: "confirm_tic_tac_toe_action", args: {} };
-  if (/^(no|cancel|never mind|nevermind)$/.test(value))
-    return { name: "cancel_tic_tac_toe_action", args: {}, announce: true };
-  if (
-    /^(board|describe (?:the )?board|board position|position|status|whose turn|what is happening)$/.test(
-      value,
-    )
-  )
-    return { name: "get_tic_tac_toe_state", args: {}, announce: true };
-  if (/^(available|available squares|legal moves|what can i play|where can i play)$/.test(value))
-    return { name: "get_available_tic_tac_toe_moves", args: {}, announce: true };
-  if (/^(history|move history|what was played|what did the computer play)$/.test(value))
-    return { name: "get_tic_tac_toe_history", args: {}, announce: true };
-  if (/^(suggest|suggest a move|choose for me|play for me|help me move)$/.test(value))
-    return { name: "suggest_tic_tac_toe_move", args: {} };
-  if (/^(undo|undo turn|take that back)$/.test(value))
-    return { name: "undo_tic_tac_toe_turn", args: {}, announce: true };
-  if (/^(pause|pause game)$/.test(value))
-    return { name: "propose_tic_tac_toe_control", args: { action: "pause" }, announce: true };
-  if (/^(resume|resume game|resume saved round)$/.test(value))
-    return { name: "propose_tic_tac_toe_control", args: { action: "resume" }, announce: true };
-  if (/^(new round|start a new round|new game)$/.test(value))
-    return { name: "propose_tic_tac_toe_control", args: { action: "new_round" } };
-  if (/^(reset match|reset score|clear score|clear scoreboard)$/.test(value))
-    return { name: "propose_tic_tac_toe_control", args: { action: "reset_match" } };
-  const difficulty = value.match(/^(?:set |change (?:to )?)?(easy|medium|hard)(?: difficulty)?$/);
-  if (difficulty)
-    return { name: "set_tic_tac_toe_difficulty", args: { difficulty: difficulty[1] } };
-  const inspect = value.match(/^(?:what is|whats|inspect|check) (?:in |at |on )?(.+)$/);
-  if (inspect && parseTicTacToePosition(inspect[1]) !== null)
-    return { name: "inspect_tic_tac_toe_cell", args: { position: inspect[1] }, announce: true };
-  const position = parseTicTacToePosition(value);
-  if (
-    position !== null &&
-    (/\b(play|place|put|move|mark|choose|select)\b/.test(value) ||
-      value === POSITION_NAMES[position] ||
-      /^(?:square )?(?:[1-9]|one|two|three|four|five|six|seven|eight|nine)$/.test(value))
-  ) {
-    return { name: "place_tic_tac_toe_mark", args: { position: POSITION_NAMES[position] } };
-  }
-  return null;
+type PagePhase = "loading" | "setup" | "game";
+type SetupStep = "opponent" | "difficulty" | "mark" | "firstTurn";
+type SetupSelection = Omit<TicTacToeSetup, "playerMark"> & {
+  playerMark: TicTacToeMark | "random";
+};
+
+const SETUP_STEPS: SetupStep[] = ["opponent", "difficulty", "mark", "firstTurn"];
+const LOADING_ASSETS = [
+  "/assets/figma/ttt-loading-base.png",
+  "/assets/figma/ttt-loading-light.png",
+  "/assets/figma/ttt-loading-texture.png",
+  "/assets/figma/ttt-loading-diamond.svg",
+  "/assets/figma/mark-x.png",
+  "/assets/figma/mark-o.png",
+  "/assets/figma/ttt-companion.png",
+];
+
+const INTRODUCTION =
+  "Tic-Tac-Toe is played on a three by three board. Make three marks in a row, column, or diagonal before your opponent. You can name a cell from top left to bottom right, or use positions one through nine.";
+const GUIDE =
+  "Say or type play center, top left, or square nine. You can also ask to describe the board, list available squares, undo, pause, or start a new round.";
+
+function setupGuidance(
+  step: SetupStep,
+  setup: SetupSelection,
+  ready: boolean,
+  confirmation = "",
+): string {
+  const prefix = confirmation ? `${confirmation} ` : "";
+  if (ready)
+    return `${prefix}Your settings are ${setup.opponent}, ${setup.difficulty} difficulty, ${setup.playerMark}, with ${setup.firstTurn === "player" ? "you" : "your opponent"} moving first. Say Start the game or choose Start game to confirm.`;
+  if (step === "opponent")
+    return `${prefix}Welcome to Tic-Tac-Toe. Setup has four short steps. First, choose your opponent. ${setup.opponent === "computer" ? "Computer" : "Friend"} is selected. Available choices are Computer or Friend. Computer is the default. Say a choice or select it to continue.`;
+  if (step === "difficulty")
+    return `${prefix}Choose a difficulty. ${setup.difficulty} is selected. Available choices are Easy, Medium, or Hard. Easy is the default.`;
+  if (step === "mark")
+    return `${prefix}Choose your mark. ${setup.playerMark} is selected. Available choices are X, O, or Random. X is the default.`;
+  return `${prefix}Choose who moves first. ${setup.firstTurn === "player" ? "You move" : "Your opponent moves"} first is selected. Available choices are You or Opponent. You is the default. Say a choice or select it to continue.`;
+}
+
+function loadImage(src: string, signal: AbortSignal) {
+  return new Promise<void>((resolve, reject) => {
+    const image = new Image();
+    const abort = () => {
+      image.src = "";
+      reject(new DOMException("Loading cancelled", "AbortError"));
+    };
+    signal.addEventListener("abort", abort, { once: true });
+    image.onload = () => {
+      signal.removeEventListener("abort", abort);
+      resolve();
+    };
+    image.onerror = () => {
+      signal.removeEventListener("abort", abort);
+      reject(new Error(`Could not load ${src}`));
+    };
+    image.src = src;
+  });
+}
+
+function Header({
+  panel,
+  setPanel,
+}: {
+  panel: "audio" | "help" | null;
+  setPanel: (panel: "audio" | "help" | null) => void;
+}) {
+  return (
+    <header className="ttt-header">
+      <div className="ttt-brand">
+        <strong>Playora</strong>
+        <img src="/assets/figma/nav-separator.png" alt="" />
+        <span>Tic-Tac-Toe</span>
+      </div>
+      <nav aria-label="Tic-Tac-Toe options">
+        <button
+          type="button"
+          aria-expanded={panel === "audio"}
+          onClick={() => setPanel(panel === "audio" ? null : "audio")}
+        >
+          Audio Settings
+        </button>
+        <button
+          type="button"
+          aria-expanded={panel === "help"}
+          onClick={() => setPanel(panel === "help" ? null : "help")}
+        >
+          Help
+        </button>
+      </nav>
+    </header>
+  );
+}
+
+function LoadingScreen({
+  error,
+  onRetry,
+  onBack,
+}: {
+  error: string | null;
+  onRetry: () => void;
+  onBack: () => void;
+}) {
+  return (
+    <main className="ttt-loading" aria-busy={!error} aria-labelledby="ttt-loading-title">
+      <div className="ttt-loading-brand" aria-label="Playora, Tic-Tac-Toe">
+        <strong>Playora</strong>
+        <span aria-hidden="true">•</span>
+        <span>Tic-Tac-Toe</span>
+      </div>
+      <div className="ttt-loading-art" aria-hidden="true">
+        <img className="ttt-loading-base" src="/assets/figma/ttt-loading-base.png" alt="" />
+        <img className="ttt-loading-light" src="/assets/figma/ttt-loading-light.png" alt="" />
+        <img className="ttt-loading-texture" src="/assets/figma/ttt-loading-texture.png" alt="" />
+      </div>
+      <div className="ttt-loading-content">
+        <img src="/assets/figma/ttt-loading-diamond.svg" alt="" />
+        <h1 id="ttt-loading-title">{error ? "Tic-Tac-Toe could not load" : "Loading"}</h1>
+        {error ? (
+          <div className="ttt-loading-error" role="alert">
+            <p>{error}</p>
+            <button type="button" onClick={onRetry}>
+              Retry
+            </button>
+            <button type="button" onClick={onBack}>
+              Back
+            </button>
+          </div>
+        ) : (
+          <span className="sr-only" role="status">
+            Preparing the Tic-Tac-Toe board and artwork.
+          </span>
+        )}
+      </div>
+      <button type="button" className="ttt-loading-back" onClick={onBack}>
+        <ArrowLeft size={20} aria-hidden="true" /> Go back to main
+      </button>
+    </main>
+  );
+}
+
+type Option = { value: string; title: string; detail?: string; dot?: string };
+
+function SetupCard({
+  title,
+  description,
+  options,
+  value,
+  onSelect,
+  footer,
+}: {
+  title: string;
+  description: string;
+  options: Option[];
+  value: string;
+  onSelect: (value: string) => void;
+  footer?: React.ReactNode;
+}) {
+  const headingRef = useRef<HTMLHeadingElement>(null);
+  useEffect(() => headingRef.current?.focus(), [title]);
+  return (
+    <section className="ttt-setup-card" aria-labelledby="ttt-setup-title">
+      <h1 id="ttt-setup-title" ref={headingRef} tabIndex={-1}>
+        {title}
+      </h1>
+      <p>{description}</p>
+      <div className="ttt-option-list" role="radiogroup" aria-label={title}>
+        {options.map((option) => (
+          <button
+            type="button"
+            role="radio"
+            aria-checked={value === option.value}
+            className={value === option.value ? "is-selected" : ""}
+            key={option.value}
+            onClick={() => onSelect(option.value)}
+          >
+            {option.dot && <span className={`ttt-option-dot ${option.dot}`} aria-hidden="true" />}
+            <span>
+              <strong>{option.title}</strong>
+              {option.detail && <small>{option.detail}</small>}
+            </span>
+            {value === option.value && <Check size={20} aria-hidden="true" />}
+          </button>
+        ))}
+      </div>
+      {footer}
+    </section>
+  );
+}
+
+function CompanionControls({
+  voice,
+  screenReaderMode,
+  response,
+  command,
+  setCommand,
+  onCommand,
+}: {
+  voice: ReturnType<typeof useLibraryVoice>["voice"];
+  screenReaderMode: boolean;
+  response: string;
+  command: string;
+  setCommand: (value: string) => void;
+  onCommand: () => void;
+}) {
+  const [typing, setTyping] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (typing) inputRef.current?.focus();
+  }, [typing]);
+  const active = voice.status === "connected" && !voice.needsAudioActivation;
+  const waiting = voice.status === "connecting" || voice.status === "closing";
+  const activity = voice.isSpeaking
+    ? "speaking"
+    : active && !voice.microphoneMuted
+      ? "listening"
+      : voice.status;
+  return (
+    <footer
+      className={`ttt-companion${active ? " is-active" : ""} voice-${activity}`}
+      aria-label="Voice companion"
+      data-voice-activity={activity}
+    >
+      <div className="ttt-companion-row">
+        <button
+          type="button"
+          className="ttt-orb-button"
+          disabled={waiting}
+          aria-label={
+            voice.needsAudioActivation
+              ? "Start voice"
+              : active
+                ? voice.microphoneMuted
+                  ? "Unmute microphone"
+                  : "Mute microphone"
+                : "Start voice companion"
+          }
+          onClick={() =>
+            voice.needsAudioActivation
+              ? void voice.activateAudio()
+              : active
+                ? voice.toggleMicrophone()
+                : void voice.start()
+          }
+        >
+          <LiquidOrb tone="violet" />
+        </button>
+        <button
+          type="button"
+          className="ttt-dock-button ttt-keyboard-button"
+          aria-label={typing ? "Close typed commands" : "Type a command"}
+          aria-expanded={typing}
+          onClick={() => setTyping((open) => !open)}
+        >
+          {typing ? (
+            <CloseIcon size={20} aria-hidden="true" />
+          ) : (
+            <Keyboard size={20} aria-hidden="true" />
+          )}
+        </button>
+        {active && (
+          <button
+            type="button"
+            className="ttt-dock-button ttt-end-voice"
+            aria-label="End voice"
+            onClick={() => void voice.stop()}
+          >
+            <Square size={15} aria-hidden="true" />
+          </button>
+        )}
+      </div>
+      <p className="sr-only" aria-live={screenReaderMode ? "polite" : "off"} aria-atomic="true">
+        {voice.caption || response}
+      </p>
+      {voice.error && (
+        <div className="ttt-voice-error" role="alert">
+          <p>{voice.error}</p>
+          <button type="button" onClick={() => void voice.start()}>
+            Retry voice
+          </button>
+        </div>
+      )}
+      {typing && (
+        <form
+          className="ttt-command-panel"
+          onSubmit={(event) => {
+            event.preventDefault();
+            onCommand();
+          }}
+        >
+          <label htmlFor="ttt-command">Type to your companion</label>
+          <div>
+            <input
+              ref={inputRef}
+              id="ttt-command"
+              value={command}
+              onChange={(event) => setCommand(event.target.value)}
+              placeholder="Try ‘play center’"
+              autoComplete="off"
+            />
+            <button type="submit" aria-label="Send command" disabled={!command.trim()}>
+              <ArrowUp size={20} />
+            </button>
+          </div>
+        </form>
+      )}
+    </footer>
+  );
 }
 
 export default function TicTacToePage({
@@ -78,95 +339,365 @@ export default function TicTacToePage({
   preferences: Preferences;
 }) {
   const game = useTicTacToeGame();
-  const { settings, setScreenReaderMode } = preferences;
-  const [, refreshPending] = useState(0);
-  const [typedCommand, setTypedCommand] = useState("");
-  const [response, setResponse] = useState("Ready. You are X. Choose any square.");
+  const [phase, setPhase] = useState<PagePhase>("loading");
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [loadAttempt, setLoadAttempt] = useState(0);
+  const [step, setStep] = useState(0);
+  const [setupReady, setSetupReady] = useState(false);
+  const [setup, setSetup] = useState<SetupSelection>(DEFAULT_TIC_TAC_TOE_SETUP);
+  const [panel, setPanel] = useState<"audio" | "help" | null>(null);
+  const [response, setResponse] = useState("Preparing Tic-Tac-Toe.");
+  const [command, setCommand] = useState("");
   const [focusedCell, setFocusedCell] = useState(0);
+  const startingRef = useRef(false);
+  const cellsRef = useRef<Array<HTMLButtonElement | null>>([]);
+  const lastRevision = useRef(game.state.revision);
+  const guidanceTracker = useRef(new GuidanceTracker());
+  const setupConfirmation = useRef("");
   const bridgeRef = useRef<TicTacToeToolBridge>(game);
   bridgeRef.current = game;
-  const executorRef = useRef<ReturnType<typeof createTicTacToeToolExecutor> | null>(null);
-  if (!executorRef.current)
-    executorRef.current = createTicTacToeToolExecutor(
-      () => bridgeRef.current,
-      () => refreshPending((value) => value + 1),
-    );
-  const executor = executorRef.current;
-  const { voice, runGlobalCommand } = useLibraryVoice(executor, "tic-tac-toe");
-  const previousVoiceStatus = useRef(voice.status);
-  const lastAnnouncedRevision = useRef(game.state.revision);
-  const cellsRef = useRef<Array<HTMLButtonElement | null>>([]);
+  const executor = useMemo(() => createTicTacToeToolExecutor(() => bridgeRef.current), []);
+  const { voice, runGlobalCommand, setGuidanceHandler } = useLibraryVoice(executor, "tic-tac-toe");
+
+  const beginLoading = useCallback(() => {
+    setLoadError(null);
+    setPhase("loading");
+    setLoadAttempt((attempt) => attempt + 1);
+  }, []);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    void Promise.all(LOADING_ASSETS.map((src) => loadImage(src, controller.signal)))
+      .then(() => {
+        if (!controller.signal.aborted) {
+          setPhase("setup");
+          setResponse("Tic-Tac-Toe is ready. Choose who you want to play against.");
+        }
+      })
+      .catch((error: unknown) => {
+        if (!controller.signal.aborted)
+          setLoadError(
+            error instanceof Error ? error.message : "The game assets could not be prepared.",
+          );
+      });
+    return () => controller.abort();
+  }, [loadAttempt]);
 
   useEffect(() => {
     game.setNarrationBusy(voice.status === "connected" && voice.isSpeaking);
   }, [game.setNarrationBusy, voice.isSpeaking, voice.status]);
 
   useEffect(() => {
-    if (voice.status === "connected" && previousVoiceStatus.current !== "connected") {
-      const welcome = game.awaitingStartChoice
-        ? "Welcome back to Tic-Tac-Toe. Resume your saved round or start a new round?"
-        : `Welcome to Tic-Tac-Toe. ${TIC_TAC_TOE_INTRODUCTION} Say help for the controls.`;
-      setResponse(welcome);
-      voice.announce(welcome);
+    if (voice.status !== "connected") return;
+    const key = `${phase}:${step}:${setupReady}:${JSON.stringify(setup)}:${setupConfirmation.current}`;
+    const candidate =
+      phase === "loading"
+        ? "Tic-Tac-Toe selected. I am preparing the board and setup choices."
+        : phase === "setup"
+          ? setupGuidance(SETUP_STEPS[step], setup, setupReady, setupConfirmation.current)
+          : `Tic-Tac-Toe is ready. You are ${game.state.playerMark}. ${game.state.firstTurn === "player" ? "It is your turn" : `Your ${game.state.opponent} moves first`}. For example, say play center or square five.`;
+    const message = candidate
+      ? guidanceTracker.current.take({
+          key,
+          message: candidate,
+          location: phase,
+          capabilities: "Ask what can I do for available actions.",
+        })
+      : null;
+    setupConfirmation.current = "";
+    if (message) {
+      setResponse(message);
+      voice.announce(message);
     }
-    previousVoiceStatus.current = voice.status;
-  }, [game.awaitingStartChoice, voice.announce, voice.status]);
+  }, [
+    game.state.firstTurn,
+    game.state.opponent,
+    game.state.playerMark,
+    phase,
+    setup,
+    setupReady,
+    step,
+    voice.announce,
+    voice.status,
+  ]);
 
   useEffect(() => {
-    if (game.state.revision === lastAnnouncedRevision.current) return;
-    lastAnnouncedRevision.current = game.state.revision;
+    if (phase !== "game" || lastRevision.current === game.state.revision) return;
+    lastRevision.current = game.state.revision;
     setResponse(game.status);
     if (voice.status === "connected") voice.announce(game.status);
-  }, [game.state.revision, game.status, voice.announce, voice.status]);
+  }, [game.state.revision, game.status, phase, voice]);
 
-  async function execute(name: string, args: Record<string, unknown> = {}, announce = false) {
+  const updateSetup = useCallback(
+    (patch: Partial<SetupSelection>, advance = true) => {
+      const expected = SETUP_STEPS[step];
+      const expectedKey = expected === "mark" ? "playerMark" : expected;
+      const keys = Object.keys(patch);
+      if (!isCurrentSetupAnswer(expectedKey, keys, setupReady)) {
+        setResponse(
+          `That answer does not apply to the current step. ${setupGuidance(expected, setup, setupReady)}`,
+        );
+        return false;
+      }
+      const selected = Object.values(patch)[0];
+      setupConfirmation.current = selected ? `${String(selected)} selected.` : "";
+      setSetup((current) => ({ ...current, ...patch }));
+      if (SETUP_STEPS[step] === "firstTurn") setSetupReady(true);
+      else if (advance) setStep((current) => Math.min(SETUP_STEPS.length - 1, current + 1));
+      return true;
+    },
+    [setup, setupReady, step],
+  );
+
+  const startMatch = useCallback(() => {
+    if (startingRef.current) return;
+    startingRef.current = true;
+    const resolved = {
+      ...setup,
+      playerMark:
+        setup.playerMark === "random" ? (Math.random() < 0.5 ? "X" : "O") : setup.playerMark,
+    } as TicTacToeSetup;
+    const result = game.startGame(resolved);
+    setResponse(result.message);
+    setPhase("game");
+    setPanel(null);
+    queueMicrotask(() => {
+      startingRef.current = false;
+    });
+  }, [game, setup]);
+
+  const leave = useCallback(() => {
+    voice.interrupt();
+    onExit();
+  }, [onExit, voice]);
+
+  bridgeRef.current = {
+    ...game,
+    phase,
+    setup,
+    configureSetup: (patch) => {
+      const expected = SETUP_STEPS[step];
+      const keys = Object.keys(patch) as SetupStep[];
+      const expectedKey = expected === "mark" ? "playerMark" : expected;
+      if (!isCurrentSetupAnswer(expectedKey, keys, setupReady))
+        return {
+          ok: false,
+          message: `That answer does not apply to the current step. ${setupGuidance(expected, setup, setupReady)}`,
+        };
+      if (!updateSetup(patch))
+        return {
+          ok: false,
+          message: `That answer does not apply to the current step. ${setupGuidance(expected, setup, setupReady)}`,
+        };
+      return { ok: true, message: `${String(Object.values(patch)[0])} selected.` };
+    },
+    setupBack: () => {
+      if (step > 0) {
+        setSetupReady(false);
+        setStep((current) => current - 1);
+        return { ok: true, message: "Returned to the previous setup step." };
+      }
+      leave();
+      return { ok: true, message: "Returned to the game picker." };
+    },
+    startConfiguredGame: () => {
+      if (!setupReady) {
+        if (step < SETUP_STEPS.length - 1) setStep(SETUP_STEPS.length - 1);
+        return { ok: true, message: "Review the settings, then say confirm to start." };
+      }
+      startMatch();
+      return { ok: true, message: "Starting the configured match." };
+    },
+    cancelSetup: () => {
+      leave();
+      return { ok: true, message: "Setup cancelled." };
+    },
+    controlSetup: (action) => {
+      if (action === "defaults") {
+        setupConfirmation.current = "Defaults selected.";
+        setSetup(DEFAULT_TIC_TAC_TOE_SETUP);
+        setStep(SETUP_STEPS.length - 1);
+        setSetupReady(true);
+        return { ok: true, message: "Defaults selected. Review the summary and confirm." };
+      }
+      const message =
+        action === "explain"
+          ? `${INTRODUCTION} ${setupGuidance(SETUP_STEPS[step], setup, setupReady)}`
+          : setupGuidance(SETUP_STEPS[step], setup, setupReady);
+      setResponse(message);
+      voice.announce(message);
+      return {
+        ok: true,
+        message: `The application ${action === "repeat" ? "repeated" : "explained"} the current step.`,
+      };
+    },
+  };
+
+  useEffect(() => {
+    setGuidanceHandler((action) => {
+      let message: string;
+      if (action === "repeat")
+        message =
+          phase === "setup" ? setupGuidance(SETUP_STEPS[step], setup, setupReady) : response;
+      else if (action === "location")
+        message =
+          phase === "setup"
+            ? `You are in Tic-Tac-Toe setup. ${setupGuidance(SETUP_STEPS[step], setup, setupReady)}`
+            : `You are playing Tic-Tac-Toe. ${game.status}`;
+      else if (action === "capabilities")
+        message =
+          phase === "setup"
+            ? `${setupGuidance(SETUP_STEPS[step], setup, setupReady)} You can also go back, use defaults, or start the game.`
+            : `${GUIDE} ${game.status}`;
+      else if (action === "explain")
+        message =
+          phase === "setup"
+            ? `${INTRODUCTION} ${setupGuidance(SETUP_STEPS[step], setup, setupReady)}`
+            : `${INTRODUCTION} ${GUIDE}`;
+      else if (action === "home") {
+        message = "Returning to the game picker.";
+        window.setTimeout(leave, 0);
+      } else if (action === "back") {
+        if (phase !== "setup")
+          return {
+            ok: false,
+            message: "A live round cannot return to setup. Say go home or finish the round.",
+          };
+        if (setupReady) setSetupReady(false);
+        else if (step > 0) setStep((current) => current - 1);
+        else window.setTimeout(leave, 0);
+        message =
+          step > 0 || setupReady
+            ? "Returned to the previous Tic-Tac-Toe setup step."
+            : "Returning to the game picker.";
+      } else if (action === "defaults") {
+        if (phase !== "setup")
+          return {
+            ok: false,
+            message: "The round is already active. Start a new match to change setup.",
+          };
+        setupConfirmation.current = "Defaults selected.";
+        setSetup(DEFAULT_TIC_TAC_TOE_SETUP);
+        setStep(SETUP_STEPS.length - 1);
+        setSetupReady(true);
+        message = "Defaults selected. Review the summary and say Start the game to confirm.";
+      } else {
+        if (phase !== "setup")
+          return { ok: false, message: `The round is already active. ${game.status}` };
+        if (!setupReady) {
+          if (step < SETUP_STEPS.length - 1) setStep(SETUP_STEPS.length - 1);
+          else setSetupReady(true);
+          message =
+            "Setup is not complete. Review the current choices, then say Start the game again to confirm.";
+        } else {
+          startMatch();
+          message = "Starting the configured Tic-Tac-Toe match.";
+        }
+      }
+      setResponse(message);
+      return { ok: true, message };
+    });
+    return () => setGuidanceHandler(null);
+  }, [
+    game.status,
+    leave,
+    phase,
+    response,
+    setGuidanceHandler,
+    setup,
+    setupReady,
+    startMatch,
+    step,
+  ]);
+
+  async function executeTool(name: string, args: Record<string, unknown> = {}) {
     const parsed = JSON.parse(await executor.execute(name, JSON.stringify(args))) as {
       message?: string;
       description?: string;
     };
     const message = parsed.message ?? parsed.description ?? "Done.";
     setResponse(message);
-    if (announce && voice.status === "connected") voice.announce(message);
-    return parsed;
+    if (voice.status === "connected") voice.announce(message);
   }
 
-  async function runTypedCommand() {
-    const value = typedCommand.trim();
-    setTypedCommand("");
-    if (!value) return;
-    const global = await runGlobalCommand(value);
+  async function runCommand() {
+    const raw = command.trim();
+    setCommand("");
+    if (!raw) return;
+    const value = raw
+      .toLowerCase()
+      .replace(/[,.!?]/g, "")
+      .replace(/\s+/g, " ");
+    const global = await runGlobalCommand(raw);
     if (global !== null) {
       setResponse(global);
       return;
     }
-    const normalized = value
-      .toLowerCase()
-      .replace(/[,.!?]/g, "")
-      .replace(/\s+/g, " ");
-    if (
-      /^(introduction|what is this game|what is tic tac toe|rules|how do i win|how do i lose)$/.test(
-        normalized,
-      )
-    ) {
-      await execute("get_tic_tac_toe_introduction", {}, true);
+    if (phase === "setup") {
+      const guidanceCommand = parseGuidanceCommand(value);
+      if (guidanceCommand === "repeat") {
+        const message = setupGuidance(SETUP_STEPS[step], setup, setupReady);
+        setResponse(message);
+        if (voice.status === "connected") voice.announce(message);
+      } else if (guidanceCommand === "explain" || value === "help") {
+        const message = `${INTRODUCTION} ${setupGuidance(SETUP_STEPS[step], setup, setupReady)}`;
+        setResponse(message);
+        if (voice.status === "connected") voice.announce(message);
+      } else if (guidanceCommand === "capabilities") {
+        const message = `${setupGuidance(SETUP_STEPS[step], setup, setupReady)} You can also say go back, use the defaults, or start the game.`;
+        setResponse(message);
+        if (voice.status === "connected") voice.announce(message);
+      } else if (guidanceCommand === "location") {
+        const message = `You are in Tic-Tac-Toe setup. ${setupGuidance(SETUP_STEPS[step], setup, setupReady)}`;
+        setResponse(message);
+        if (voice.status === "connected") voice.announce(message);
+      } else if (guidanceCommand === "defaults") {
+        setupConfirmation.current = "Defaults selected.";
+        setSetup(DEFAULT_TIC_TAC_TOE_SETUP);
+        setStep(SETUP_STEPS.length - 1);
+        setSetupReady(true);
+      } else if (/computer|bot/.test(value)) updateSetup({ opponent: "computer" });
+      else if (/friend|player two|two player/.test(value)) updateSetup({ opponent: "friend" });
+      else if (/\beasy\b/.test(value)) updateSetup({ difficulty: "easy" });
+      else if (/\bmedium\b/.test(value)) updateSetup({ difficulty: "medium" });
+      else if (/\bhard\b/.test(value)) updateSetup({ difficulty: "hard" });
+      else if (/random mark|random symbol/.test(value)) updateSetup({ playerMark: "random" });
+      else if (/\b(?:choose|play as|mark) x\b|\bx mark\b/.test(value))
+        updateSetup({ playerMark: "X" });
+      else if (/\b(?:choose|play as|mark) o\b|\bo mark\b/.test(value))
+        updateSetup({ playerMark: "O" });
+      else if (/computer first|opponent first|player two first/.test(value))
+        updateSetup({ firstTurn: "opponent" });
+      else if (/i go first|me first|my turn first|you first/.test(value))
+        updateSetup({ firstTurn: "player" });
+      else if (guidanceCommand === "start" || value === "yes") {
+        if (setupReady) startMatch();
+        else if (step < SETUP_STEPS.length - 1) setStep(SETUP_STEPS.length - 1);
+        else setSetupReady(true);
+      } else if (guidanceCommand === "back") {
+        if (setupReady) setSetupReady(false);
+        else setStep((current) => Math.max(0, current - 1));
+      } else setResponse("Choose an opponent, difficulty, mark, or who moves first.");
       return;
     }
-    if (/^(guide|tutorial|how to play|help)$/.test(normalized)) {
-      await execute("get_tic_tac_toe_guide", {}, true);
+    if (/^(help|guide|how to play|rules)$/.test(value))
+      return void executeTool("get_tic_tac_toe_guide");
+    if (/^(dashboard|describe dashboard|what is on the screen)$/.test(value)) {
+      setResponse(TIC_TAC_TOE_DASHBOARD);
+      if (voice.status === "connected") voice.announce(TIC_TAC_TOE_DASHBOARD);
       return;
     }
-    if (/^(dashboard|describe dashboard|what is on the screen)$/.test(normalized)) {
-      await execute("get_tic_tac_toe_dashboard", {}, true);
-      return;
-    }
-    const intent = localIntent(value);
-    if (!intent) {
-      setResponse(
-        "I did not understand. Try play center, describe the board, available squares, suggest a move, or help.",
-      );
-      return;
-    }
-    await execute(intent.name, intent.args, intent.announce);
+    if (/^(describe the board|board|status|whose turn)$/.test(value))
+      return void executeTool("get_tic_tac_toe_state");
+    if (/^(available|available squares|legal moves)$/.test(value))
+      return void executeTool("get_available_tic_tac_toe_moves");
+    if (/^(undo|undo turn)$/.test(value)) return void executeTool("undo_tic_tac_toe_turn");
+    if (/^(new round|play again|restart)$/.test(value))
+      return void executeTool("propose_tic_tac_toe_control", { action: "new_round" });
+    const index = parseTicTacToePosition(value);
+    if (index !== null)
+      return void executeTool("place_tic_tac_toe_mark", { position: POSITION_NAMES[index] });
+    setResponse("I did not understand. Try play center, describe the board, or help.");
   }
 
   function onCellKeyDown(event: KeyboardEvent<HTMLButtonElement>, index: number) {
@@ -185,198 +716,215 @@ export default function TicTacToePage({
     cellsRef.current[next]?.focus();
   }
 
-  const pending = executor.getPending();
+  if (phase === "loading")
+    return <LoadingScreen error={loadError} onRetry={beginLoading} onBack={leave} />;
+
+  const stepName = SETUP_STEPS[step];
+  const setupProps =
+    stepName === "opponent"
+      ? {
+          title: "Who do you want to play against?",
+          description: "Choose your opponent",
+          value: setup.opponent,
+          options: [
+            { value: "computer", title: "Computer" },
+            { value: "friend", title: "Friend", detail: "Play locally on this device" },
+          ],
+          onSelect: (value: string) => updateSetup({ opponent: value as TicTacToeOpponent }),
+        }
+      : stepName === "difficulty"
+        ? {
+            title: "Choose your difficulty",
+            description: "You can change this before each match",
+            value: setup.difficulty,
+            options: [
+              { value: "easy", title: "Easy", dot: "green" },
+              { value: "medium", title: "Medium", dot: "yellow" },
+              { value: "hard", title: "Hard", dot: "red" },
+            ],
+            onSelect: (value: string) =>
+              updateSetup({ difficulty: value as TicTacToeSetup["difficulty"] }),
+          }
+        : stepName === "mark"
+          ? {
+              title: "Choose your mark",
+              description: "Select the symbol you want to play",
+              value: setup.playerMark,
+              options: [
+                { value: "X", title: "X" },
+                { value: "O", title: "O" },
+                { value: "random", title: "Random" },
+              ],
+              onSelect: (value: string) =>
+                updateSetup({ playerMark: value as SetupSelection["playerMark"] }),
+            }
+          : {
+              title: "Who should go first?",
+              description: "Choose the opening turn",
+              value: setup.firstTurn,
+              options: [
+                { value: "opponent", title: setup.opponent === "computer" ? "Computer" : "Friend" },
+                { value: "player", title: "You" },
+              ],
+              onSelect: (value: string) =>
+                updateSetup({ firstTurn: value as TicTacToeFirstTurn }, false),
+            };
+
   const boardDisabled =
-    game.awaitingStartChoice ||
     game.paused ||
     game.state.status !== "playing" ||
-    game.state.turn !== "X";
+    (game.state.opponent === "computer" && game.state.turn !== game.state.playerMark);
 
   return (
-    <div className="app tic-tac-toe-app">
-      <a href="#tic-tac-toe-main" className="skip-link">
+    <div
+      className={`ttt-app${game.state.status !== "playing" ? " is-finished" : ""}${game.state.status === "won" ? " is-won" : ""}`}
+    >
+      <a href="#ttt-main" className="skip-link">
         Skip to game
       </a>
-      <header className="app-header">
-        <button className="library-link" onClick={onExit}>
-          Game library
-        </button>
-        <h1>Voice Tic-Tac-Toe</h1>
-        <span className="game-badge">You are X</span>
-      </header>
-      <main id="tic-tac-toe-main" className="tic-tac-toe-main">
-        <section
-          className="tic-tac-toe-introduction"
-          aria-labelledby="tic-tac-toe-introduction-heading"
-        >
-          <p className="voice-eyebrow">Three in a row</p>
-          <h2 id="tic-tac-toe-introduction-heading">Beat the computer using voice alone</h2>
-          <p>{TIC_TAC_TOE_INTRODUCTION}</p>
-        </section>
+      <Header panel={panel} setPanel={setPanel} />
+      <main id="ttt-main" className="ttt-main">
+        <div className="ttt-side-actions" aria-label="Game navigation">
+          <button type="button" onClick={leave} aria-label="Return home">
+            <img src="/artwork/loups-garous/home.svg" alt="" />
+          </button>
+          {phase === "setup" && step > 0 && (
+            <button
+              type="button"
+              onClick={() => setStep((current) => current - 1)}
+              aria-label="Previous setup step"
+            >
+              <ArrowLeft />
+            </button>
+          )}
+          {phase === "game" && (
+            <button
+              type="button"
+              onClick={() => {
+                const result = game.newRound();
+                setResponse(result.message);
+              }}
+              aria-label="Play again"
+            >
+              <img src="/assets/figma/restart.png" alt="" />
+            </button>
+          )}
+        </div>
 
-        <Card className="voice-companion" aria-labelledby="tic-tac-toe-voice-heading">
-          <div className="voice-heading-row">
-            <div>
-              <p className="voice-eyebrow">Conversational game controls</p>
-              <h2 id="tic-tac-toe-voice-heading">Voice companion</h2>
-              <p className="voice-status">
-                {voice.status === "connected" && voice.commandsPaused
-                  ? "Listening, commands paused"
-                  : voice.status === "connected"
-                    ? "Listening"
-                  : voice.status === "connecting"
-                    ? "Connecting…"
-                    : voice.status === "closing"
-                      ? "Ending voice…"
-                      : voice.status === "error"
-                        ? "Voice unavailable"
-                        : "Voice is off"}
-              </p>
-            </div>
-            {voice.status !== "connected" ? (
-              <Button
-                onClick={voice.start}
-                disabled={voice.status === "connecting" || voice.status === "closing"}
-                autoFocus
-              >
-                <Mic aria-hidden="true" size={20} /> Start voice companion
-              </Button>
+        {panel && (
+          <aside className="ttt-popover" aria-label={panel === "help" ? "Help" : "Audio settings"}>
+            <button
+              type="button"
+              className="ttt-popover-close"
+              onClick={() => setPanel(null)}
+              aria-label="Close"
+            >
+              <CloseIcon />
+            </button>
+            <h2>{panel === "help" ? "How to play" : "Audio settings"}</h2>
+            {panel === "help" ? (
+              <>
+                <p>{INTRODUCTION}</p>
+                <p>{GUIDE}</p>
+              </>
             ) : (
-              <div className="voice-actions">
-                <Button onClick={voice.toggleMicrophone} className="secondary-button">
-                  {voice.microphoneMuted ? (
-                    <MicOff aria-hidden="true" size={20} />
-                  ) : (
-                    <Mic aria-hidden="true" size={20} />
-                  )}
-                  {voice.microphoneMuted ? "Unmute" : "Mute"} microphone
-                </Button>
-                <Button onClick={voice.stop} className="danger-button">
-                  <Square aria-hidden="true" size={18} /> End voice
-                </Button>
-              </div>
+              <>
+                <p>
+                  {voice.status === "connected"
+                    ? "Voice companion is connected."
+                    : "Start the companion with the orb."}
+                </p>
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={preferences.settings.screenReaderMode}
+                    onChange={(event) => preferences.setScreenReaderMode(event.target.checked)}
+                  />{" "}
+                  Screen-reader narration
+                </label>
+              </>
             )}
-          </div>
-          <p className="voice-help">
-            Try: “play center,” “top left,” “describe the board,” “available squares,” or “suggest a
-            move.”
-          </p>
-          <p className="dashboard-overview">{TIC_TAC_TOE_DASHBOARD}</p>
-          {game.awaitingStartChoice && (
-            <div className="resume-choice" role="group" aria-label="Saved Tic-Tac-Toe round choice">
-              <p>A saved round is loaded. Resume it or start a new round?</p>
-              <Button
-                onClick={() =>
-                  void execute("propose_tic_tac_toe_control", { action: "resume" }, true)
-                }
-              >
-                Resume saved round
-              </Button>
-              <Button
-                className="secondary-button"
-                onClick={() => void execute("propose_tic_tac_toe_control", { action: "new_round" })}
-              >
-                Start a new round
-              </Button>
-            </div>
-          )}
-          <div className="voice-onboarding" role="group" aria-label="Tic-Tac-Toe introduction">
-            <p>Need the rules or controls?</p>
-            <Button onClick={() => void execute("get_tic_tac_toe_introduction", {}, true)}>
-              Hear game introduction
-            </Button>
-            <Button
-              className="secondary-button"
-              onClick={() => void execute("get_tic_tac_toe_guide", {}, true)}
-            >
-              Hear the quick guide
-            </Button>
-          </div>
-          {voice.error && (
-            <p role="alert" className="voice-error">
-              {voice.error}
-            </p>
-          )}
-          {voice.caption && (
-            <p className="voice-caption">
-              <strong>Caption:</strong> {voice.caption}
-            </p>
-          )}
-          <form
-            className="typed-command"
-            onSubmit={(event) => {
-              event.preventDefault();
-              void runTypedCommand();
-            }}
-          >
-            <label htmlFor="tic-tac-toe-command">Typed command fallback</label>
-            <div>
-              <input
-                id="tic-tac-toe-command"
-                value={typedCommand}
-                onChange={(event) => setTypedCommand(event.target.value)}
-                placeholder="play center"
-              />
-              <Button type="submit">Run command</Button>
-            </div>
-          </form>
-          {pending && (
-            <div
-              className="pending-action"
-              role="group"
-              aria-label="Tic-Tac-Toe action confirmation"
-            >
-              <p>{pending.description}. Confirm?</p>
-              <Button onClick={() => void execute("confirm_tic_tac_toe_action")}>Confirm</Button>
-              <Button
-                className="secondary-button"
-                onClick={() => void execute("cancel_tic_tac_toe_action", {}, true)}
-              >
-                Cancel
-              </Button>
-            </div>
-          )}
-          <label className="tic-tac-toe-screen-reader">
-            <input
-              type="checkbox"
-              checked={settings.screenReaderMode}
-              onChange={(event) => setScreenReaderMode(event.target.checked)}
-            />{" "}
-            Screen-reader narration
-          </label>
-          <p
-            className="sr-announcement"
-            aria-live={settings.screenReaderMode ? "polite" : "off"}
-            aria-atomic="true"
-          >
-            <Volume2 aria-hidden="true" size={18} /> {response}
-          </p>
-        </Card>
+          </aside>
+        )}
 
-        <div className="tic-tac-toe-layout">
-          <section className="tic-tac-toe-board-panel" aria-labelledby="tic-tac-toe-board-heading">
-            <div className="tic-tac-toe-section-heading">
-              <div>
-                <p className="voice-eyebrow">Current round</p>
-                <h2 id="tic-tac-toe-board-heading">Tic-Tac-Toe board</h2>
-              </div>
-              <span
-                className={`tic-tac-toe-turn turn-${game.state.turn.toLowerCase()}`}
-                role="status"
-              >
+        {phase === "setup" ? (
+          <div className="ttt-setup-layout">
+            <div className="ttt-setup-intro">
+              <h2>Let’s set up your game</h2>
+              <p>Pick your preferences. You can go back at any time.</p>
+            </div>
+            <SetupCard
+              {...setupProps}
+              footer={
+                stepName === "firstTurn" ? (
+                  <div className="ttt-setup-footer">
+                    {setupReady && (
+                      <p role="status">
+                        {setup.opponent}, {setup.difficulty}, {setup.playerMark},{" "}
+                        {setup.firstTurn === "player" ? "you move first" : "opponent moves first"}.
+                      </p>
+                    )}
+                    <button type="button" onClick={leave}>
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      className="primary"
+                      onClick={() => (setupReady ? startMatch() : setSetupReady(true))}
+                    >
+                      {setupReady ? "Start game" : "Review settings"}
+                    </button>
+                  </div>
+                ) : undefined
+              }
+            />
+          </div>
+        ) : (
+          <div className="ttt-game-layout">
+            {game.state.status !== "playing" && (
+              <section className="ttt-result" aria-labelledby="ttt-result-title">
+                <h1 id="ttt-result-title">
+                  {game.state.status === "draw"
+                    ? "It’s a draw"
+                    : game.state.winner === game.state.playerMark
+                      ? "You win!"
+                      : game.state.opponent === "computer"
+                        ? "Computer wins"
+                        : "Player two wins"}
+                </h1>
+                <p>{game.status}</p>
+                <div>
+                  <button
+                    type="button"
+                    className="primary"
+                    onClick={() => {
+                      const result = game.newRound();
+                      setResponse(result.message);
+                    }}
+                  >
+                    Play again
+                  </button>
+                  <button type="button" onClick={leave}>
+                    Return home
+                  </button>
+                </div>
+              </section>
+            )}
+            <section className="ttt-board-panel" aria-labelledby="ttt-board-title">
+              <h1 id="ttt-board-title" className="sr-only">
+                Tic-Tac-Toe board
+              </h1>
+              <span className="ttt-turn" role="status">
                 {game.status}
               </span>
-            </div>
-            <div
-              className="tic-tac-toe-board"
-              role="grid"
-              aria-label="Tic-Tac-Toe board"
-              aria-rowcount={3}
-              aria-colcount={3}
-            >
-              {game.state.board.map((mark, index) => {
-                const winning = game.state.winningLine?.includes(index);
-                return (
+              <div
+                className="ttt-board"
+                role="grid"
+                aria-label="Tic-Tac-Toe board"
+                aria-rowcount={3}
+                aria-colcount={3}
+              >
+                {game.state.board.map((mark, index) => (
                   <button
                     key={index}
                     ref={(node) => {
@@ -384,11 +932,10 @@ export default function TicTacToePage({
                     }}
                     type="button"
                     role="gridcell"
-                    aria-label={`${POSITION_NAMES[index]}, ${mark === "X" ? "your X" : mark === "O" ? "computer O" : "empty"}`}
+                    className={`ttt-cell${game.state.winningLine?.includes(index) ? " winning" : ""}`}
+                    aria-label={`${POSITION_NAMES[index]}, ${mark === null ? "empty" : mark === game.state.playerMark ? `your ${mark}` : `${game.state.opponent === "computer" ? "computer" : "player two"} ${mark}`}`}
                     aria-disabled={boardDisabled || mark !== null}
                     tabIndex={focusedCell === index ? 0 : -1}
-                    data-position={index + 1}
-                    className={`tic-tac-toe-cell${mark ? ` cell-${mark.toLowerCase()}` : ""}${winning ? " winning-cell" : ""}`}
                     onFocus={() => setFocusedCell(index)}
                     onKeyDown={(event) => onCellKeyDown(event, index)}
                     onClick={() => {
@@ -398,133 +945,27 @@ export default function TicTacToePage({
                       }
                     }}
                   >
-                    <span aria-hidden="true">{mark ?? index + 1}</span>
-                    <span className="tic-tac-toe-cell-name" aria-hidden="true">
-                      {POSITION_NAMES[index]}
-                    </span>
+                    {mark && (
+                      <img
+                        src={mark === "X" ? "/assets/figma/mark-x.png" : "/assets/figma/mark-o.png"}
+                        alt=""
+                      />
+                    )}
                   </button>
-                );
-              })}
-            </div>
-            <p className="tic-tac-toe-board-help">
-              Squares 1–9 run left to right, top to bottom. Arrow keys move focus; Enter or Space
-              selects.
-            </p>
-          </section>
-
-          <aside className="tic-tac-toe-sidebar" aria-label="Round information and controls">
-            <Card>
-              <h2>Scoreboard</h2>
-              <dl className="tic-tac-toe-score">
-                <div>
-                  <dt>Wins</dt>
-                  <dd>{game.state.score.wins}</dd>
-                </div>
-                <div>
-                  <dt>Losses</dt>
-                  <dd>{game.state.score.losses}</dd>
-                </div>
-                <div>
-                  <dt>Draws</dt>
-                  <dd>{game.state.score.draws}</dd>
-                </div>
-              </dl>
-            </Card>
-            <Card>
-              <h2>Computer</h2>
-              <label htmlFor="tic-tac-toe-difficulty">Difficulty</label>
-              <select
-                id="tic-tac-toe-difficulty"
-                value={game.state.difficulty}
-                onChange={(event) => {
-                  void execute("set_tic_tac_toe_difficulty", {
-                    difficulty: event.target.value as TicTacToeDifficulty,
-                  });
-                }}
-              >
-                <option value="easy">Easy — random</option>
-                <option value="medium">Medium — tactical</option>
-                <option value="hard">Hard — unbeatable</option>
-              </select>
-            </Card>
-            <Card>
-              <h2>Move history</h2>
-              {game.state.moves.length ? (
-                <ol className="tic-tac-toe-history">
-                  {game.state.moves.map((move, index) => (
-                    <li key={`${index}-${move.index}`}>
-                      {move.mark === "X" ? "You: X" : "Computer: O"} — {POSITION_NAMES[move.index]}
-                    </li>
-                  ))}
-                </ol>
-              ) : (
-                <p>No moves yet.</p>
-              )}
-            </Card>
-            <Card className="tic-tac-toe-controls">
-              <h2>Controls</h2>
-              <Button
-                className="secondary-button"
-                onClick={() => {
-                  const result = game.undo();
-                  setResponse(result.message);
-                }}
-                disabled={game.awaitingStartChoice || !game.state.moves.length}
-              >
-                Undo full turn
-              </Button>
-              <Button
-                className="secondary-button"
-                onClick={() => {
-                  const result = game.paused ? game.resume() : game.pause();
-                  setResponse(result.message);
-                }}
-                disabled={game.awaitingStartChoice || game.state.status !== "playing"}
-              >
-                {game.paused ? "Resume round" : "Pause round"}
-              </Button>
-              <Button
-                onClick={() => void execute("propose_tic_tac_toe_control", { action: "new_round" })}
-              >
-                New round
-              </Button>
-              <Button
-                className="danger-button"
-                onClick={() =>
-                  void execute("propose_tic_tac_toe_control", { action: "reset_match" })
-                }
-              >
-                Reset match
-              </Button>
-            </Card>
-          </aside>
-        </div>
-
-        {game.state.status !== "playing" && (
-          <section
-            className="tic-tac-toe-result"
-            role="dialog"
-            aria-modal="false"
-            aria-labelledby="tic-tac-toe-result-heading"
-          >
-            <h2 id="tic-tac-toe-result-heading">
-              {game.state.status === "draw"
-                ? "Round drawn"
-                : game.state.winner === "X"
-                  ? "You win!"
-                  : "Computer wins"}
-            </h2>
-            <p>{game.status}</p>
-            <Button
-              onClick={() => {
-                const result = game.newRound();
-                setResponse(result.message);
-              }}
-            >
-              Play another round
-            </Button>
-          </section>
+                ))}
+              </div>
+            </section>
+          </div>
         )}
+
+        <CompanionControls
+          voice={voice}
+          screenReaderMode={preferences.settings.screenReaderMode}
+          response={response}
+          command={command}
+          setCommand={setCommand}
+          onCommand={() => void runCommand()}
+        />
       </main>
     </div>
   );

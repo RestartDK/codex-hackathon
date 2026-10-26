@@ -2,6 +2,7 @@ import { navigationTool, PLAYABLE_GAMES_LABEL } from "../../src/voice/navigation
 import { preferenceNames } from "../../src/lib/preferences.js";
 import { appControlTool, chessSetupTool } from "../../src/voice/chessCommands.js";
 import { voiceControlTool } from "../../src/voice/voiceControl.js";
+import { providerFailureResponse } from "./provider-error.js";
 
 const DEFAULT_ALLOWED_ORIGINS =
   "http://localhost:3000,http://127.0.0.1:3000,http://localhost:5173,http://127.0.0.1:5173";
@@ -23,6 +24,8 @@ and game_control for pause, resume, new_game, undo, resign, return_live, flip_bo
 Use chess_setup for every setup step and choice, app_control for back, close, or reviewing a finished
 game, and voice_control for pausing commands, muting the microphone, reading voice state, or ending voice.
 Use navigate_app for page/game selection. ${PLAYABLE_GAMES_LABEL} are playable.
+Use control_voice_guidance for What can I do, Where am I, Repeat, Explain this, Go back,
+Go home, Use the defaults, and Start the game so replies match the current screen.
 Keep answers brief; say coordinates as a letter then number. The app narrates committed moves.
 `.trim();
 
@@ -31,6 +34,32 @@ const tools = [
   chessSetupTool,
   appControlTool,
   voiceControlTool,
+  {
+    type: "function",
+    name: "control_voice_guidance",
+    description: "Handle a contextual guidance or setup-navigation command on the current screen.",
+    parameters: {
+      type: "object",
+      properties: {
+        action: {
+          type: "string",
+          enum: [
+            "capabilities",
+            "location",
+            "repeat",
+            "explain",
+            "back",
+            "home",
+            "defaults",
+            "start",
+          ],
+        },
+      },
+      required: ["action"],
+      additionalProperties: false,
+    },
+    strict: true,
+  },
   {
     type: "function",
     name: "promote_pawn",
@@ -244,7 +273,7 @@ const GREETINGS = {
 } as const;
 
 const INSTRUCTIONS = `You are the calm English-speaking companion in Playora for blind and low-vision players.
-In chess setup, "start with defaults" or "start game" must call game_control with start_game. Use set_preference for color, opponent and difficulty selections before starting.
+In chess setup, use chess_setup for every choice. "Start with defaults" selects defaults and opens the summary; "Start game" confirms only after the summary is ready. Never use chess gameplay preferences to skip setup.
 
 Backchannel policy:
 Use sparse, brief backchannels. A short command such as play chess, undo, pause, or help is an action, never a backchannel to ignore.
@@ -355,21 +384,6 @@ function networkErrorCode(error: unknown): string {
     : "NETWORK_ERROR";
 }
 
-async function providerRejectionMessage(response: Response): Promise<string> {
-  const raw = await response.text().catch(() => "");
-  let detail = "";
-  try {
-    const parsed: unknown = JSON.parse(raw);
-    const error = isObject(parsed) && isObject(parsed.error) ? parsed.error : null;
-    if (error && typeof error.message === "string") detail = error.message;
-  } catch {
-    detail = "";
-  }
-  const safeDetail = detail.replace(/\bsk-[\w-]+\b/gu, "[redacted]");
-  const suffix = safeDetail ? `: ${safeDetail.slice(0, 300)}` : "";
-  return `The voice provider rejected this session (${response.status})${suffix}`;
-}
-
 const LOBBY_INSTRUCTIONS = `You are the public lobby listener for Play by Voice. This session is
 transcription only. The application reads every transcript and performs any action, so never invent
 game state, never mention a saved or private game, and never answer with game facts.`;
@@ -475,7 +489,7 @@ export async function handleChessVoiceSession(
     return problem(`The voice provider could not be reached (${code}).`, 502);
   }
 
-  if (!upstream.ok) return problem(await providerRejectionMessage(upstream), 502);
+  if (!upstream.ok) return providerFailureResponse(upstream);
 
   let session: unknown;
   try {

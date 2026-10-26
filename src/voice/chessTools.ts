@@ -126,6 +126,58 @@ export function createChessToolExecutor(getBridge: () => ChessToolBridge) {
     }
     const fields = new Map<string, unknown>(Object.entries(args));
 
+    if (name === "control_voice_guidance") {
+      const rawAction = fields.get("action");
+      const action = typeof rawAction === "string" ? rawAction : "";
+      if (action === "home") {
+        cancelRequests();
+        return json({ status: "completed", message: bridge.navigate("home") });
+      }
+      if (action === "back") {
+        if (bridge.view === "chess-setup" && bridge.setupCommand)
+          return json({ status: "completed", message: bridge.setupCommand({ kind: "back" }) });
+        return json({
+          status: "error",
+          message: "There is no previous step here. Say go home to open the game picker.",
+        });
+      }
+      if (action === "defaults" || action === "start") {
+        if (bridge.view !== "chess-setup" || !bridge.setupCommand)
+          return json({
+            status: "error",
+            message: "Open Chess setup before changing or confirming setup.",
+          });
+        return json({ status: "completed", message: bridge.setupCommand({ kind: action }) });
+      }
+      const current =
+        (bridge.view === "chess-setup" && bridge.setup
+          ? describeChessSetup(bridge.setup)
+          : undefined) ??
+        (bridge.view === "chess"
+          ? `You are playing Chess as ${colorName(bridge.playerColor)}. ${colorName(bridge.game.turn())} to move.`
+          : `You are on the ${bridge.view} screen.`);
+      if (action === "location")
+        return json({
+          status: "ok",
+          message: `You are in ${bridge.view === "chess-setup" ? "Chess setup" : bridge.view}. ${current}`,
+        });
+      if (action === "capabilities")
+        return json({
+          status: "ok",
+          message: `${current} You can ask for available actions, repeat, an explanation, go back, go home, or continue with the current choice.`,
+        });
+      if (action === "explain")
+        return json({
+          status: "ok",
+          message:
+            bridge.view === "chess-setup"
+              ? `Chess setup chooses opponent strength, piece color, timer, and guidance. ${current}`
+              : `${current} Ask for the quick guide for rules and move examples.`,
+        });
+      if (action === "repeat") return json({ status: "ok", message: current });
+      return json({ status: "error", message: "Unknown guidance command." });
+    }
+
     if (name === "navigate_app") {
       const destination = parseDestination(fields.get("destination"));
       if (!destination)
@@ -167,7 +219,10 @@ export function createChessToolExecutor(getBridge: () => ChessToolBridge) {
       const settingsAfter = { ...bridge.settings, ...changes.data };
       if (bridge.view === "chess-setup" && bridge.setupCommand) {
         if (preference.data === "gameMode" && settingsAfter.gameMode !== "computer")
-          return json({ status: "error", message: "Player games are coming soon. Choose the computer." });
+          return json({
+            status: "error",
+            message: "Player games are coming soon. Choose the computer.",
+          });
         const setupCommand: ChessSetupCommand | null =
           preference.data === "difficulty"
             ? { kind: "choose-difficulty", difficulty: settingsAfter.difficulty }

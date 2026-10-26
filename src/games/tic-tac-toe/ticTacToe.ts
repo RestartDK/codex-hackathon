@@ -2,6 +2,22 @@ export type TicTacToeMark = "X" | "O";
 export type TicTacToeCell = TicTacToeMark | null;
 export type TicTacToeDifficulty = "easy" | "medium" | "hard";
 export type TicTacToeStatus = "playing" | "won" | "draw";
+export type TicTacToeOpponent = "computer" | "friend";
+export type TicTacToeFirstTurn = "player" | "opponent";
+
+export interface TicTacToeSetup {
+  opponent: TicTacToeOpponent;
+  difficulty: TicTacToeDifficulty;
+  playerMark: TicTacToeMark;
+  firstTurn: TicTacToeFirstTurn;
+}
+
+export const DEFAULT_TIC_TAC_TOE_SETUP: TicTacToeSetup = {
+  opponent: "computer",
+  difficulty: "easy",
+  playerMark: "X",
+  firstTurn: "player",
+};
 
 export interface TicTacToeMove {
   index: number;
@@ -23,6 +39,9 @@ export interface TicTacToeState {
   winningLine: number[] | null;
   moves: TicTacToeMove[];
   difficulty: TicTacToeDifficulty;
+  opponent: TicTacToeOpponent;
+  playerMark: TicTacToeMark;
+  firstTurn: TicTacToeFirstTurn;
   score: TicTacToeScore;
   revision: number;
 }
@@ -57,18 +76,24 @@ export const WINNING_LINES: readonly (readonly [number, number, number])[] = [
 ];
 
 export function createTicTacToeState(
-  difficulty: TicTacToeDifficulty = "medium",
+  difficulty: TicTacToeDifficulty = DEFAULT_TIC_TAC_TOE_SETUP.difficulty,
   score: TicTacToeScore = { wins: 0, losses: 0, draws: 0 },
+  setup: Partial<TicTacToeSetup> = {},
 ): TicTacToeState {
+  const resolved = { ...DEFAULT_TIC_TAC_TOE_SETUP, ...setup, difficulty };
+  const opponentMark: TicTacToeMark = resolved.playerMark === "X" ? "O" : "X";
   return {
     version: 1,
     board: Array<TicTacToeCell>(9).fill(null),
-    turn: "X",
+    turn: resolved.firstTurn === "player" ? resolved.playerMark : opponentMark,
     status: "playing",
     winner: null,
     winningLine: null,
     moves: [],
     difficulty,
+    opponent: resolved.opponent,
+    playerMark: resolved.playerMark,
+    firstTurn: resolved.firstTurn,
     score: { ...score },
     revision: 0,
   };
@@ -106,11 +131,17 @@ export function applyTicTacToeMove(state: TicTacToeState, index: number): TicTac
     state.status = "won";
     state.winner = mark;
     state.winningLine = line;
-    if (mark === "X") state.score.wins += 1;
+    if (mark === state.playerMark) state.score.wins += 1;
     else state.score.losses += 1;
+    const actor =
+      mark === state.playerMark
+        ? "You"
+        : state.opponent === "computer"
+          ? "The computer"
+          : "Player two";
     return {
       ok: true,
-      message: `${mark === "X" ? "You placed X" : "The computer placed O"} in ${POSITION_NAMES[index]}. ${mark === "X" ? "You win!" : "The computer wins."}`,
+      message: `${actor} placed ${mark} in ${POSITION_NAMES[index]}. ${mark === state.playerMark ? "You win!" : state.opponent === "computer" ? "The computer wins." : "Player two wins."}`,
     };
   }
   if (state.board.every(Boolean)) {
@@ -118,19 +149,23 @@ export function applyTicTacToeMove(state: TicTacToeState, index: number): TicTac
     state.score.draws += 1;
     return {
       ok: true,
-      message: `${mark === "X" ? "You placed X" : "The computer placed O"} in ${POSITION_NAMES[index]}. The round is a draw.`,
+      message: `${mark === state.playerMark ? "You" : state.opponent === "computer" ? "The computer" : "Player two"} placed ${mark} in ${POSITION_NAMES[index]}. The round is a draw.`,
     };
   }
   state.turn = mark === "X" ? "O" : "X";
   return {
     ok: true,
-    message: `${mark === "X" ? "You placed X" : "The computer placed O"} in ${POSITION_NAMES[index]}. ${state.turn === "X" ? "Your turn." : "Computer thinking."}`,
+    message: `${mark === state.playerMark ? "You" : state.opponent === "computer" ? "The computer" : "Player two"} placed ${mark} in ${POSITION_NAMES[index]}. ${state.turn === state.playerMark ? "Your turn." : state.opponent === "computer" ? "Computer thinking." : "Player two's turn."}`,
   };
 }
 
-function terminalScore(board: readonly TicTacToeCell[], depth: number): number | null {
+function terminalScore(
+  board: readonly TicTacToeCell[],
+  depth: number,
+  maximizingMark: TicTacToeMark,
+): number | null {
   const line = findWinningLine(board);
-  if (line) return board[line[0]] === "O" ? 10 - depth : depth - 10;
+  if (line) return board[line[0]] === maximizingMark ? 10 - depth : depth - 10;
   return availableMoves(board).length === 0 ? 0 : null;
 }
 
@@ -140,14 +175,18 @@ function minimax(
   depth: number,
   alpha: number,
   beta: number,
+  maximizingMark: TicTacToeMark,
 ): number {
-  const terminal = terminalScore(board, depth);
+  const terminal = terminalScore(board, depth, maximizingMark);
   if (terminal !== null) return terminal;
-  if (turn === "O") {
+  if (turn === maximizingMark) {
     let best = -Infinity;
     for (const index of availableMoves(board)) {
-      board[index] = "O";
-      best = Math.max(best, minimax(board, "X", depth + 1, alpha, beta));
+      board[index] = turn;
+      best = Math.max(
+        best,
+        minimax(board, turn === "X" ? "O" : "X", depth + 1, alpha, beta, maximizingMark),
+      );
       board[index] = null;
       alpha = Math.max(alpha, best);
       if (beta <= alpha) break;
@@ -156,8 +195,11 @@ function minimax(
   }
   let best = Infinity;
   for (const index of availableMoves(board)) {
-    board[index] = "X";
-    best = Math.min(best, minimax(board, "O", depth + 1, alpha, beta));
+    board[index] = turn;
+    best = Math.min(
+      best,
+      minimax(board, turn === "X" ? "O" : "X", depth + 1, alpha, beta, maximizingMark),
+    );
     board[index] = null;
     beta = Math.min(beta, best);
     if (beta <= alpha) break;
@@ -181,12 +223,12 @@ export function chooseBestMove(
   const moves = availableMoves(board);
   if (!moves.length) return null;
   let bestMove = moves[0];
-  let bestScore = mark === "O" ? -Infinity : Infinity;
+  let bestScore = -Infinity;
   for (const index of moves) {
     const probe = [...board];
     probe[index] = mark;
-    const score = minimax(probe, mark === "O" ? "X" : "O", 0, -Infinity, Infinity);
-    if ((mark === "O" && score > bestScore) || (mark === "X" && score < bestScore)) {
+    const score = minimax(probe, mark === "O" ? "X" : "O", 0, -Infinity, Infinity, mark);
+    if (score > bestScore) {
       bestScore = score;
       bestMove = index;
     }
@@ -197,39 +239,62 @@ export function chooseBestMove(
 export function chooseComputerMove(
   state: Pick<TicTacToeState, "board" | "difficulty">,
   random: () => number = Math.random,
+  computerMark: TicTacToeMark = "O",
 ): number | null {
   const moves = availableMoves(state.board);
   if (!moves.length) return null;
   if (state.difficulty === "easy")
     return moves[Math.min(moves.length - 1, Math.floor(random() * moves.length))];
   if (state.difficulty === "medium") {
-    const winning = immediateMove(state.board, "O");
+    const winning = immediateMove(state.board, computerMark);
     if (winning !== null) return winning;
-    const block = immediateMove(state.board, "X");
+    const block = immediateMove(state.board, computerMark === "X" ? "O" : "X");
     if (block !== null) return block;
     return moves[Math.min(moves.length - 1, Math.floor(random() * moves.length))];
   }
-  return chooseBestMove(state.board, "O");
+  return chooseBestMove(state.board, computerMark);
 }
 
 export function undoTicTacToeTurn(state: TicTacToeState): TicTacToeActionResult {
   if (!state.moves.length) return { ok: false, message: "There is no turn to undo." };
   if (state.status === "won") {
-    if (state.winner === "X") state.score.wins = Math.max(0, state.score.wins - 1);
+    if (state.winner === state.playerMark) state.score.wins = Math.max(0, state.score.wins - 1);
     else state.score.losses = Math.max(0, state.score.losses - 1);
   } else if (state.status === "draw") state.score.draws = Math.max(0, state.score.draws - 1);
 
-  const lastHuman = state.moves.map((move) => move.mark).lastIndexOf("X");
-  const retained = lastHuman < 0 ? [] : state.moves.slice(0, lastHuman);
+  const lastPlayer = state.moves.map((move) => move.mark).lastIndexOf(state.playerMark);
+  const retained =
+    state.opponent === "computer"
+      ? lastPlayer < 0
+        ? []
+        : state.moves.slice(0, lastPlayer)
+      : state.moves.slice(0, -1);
   state.board = Array<TicTacToeCell>(9).fill(null);
   for (const move of retained) state.board[move.index] = move.mark;
   state.moves = retained;
-  state.turn = "X";
+  state.turn =
+    state.opponent === "computer"
+      ? state.playerMark
+      : retained.length
+        ? retained.at(-1)!.mark === "X"
+          ? "O"
+          : "X"
+        : state.firstTurn === "player"
+          ? state.playerMark
+          : state.playerMark === "X"
+            ? "O"
+            : "X";
   state.status = "playing";
   state.winner = null;
   state.winningLine = null;
   state.revision += 1;
-  return { ok: true, message: "Your previous turn and the computer reply were undone. Your turn." };
+  return {
+    ok: true,
+    message:
+      state.opponent === "computer"
+        ? "Your previous turn and the computer reply were undone. Your turn."
+        : "The previous move was undone.",
+  };
 }
 
 export function parseTicTacToePosition(input: string): number | null {
@@ -270,17 +335,21 @@ export function parseTicTacToePosition(input: string): number | null {
 
 export function describeTicTacToeBoard(state: TicTacToeState): string {
   const occupied = state.board.flatMap((cell, index) =>
-    cell ? [`${POSITION_NAMES[index]} is ${cell === "X" ? "your X" : "computer O"}`] : [],
+    cell
+      ? [
+          `${POSITION_NAMES[index]} is ${cell === state.playerMark ? `your ${cell}` : state.opponent === "computer" ? `computer ${cell}` : `player two ${cell}`}`,
+        ]
+      : [],
   );
   const empty = availableMoves(state.board).map((index) => POSITION_NAMES[index]);
   const position = occupied.length ? occupied.join(", ") : "The board is empty";
   const empties = empty.length ? ` Empty: ${empty.join(", ")}.` : "";
   const ending =
     state.status === "won"
-      ? ` ${state.winner === "X" ? "You won" : "The computer won"}.`
+      ? ` ${state.winner === state.playerMark ? "You won" : state.opponent === "computer" ? "The computer won" : "Player two won"}.`
       : state.status === "draw"
         ? " The round is a draw."
-        : ` ${state.turn === "X" ? "Your turn" : "Computer's turn"}.`;
+        : ` ${state.turn === state.playerMark ? "Your turn" : state.opponent === "computer" ? "Computer's turn" : "Player two's turn"}.`;
   return `${position}.${empties}${ending}`;
 }
 
@@ -319,7 +388,11 @@ export function deserializeTicTacToe(raw: string): TicTacToeState | null {
       )
     )
       return null;
-    const replay = createTicTacToeState(state.difficulty as TicTacToeDifficulty, state.score);
+    const replay = createTicTacToeState(state.difficulty as TicTacToeDifficulty, state.score, {
+      opponent: state.opponent === "friend" ? "friend" : "computer",
+      playerMark: state.playerMark === "O" ? "O" : "X",
+      firstTurn: state.firstTurn === "opponent" ? "opponent" : "player",
+    });
     for (const move of state.moves) {
       if (replay.turn !== move.mark || !applyTicTacToeMove(replay, move.index).ok) return null;
     }
@@ -337,6 +410,14 @@ export function deserializeTicTacToe(raw: string): TicTacToeState | null {
 
 export const TIC_TAC_TOE_INTRODUCTION =
   "Tic-Tac-Toe is a three by three strategy game. You are X and move first. Make three X marks in a row, column, or diagonal before the computer makes three O marks. If all nine squares fill without a line, the round is a draw. Name squares by position, from top left to bottom right, or as square one through nine.";
+
+export function ticTacToeIntroduction(setup: TicTacToeSetup) {
+  if (setup.playerMark === "X" && setup.firstTurn === "player" && setup.opponent === "computer")
+    return TIC_TAC_TOE_INTRODUCTION;
+  const opponentMark = setup.playerMark === "X" ? "O" : "X";
+  const opponent = setup.opponent === "computer" ? "the computer" : "player two";
+  return `Tic-Tac-Toe is a three by three strategy game. You play ${setup.playerMark}; ${opponent} plays ${opponentMark}. ${setup.firstTurn === "player" ? "You move first" : `${opponent} moves first`}. Make three of your marks in a row, column, or diagonal before your opponent. If all nine squares fill without a line, the round is a draw. Name squares by position, from top left to bottom right, or as square one through nine.`;
+}
 
 export const TIC_TAC_TOE_GUIDE =
   "Say play center, top left, or square nine. You can also ask describe the board, available squares, what is in a square, move history, whose turn, suggest a move, undo, pause, or new round. Direct moves play immediately. A move selected by the companion asks for confirmation.";

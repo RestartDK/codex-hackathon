@@ -8,6 +8,7 @@
     "predev": "node scripts/copy-stockfish.mjs",
     "prebuild": "node scripts/copy-stockfish.mjs",
     "build": "tsc -b && vp build",
+    "build:sites": "node scripts/build-sites.mjs",
     "check": "vp check",
     "typecheck": "tsc -b",
     "test": "vp test run --config vitest.config.ts",

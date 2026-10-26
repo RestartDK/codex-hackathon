@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vite-plus/test";
+import { describe, expect, it, vi } from "vite-plus/test";
 import {
   chessVoiceSettings,
   createChessVoiceTransport,
@@ -117,6 +117,9 @@ describe("chess voice session endpoint", () => {
         "game_control",
       ]),
     );
+    expect(payload.session.delegation.responses.tools.map((tool) => tool.name)).toContain(
+      "control_voice_guidance",
+    );
     expect(request.body).not.toContain("sk-test-only-key");
   });
 
@@ -149,18 +152,36 @@ describe("chess voice session endpoint", () => {
   });
 
   it("reports a provider rejection without echoing the provider key", async () => {
+    const warning = vi.spyOn(console, "warn").mockImplementation(() => undefined);
     const recorder = recordingTransport(async () =>
       Response.json(
-        { error: { message: "Incorrect API key provided: sk-test-only-key" } },
-        { status: 401 },
+        {
+          error: {
+            message: "Incorrect API key provided: sk-test-only-key",
+            type: "invalid_request_error",
+            code: "invalid_api_key",
+          },
+        },
+        { status: 401, headers: { "x-request-id": "req_safe-test" } },
       ),
     );
     const response = await handleChessVoiceSession(offerRequest(), settings, recorder.transport);
-    const body = await response.text();
+    const body = await response.json();
     expect(response.status).toBe(502);
-    expect(body).toContain("rejected");
-    expect(body).toContain("[redacted]");
-    expect(body).not.toContain("sk-test-only-key");
+    expect(body).toEqual({
+      error:
+        "OpenAI rejected the server credential (401): Incorrect API key provided: [redacted] Replace OPENAI_API_KEY on the server, restart it, then choose Retry voice.",
+      providerStatus: 401,
+      providerCode: "invalid_api_key",
+    });
+    expect(JSON.stringify(body)).not.toContain("sk-test-only-key");
+    expect(warning).toHaveBeenCalledWith(
+      expect.stringContaining(
+        "status=401 type=invalid_request_error code=invalid_api_key request_id=req_safe-test",
+      ),
+    );
+    expect(warning.mock.calls.flat().join(" ")).not.toContain("sk-test-only-key");
+    warning.mockRestore();
   });
 
   it("reports an unreachable provider with a stable error code", async () => {

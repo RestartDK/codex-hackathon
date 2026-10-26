@@ -4,6 +4,8 @@ import { Button } from "../ui/Button";
 import { Card } from "../ui/Card";
 import { createLudoToolExecutor, type LudoToolBridge } from "../../games/ludo/ludoTools";
 import { useLibraryVoice } from "../../voice/useLibraryVoice";
+import { GuidanceTracker, parseGuidanceCommand } from "../../voice/guidance";
+import { LUDO_GUIDE as GUIDE } from "../../games/ludo/ludo";
 
 interface Props extends LudoToolBridge {
   screenReaderMode: boolean;
@@ -67,24 +69,30 @@ export default function LudoVoiceCompanion(props: Props) {
       () => refreshPending((v) => v + 1),
     );
   const executor = executorRef.current;
-  const { voice, runGlobalCommand } = useLibraryVoice(executor, "ludo");
+  const { voice, runGlobalCommand, setGuidanceHandler } = useLibraryVoice(executor, "ludo");
   useEffect(() => {
     props.onNarrationBusyChange(voice.status === "connected" && voice.isSpeaking);
   }, [props.onNarrationBusyChange, voice.isSpeaking, voice.status]);
   const [typedCommand, setTypedCommand] = useState("");
   const [response, setResponse] = useState("Ready. Say roll to begin.");
-  const previousVoiceStatus = useRef(voice.status);
+  const guidanceTracker = useRef(new GuidanceTracker());
   const lastAnnouncedRevision = useRef(props.state.revision);
 
   useEffect(() => {
-    if (voice.status === "connected" && previousVoiceStatus.current !== "connected") {
-      const welcome = props.awaitingStartChoice
-        ? "Welcome back. Resume your saved game or start a new one?"
-        : "Welcome to Ludo. You are red. Say roll to begin. Ask for help or board configuration anytime.";
-      setResponse(welcome);
-      voice.announce(welcome);
+    if (voice.status !== "connected") return;
+    const welcome = props.awaitingStartChoice
+      ? "Welcome back to Ludo. There is no setup. Resume your saved game or start a new one."
+      : "Welcome to Ludo. There is no setup, so the board is ready. You are red and it is your turn. Say roll to begin. You can ask for help or the board configuration anytime.";
+    const message = guidanceTracker.current.take({
+      key: props.awaitingStartChoice ? "saved" : "ready",
+      message: welcome,
+      location: "Ludo game",
+      capabilities: GUIDE,
+    });
+    if (message) {
+      setResponse(message);
+      voice.announce(message);
     }
-    previousVoiceStatus.current = voice.status;
   }, [props.awaitingStartChoice, voice.announce, voice.status]);
 
   useEffect(() => {
@@ -96,6 +104,34 @@ export default function LudoVoiceCompanion(props: Props) {
 
   async function runCommand() {
     const value = typedCommand.trim().toLowerCase();
+    const guidanceCommand = parseGuidanceCommand(value);
+    if (guidanceCommand === "repeat") {
+      voice.announce(response);
+      setTypedCommand("");
+      return;
+    }
+    if (guidanceCommand === "location") {
+      const message = `You are in Ludo. ${props.status}`;
+      setResponse(message);
+      if (voice.status === "connected") voice.announce(message);
+      setTypedCommand("");
+      return;
+    }
+    if (guidanceCommand === "capabilities" || guidanceCommand === "explain") {
+      setResponse(GUIDE);
+      if (voice.status === "connected") voice.announce(GUIDE);
+      setTypedCommand("");
+      return;
+    }
+    if (guidanceCommand === "defaults" || guidanceCommand === "start") {
+      const message = props.awaitingStartChoice
+        ? "Choose Resume saved game or Start a new game first."
+        : `Ludo has no setup choices. The game is ready. ${props.status}`;
+      setResponse(message);
+      if (voice.status === "connected") voice.announce(message);
+      setTypedCommand("");
+      return;
+    }
     const global = await runGlobalCommand(value);
     if (global !== null) {
       setResponse(global);
@@ -139,6 +175,27 @@ export default function LudoVoiceCompanion(props: Props) {
     (props.pendingToken == null
       ? null
       : { id: "ui-token", description: `Move your token ${props.pendingToken}` });
+  useEffect(() => {
+    setGuidanceHandler((action) => {
+      let message: string;
+      if (action === "repeat") message = response;
+      else if (action === "location") message = `You are in Ludo. ${props.status}`;
+      else if (action === "capabilities" || action === "explain") message = GUIDE;
+      else if (action === "back")
+        message = "Ludo has no previous setup step. Say go home to leave the game.";
+      else if (action === "defaults" || action === "start")
+        message = props.awaitingStartChoice
+          ? "Choose Resume saved game or Start a new game first."
+          : `Ludo has no setup choices. The game is ready. ${props.status}`;
+      else {
+        message = "Returning to the game picker.";
+        window.setTimeout(() => void runGlobalCommand("go home"), 0);
+      }
+      setResponse(message);
+      return { ok: true, message };
+    });
+    return () => setGuidanceHandler(null);
+  }, [props.awaitingStartChoice, props.status, response, runGlobalCommand, setGuidanceHandler]);
   return (
     <Card className="voice-companion" aria-labelledby="ludo-voice-heading">
       <div className="voice-heading-row">
@@ -150,15 +207,19 @@ export default function LudoVoiceCompanion(props: Props) {
               ? "Listening, commands paused"
               : voice.status === "connected"
                 ? "Listening"
-              : voice.status === "connecting"
-                ? "Connecting…"
-                : voice.status === "error"
-                  ? "Voice unavailable"
-                  : "Voice is off"}
+                : voice.status === "connecting"
+                  ? "Connecting…"
+                  : voice.status === "error"
+                    ? "Voice unavailable"
+                    : "Voice is off"}
           </p>
         </div>
-        {voice.status !== "connected" ? (
-          <Button onClick={voice.start} disabled={voice.status === "connecting"} autoFocus>
+        {voice.status !== "connected" || voice.needsAudioActivation ? (
+          <Button
+            onClick={voice.needsAudioActivation ? voice.activateAudio : voice.start}
+            disabled={voice.status === "connecting" && !voice.needsAudioActivation}
+            autoFocus
+          >
             <Mic aria-hidden="true" size={20} /> Start voice companion
           </Button>
         ) : (

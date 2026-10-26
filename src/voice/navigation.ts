@@ -14,7 +14,29 @@ export type AvailableDestination = (typeof AVAILABLE_DESTINATIONS)[number];
 
 export type Destination = AvailableDestination;
 
-export const PLAYABLE_GAMES_LABEL = "Chess, Loups-Garous, Ludo, The Intercept, and Tic-Tac-Toe";
+/**
+ * Preserve the player's voice intent while moving between independently mounted
+ * game experiences. A connecting session is deliberately included: navigation
+ * tears that session down, so the destination must start its own replacement.
+ */
+export function shouldCarryVoiceOnNavigation(
+  status: "idle" | "connecting" | "connected" | "closing" | "error",
+  voiceEnabled: boolean,
+): boolean {
+  return status === "connecting" || status === "connected" || voiceEnabled;
+}
+
+const GAME_LABELS: Record<PlayableGame, string> = {
+  chess: "Chess",
+  "loups-garous": "Loups-Garous",
+  ludo: "Ludo",
+  intercept: "The Intercept",
+  "tic-tac-toe": "Tic-Tac-Toe",
+};
+
+export const PLAYABLE_GAMES_LABEL = PLAYABLE_GAMES.map((game) => GAME_LABELS[game])
+  .join(", ")
+  .replace(/, ([^,]+)$/, ", and $1");
 
 export function parseDestination(value: unknown): Destination | null {
   switch (value) {
@@ -49,4 +71,3 @@ export const navigationTool = {
   },
   strict: true,
 };
-

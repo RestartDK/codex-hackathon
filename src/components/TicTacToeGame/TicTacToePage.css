@@ -1,252 +1,706 @@
-.tic-tac-toe-app {
-  min-height: 100vh;
+.ttt-app,
+.ttt-loading {
+  min-height: 100dvh;
+  overflow: hidden;
+  background: #fff;
+  color: #090909;
+  font-family:
+    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
-.tic-tac-toe-main {
-  width: min(100% - 2rem, 1120px);
-  margin: 0 auto;
-  padding: 1.25rem 0 3rem;
+
+.ttt-app,
+.ttt-app *,
+.ttt-loading,
+.ttt-loading * {
+  box-sizing: border-box;
 }
-.tic-tac-toe-introduction {
-  margin: 0 auto 1rem;
-  padding: 1.15rem 1.25rem;
-  border: 1px solid #315a55;
-  border-radius: 1rem;
-  background: linear-gradient(135deg, #092b2a, #10263b);
-  color: #ecfeff;
+
+.ttt-app .sr-only,
+.ttt-loading .sr-only {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0) !important;
+  clip-path: inset(50%) !important;
+  border: 0 !important;
+  white-space: nowrap !important;
 }
-.tic-tac-toe-introduction h2 {
-  margin: 0.25rem 0 0.5rem;
-}
-.tic-tac-toe-introduction p:last-child {
-  margin: 0;
-  max-width: 78ch;
-  line-height: 1.6;
-}
-.tic-tac-toe-layout {
-  display: grid;
-  grid-template-columns: minmax(320px, 620px) minmax(240px, 320px);
-  gap: 1.25rem;
-  justify-content: center;
-  align-items: start;
-}
-.tic-tac-toe-board-panel {
-  padding: clamp(1rem, 3vw, 1.5rem);
-  border: 1px solid #334155;
-  border-radius: 1rem;
-  background: #0b1724;
-  color: #f8fafc;
-  box-shadow: 0 18px 45px rgba(0, 0, 0, 0.2);
-}
-.tic-tac-toe-section-heading {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 1rem;
-  margin-bottom: 1rem;
-}
-.tic-tac-toe-section-heading h2 {
-  margin: 0.2rem 0 0;
-}
-.tic-tac-toe-turn {
-  max-width: 17rem;
-  padding: 0.55rem 0.75rem;
-  border-radius: 0.65rem;
-  background: #132b3f;
-  color: #e0f2fe;
-  font-weight: 700;
-  line-height: 1.35;
-}
-.tic-tac-toe-board {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  width: min(100%, 520px);
-  aspect-ratio: 1;
-  margin: 0 auto;
-  gap: 0.55rem;
-}
-.tic-tac-toe-cell {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 0.2rem;
-  min-width: 0;
-  border: 3px solid #5eead4;
-  border-radius: 0.8rem;
-  background: #f8fafc;
-  color: #0f172a;
-  cursor: pointer;
+.ttt-app button,
+.ttt-loading button {
   font: inherit;
-  font-size: clamp(2.75rem, 10vw, 6rem);
-  font-weight: 900;
-  line-height: 1;
+}
+.ttt-app .skip-link {
+  position: fixed;
+  z-index: 100;
+  top: -100px;
+  left: 16px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: #111;
+  color: #fff;
+}
+.ttt-app .skip-link:focus {
+  top: 12px;
+}
+.ttt-header {
+  position: relative;
+  z-index: 30;
+  display: flex;
+  min-height: 96px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 24px 32px;
+  background: #fff;
+}
+.ttt-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 24px;
+  line-height: 32px;
+}
+.ttt-brand strong {
+  font-weight: 650;
+}
+.ttt-brand img {
+  width: 8px;
+  height: 8px;
+}
+.ttt-brand span {
+  color: #707070;
+}
+.ttt-header nav {
+  display: flex;
+  gap: 28px;
+}
+.ttt-header nav button {
+  min-height: 44px;
+  padding: 8px 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  font-size: 16px;
+}
+.ttt-header nav button:hover {
+  text-decoration: underline;
+  text-underline-offset: 5px;
+}
+.ttt-main {
+  position: relative;
+  min-height: calc(100dvh - 96px);
+  overflow: hidden;
+  isolation: isolate;
+}
+.ttt-main::after {
+  position: absolute;
+  z-index: -2;
+  right: -4%;
+  bottom: -96px;
+  left: -4%;
+  height: 320px;
+  background: linear-gradient(0deg, #d18beb 0%, #efcdff 42%, rgba(255, 255, 255, 0) 100%);
+  content: "";
+  filter: blur(30px);
+}
+.ttt-side-actions {
+  position: fixed;
+  z-index: 40;
+  top: 50%;
+  left: 16px;
+  display: grid;
+  gap: 12px;
+  transform: translateY(-50%);
+}
+.ttt-side-actions button,
+.ttt-dock-button {
+  display: grid;
+  width: 48px;
+  height: 48px;
+  place-items: center;
+  padding: 11px;
+  border: 1px solid #dedede;
+  border-radius: 50%;
+  background: #fff;
+  color: #111;
+  cursor: pointer;
+}
+.ttt-side-actions img {
+  width: 24px;
+  height: 24px;
+  object-fit: contain;
+}
+.ttt-setup-layout {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  justify-items: center;
+  padding: 80px 24px 255px;
+}
+.ttt-setup-intro {
+  margin-bottom: 36px;
+  text-align: center;
+}
+.ttt-setup-intro h2 {
+  margin: 0 0 8px;
+  font-size: 32px;
+  line-height: 40px;
+  letter-spacing: -0.02em;
+}
+.ttt-setup-intro p {
+  margin: 0;
+  color: #737373;
+  font-size: 16px;
+  line-height: 24px;
+}
+.ttt-setup-card {
+  width: min(403px, calc(100vw - 48px));
+  padding: 31px;
+  border: 1px solid #e8e8e8;
+  border-radius: 32px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 18px 70px rgba(70, 38, 92, 0.08);
+}
+.ttt-setup-card h1 {
+  margin: 0 0 8px;
+  font-size: 24px;
+  line-height: 32px;
+  text-align: center;
+  outline: none;
+}
+.ttt-setup-card > p {
+  margin: 0 0 24px;
+  color: #737373;
+  text-align: center;
+}
+.ttt-option-list {
+  display: grid;
+  gap: 12px;
+}
+.ttt-option-list button {
+  display: flex;
+  min-height: 58px;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 16px;
+  border: 1px solid #dedede;
+  border-radius: 16px;
+  background: #fff;
+  color: #111;
+  cursor: pointer;
+  text-align: left;
   transition:
-    transform 0.12s,
-    background 0.12s,
-    border-color 0.12s;
+    color 180ms ease,
+    background 180ms ease,
+    border-color 180ms ease;
 }
-.tic-tac-toe-cell:hover:not([aria-disabled="true"]) {
-  transform: translateY(-2px);
-  background: #ecfeff;
+.ttt-option-list button > span:not(.ttt-option-dot) {
+  display: grid;
+  flex: 1;
 }
-.tic-tac-toe-cell:focus-visible {
-  outline: 5px solid #facc15;
-  outline-offset: 3px;
-  z-index: 1;
+.ttt-option-list button small {
+  margin-top: 2px;
+  color: #737373;
 }
-.tic-tac-toe-cell[aria-disabled="true"] {
+.ttt-option-list button.is-selected {
+  border-color: #090909;
+  background: #090909;
+  color: #fff;
+}
+.ttt-option-list button.is-selected small {
+  color: #d5d5d5;
+}
+.ttt-option-dot {
+  width: 10px;
+  height: 10px;
+  flex: none;
+  border-radius: 50%;
+}
+.ttt-option-dot.green {
+  background: #23a566;
+}
+.ttt-option-dot.yellow {
+  background: #e6b51e;
+}
+.ttt-option-dot.red {
+  background: #df4f4f;
+}
+.ttt-setup-footer {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-top: 24px;
+}
+.ttt-setup-footer button,
+.ttt-result button,
+.ttt-loading-error button {
+  min-height: 48px;
+  padding: 10px 18px;
+  border: 1px solid #d8d8d8;
+  border-radius: 999px;
+  background: #fff;
+  cursor: pointer;
+}
+.ttt-setup-footer button.primary,
+.ttt-result button.primary,
+.ttt-loading-error button:first-of-type {
+  border-color: #111;
+  background: #111;
+  color: #fff;
+}
+.ttt-game-layout {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  justify-content: center;
+  padding-top: 65px;
+}
+.ttt-board-panel {
+  position: relative;
+  box-sizing: border-box;
+  width: min(500px, calc(100vw - 48px));
+  aspect-ratio: 1;
+  padding: 16px;
+  border: 1px solid #e7e7e7;
+  border-radius: 32px;
+  background: #fff;
+}
+.ttt-turn {
+  position: absolute;
+  bottom: calc(100% + 18px);
+  left: 50%;
+  min-width: max-content;
+  padding: 5px 12px;
+  border: 1px solid #e7e7e7;
+  border-radius: 999px;
+  background: #fff;
+  color: #666;
+  font-size: 14px;
+  transform: translateX(-50%);
+}
+.ttt-board {
+  display: grid;
+  width: 100%;
+  height: 100%;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+.ttt-cell {
+  display: grid;
+  min-width: 0;
+  place-items: center;
+  border: 1px solid #e7e7e7;
+  border-radius: 16px;
+  background: #fff;
+  cursor: pointer;
+  transition:
+    background 160ms ease,
+    border-color 160ms ease;
+}
+.ttt-cell:hover:not([aria-disabled="true"]) {
+  border-color: #b681cf;
+  background: #fcf8ff;
+}
+.ttt-cell[aria-disabled="true"] {
   cursor: default;
 }
-.tic-tac-toe-cell:not(.cell-x):not(.cell-o) > span:first-child {
-  color: #64748b;
-  font-size: clamp(1.4rem, 4vw, 2.2rem);
+.ttt-cell img {
+  width: 48px;
+  height: 48px;
+  object-fit: contain;
 }
-.tic-tac-toe-cell.cell-x {
-  color: #075985;
-  background: #e0f2fe;
+.ttt-cell.winning {
+  border-color: #7b369f;
+  background: #faf1ff;
+  box-shadow: inset 0 0 0 1px #7b369f;
 }
-.tic-tac-toe-cell.cell-o {
-  color: #9f1239;
-  background: #ffe4e6;
-}
-.tic-tac-toe-cell.winning-cell {
-  border-color: #facc15;
-  background: #fef9c3;
-  box-shadow: inset 0 0 0 3px #854d0e;
-}
-.tic-tac-toe-cell-name {
-  font-size: clamp(0.62rem, 1.6vw, 0.86rem);
-  font-weight: 750;
-  line-height: 1.1;
-  text-transform: capitalize;
-}
-.tic-tac-toe-board-help {
-  margin: 1rem 0 0;
-  color: #cbd5e1;
+.ttt-result {
+  position: absolute;
+  z-index: 5;
+  top: 65px;
+  left: 50%;
+  width: min(560px, calc(100vw - 40px));
   text-align: center;
+  transform: translateX(-50%);
 }
-.tic-tac-toe-sidebar {
-  display: grid;
-  gap: 0.85rem;
+.ttt-result h1 {
+  margin: 0 0 8px;
+  font-size: 48px;
+  line-height: 56px;
+  letter-spacing: -0.03em;
 }
-.tic-tac-toe-sidebar .library-card {
-  border: 1px solid #334155;
-  background: #101f2d;
-  color: #f8fafc;
+.ttt-result p {
+  margin: 0 0 16px;
+  color: #666;
 }
-.tic-tac-toe-sidebar h2 {
-  margin: 0 0 0.7rem;
-  font-size: 1.1rem;
+.ttt-result div {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
 }
-.tic-tac-toe-sidebar select {
+.ttt-app.is-finished .ttt-game-layout {
+  padding-top: 265px;
+}
+.ttt-app.is-finished .ttt-board-panel {
+  width: min(274px, calc(100vw - 48px));
+  border-color: transparent;
+  background: transparent;
+}
+.ttt-app.is-finished .ttt-turn {
+  display: none;
+}
+.ttt-app.is-won .ttt-cell:not(.winning) {
+  border-color: transparent;
+  opacity: 0;
+  pointer-events: none;
+}
+.ttt-companion {
+  position: fixed;
+  z-index: 20;
+  bottom: 40px;
+  left: 50%;
+  width: 280px;
+  height: 210px;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+.ttt-companion-row {
+  position: relative;
   width: 100%;
+  height: 100%;
+}
+.ttt-orb-button {
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  width: 201px;
+  height: 201px;
+  padding: 0;
+  overflow: visible;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  cursor: pointer;
+  transform: translateX(-50%);
+  pointer-events: auto;
+}
+.ttt-orb-button .companion-liquid-orb,
+.ttt-orb-button .companion-orb,
+.ttt-orb-button .orb-glass {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.ttt-orb-button .orb-glass {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+}
+.ttt-keyboard-button {
+  position: absolute;
+  top: 50%;
+  right: 0;
+  transform: translateY(-50%);
+  pointer-events: auto;
+}
+.ttt-end-voice {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  transform: translateY(-50%);
+  pointer-events: auto;
+}
+.ttt-companion.is-active .ttt-orb-button {
+  filter: drop-shadow(0 0 24px rgba(121, 48, 158, 0.38));
+}
+.ttt-command-panel {
+  position: absolute;
+  right: -135px;
+  bottom: 214px;
+  width: 420px;
+  padding: 16px;
+  border: 1px solid #dedede;
+  border-radius: 18px;
+  background: #fff;
+  box-shadow: 0 18px 60px rgba(47, 25, 59, 0.16);
+  pointer-events: auto;
+}
+.ttt-command-panel label {
+  display: block;
+  margin-bottom: 9px;
+  font-weight: 600;
+}
+.ttt-command-panel > div {
+  display: grid;
+  grid-template-columns: 1fr 44px;
+  gap: 8px;
+}
+.ttt-command-panel input {
+  min-width: 0;
   min-height: 44px;
-  margin-top: 0.4rem;
-  border: 2px solid #64748b;
-  border-radius: 0.6rem;
-  padding: 0.45rem;
-  background: white;
-  color: #0f172a;
+  padding: 8px 12px;
+  border: 1px solid #ccc;
+  border-radius: 12px;
   font: inherit;
 }
-.tic-tac-toe-sidebar select:focus-visible {
-  outline: 4px solid #facc15;
-  outline-offset: 2px;
-}
-.tic-tac-toe-score {
+.ttt-command-panel button {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 0.5rem;
-  margin: 0;
+  place-items: center;
+  border: 0;
+  border-radius: 12px;
+  background: #111;
+  color: #fff;
 }
-.tic-tac-toe-score div {
-  padding: 0.55rem;
-  border-radius: 0.6rem;
-  background: #172e40;
-  text-align: center;
+.ttt-command-panel button:disabled {
+  opacity: 0.45;
 }
-.tic-tac-toe-score dt {
-  color: #bae6fd;
-  font-size: 0.8rem;
+.ttt-voice-error {
+  position: absolute;
+  right: -90px;
+  bottom: 218px;
+  width: 360px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: #fff2f2;
+  color: #8a1f1f;
+  pointer-events: auto;
 }
-.tic-tac-toe-score dd {
-  margin: 0.15rem 0 0;
-  font-size: 1.45rem;
-  font-weight: 900;
+.ttt-popover {
+  position: fixed;
+  z-index: 60;
+  top: 88px;
+  right: 32px;
+  width: min(420px, calc(100vw - 32px));
+  padding: 24px;
+  border: 1px solid #dedede;
+  border-radius: 24px;
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow: 0 24px 70px rgba(37, 25, 65, 0.18);
 }
-.tic-tac-toe-history {
-  max-height: 11rem;
-  overflow-y: auto;
-  margin: 0;
-  padding-left: 1.45rem;
-  color: #e2e8f0;
+.ttt-popover h2 {
+  margin: 0 40px 12px 0;
 }
-.tic-tac-toe-history li {
-  padding: 0.18rem 0;
+.ttt-popover p {
+  line-height: 1.55;
 }
-.tic-tac-toe-controls {
+.ttt-popover-close {
+  position: absolute;
+  top: 14px;
+  right: 14px;
   display: grid;
-  gap: 0.55rem;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: #f2f2f2;
+  cursor: pointer;
 }
-.tic-tac-toe-controls h2 {
-  margin-bottom: 0.2rem;
+.ttt-loading {
+  position: relative;
+  display: grid;
+  place-items: center;
+  background: #12132c;
+  color: #fff;
 }
-.tic-tac-toe-screen-reader {
+.ttt-loading-brand {
+  position: fixed;
+  z-index: 3;
+  top: 30px;
+  left: 32px;
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  margin-top: 1rem;
+  gap: 12px;
+  font-size: 24px;
 }
-.tic-tac-toe-screen-reader input {
-  width: 1.1rem;
-  height: 1.1rem;
+.ttt-loading-brand > span:last-child {
+  color: rgba(255, 255, 255, 0.7);
 }
-.tic-tac-toe-result {
-  position: fixed;
-  inset: auto 1rem 1rem;
-  z-index: 20;
-  width: min(34rem, calc(100% - 2rem));
-  margin: auto;
-  padding: 1.15rem;
-  border: 3px solid #facc15;
-  border-radius: 1rem;
-  background: #0f172a;
-  color: white;
+.ttt-loading-art,
+.ttt-loading-art img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.ttt-loading-base {
+  opacity: 0.9;
+}
+.ttt-loading-light {
+  opacity: 0.7;
+  mix-blend-mode: screen;
+  animation: ttt-loading-drift 5s ease-in-out infinite alternate;
+}
+.ttt-loading-texture {
+  opacity: 0.38;
+  mix-blend-mode: overlay;
+}
+.ttt-loading-content {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  justify-items: center;
   text-align: center;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.45);
 }
-.tic-tac-toe-result h2 {
-  margin: 0 0 0.35rem;
+.ttt-loading-content > img {
+  width: 200px;
+  height: 200px;
+  animation: ttt-loading-diamond 2.4s cubic-bezier(0.45, 0, 0.2, 1) infinite;
 }
-.tic-tac-toe-result p {
-  margin: 0 0 0.8rem;
+.ttt-loading-content h1 {
+  margin: 34px 0 0;
+  font-size: 24px;
+  font-weight: 500;
+}
+.ttt-loading-back {
+  position: fixed;
+  z-index: 3;
+  bottom: 32px;
+  left: 32px;
+  display: flex;
+  min-height: 44px;
+  align-items: center;
+  gap: 9px;
+  border: 0;
+  background: transparent;
+  color: #fff;
+  cursor: pointer;
+}
+.ttt-loading-error {
+  max-width: 440px;
+}
+.ttt-loading-error button {
+  margin: 8px 4px;
+}
+@keyframes ttt-loading-diamond {
+  0%,
+  100% {
+    transform: translate3d(-72px, 18px, 0) rotate(0deg) scale(0.72);
+  }
+  33% {
+    transform: translate3d(0, -34px, 0) rotate(90deg) scale(1);
+  }
+  66% {
+    transform: translate3d(72px, 18px, 0) rotate(180deg) scale(0.72);
+  }
+}
+@keyframes ttt-loading-drift {
+  from {
+    transform: scale(1.04) translate3d(-1%, 0, 0);
+  }
+  to {
+    transform: scale(1.1) translate3d(1%, 1%, 0);
+  }
+}
+.ttt-app button:focus-visible,
+.ttt-loading button:focus-visible,
+.ttt-cell:focus-visible,
+.ttt-command-panel input:focus-visible {
+  outline: 4px solid #7c3aed;
+  outline-offset: 3px;
 }
 @media (prefers-reduced-motion: reduce) {
-  .tic-tac-toe-cell {
+  .ttt-loading-light,
+  .ttt-loading-content > img {
+    animation: none;
+  }
+  .ttt-cell,
+  .ttt-option-list button {
     transition: none;
   }
 }
-@media (max-width: 780px) {
-  .tic-tac-toe-main {
-    width: min(100% - 1rem, 620px);
+@media (min-width: 721px) and (max-height: 820px) {
+  .ttt-board-panel {
+    width: min(440px, calc(100dvh - 320px));
   }
-  .tic-tac-toe-layout {
-    grid-template-columns: 1fr;
+  .ttt-companion {
+    bottom: 10px;
+    width: 190px;
+    height: 130px;
   }
-  .tic-tac-toe-section-heading {
-    display: block;
+  .ttt-orb-button {
+    width: 120px;
+    height: 120px;
   }
-  .tic-tac-toe-turn {
-    display: block;
-    max-width: none;
-    margin-top: 0.65rem;
-  }
-  .tic-tac-toe-board {
-    gap: 0.35rem;
-  }
-  .tic-tac-toe-cell {
-    border-width: 2px;
-    border-radius: 0.55rem;
+  .ttt-command-panel {
+    bottom: 138px;
   }
 }
-
+@media (max-width: 720px) {
+  .ttt-app {
+    overflow: auto;
+  }
+  .ttt-header {
+    min-height: 112px;
+    align-items: flex-start;
+    padding: 18px 16px;
+  }
+  .ttt-brand {
+    gap: 8px;
+    font-size: 18px;
+  }
+  .ttt-header nav {
+    gap: 14px;
+  }
+  .ttt-header nav button {
+    font-size: 13px;
+  }
+  .ttt-main {
+    min-height: calc(100dvh - 112px);
+    padding-bottom: 190px;
+    overflow: visible;
+  }
+  .ttt-setup-layout {
+    padding-top: 48px;
+  }
+  .ttt-game-layout {
+    padding-top: 75px;
+  }
+  .ttt-board-panel {
+    width: min(88vw, 500px);
+    border-radius: 24px;
+  }
+  .ttt-board {
+    gap: 7px;
+  }
+  .ttt-cell {
+    border-radius: 12px;
+  }
+  .ttt-side-actions {
+    top: auto;
+    bottom: 18px;
+    display: flex;
+    transform: none;
+  }
+  .ttt-companion {
+    bottom: 15px;
+    width: 220px;
+    height: 150px;
+  }
+  .ttt-orb-button {
+    width: 145px;
+    height: 145px;
+  }
+  .ttt-command-panel {
+    right: 50%;
+    bottom: 158px;
+    width: min(390px, calc(100vw - 32px));
+    transform: translateX(50%);
+  }
+  .ttt-popover {
+    top: 104px;
+    right: 16px;
+  }
+  .ttt-result {
+    top: 24px;
+  }
+  .ttt-result h1 {
+    font-size: 38px;
+    line-height: 44px;
+  }
+  .ttt-app.is-finished .ttt-game-layout {
+    padding-top: 235px;
+  }
+}

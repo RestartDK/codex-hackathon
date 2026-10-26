@@ -6,7 +6,7 @@ import { useChessCompanion } from "../voice/useChessCompanion";
 import { PLAYABLE_GAMES_LABEL, type AvailableDestination } from "../voice/navigation";
 import GamePicker from "../components/PlayByVoice/GamePicker";
 import ChessView from "../components/PlayByVoice/ChessView";
-import ChessSetup from "../components/PlayByVoice/ChessSetup";
+import ChessSetup from "../components/PlayByVoice/ChessSetup.tsx";
 import {
   chessSetupSelection,
   defaultChessSetup,

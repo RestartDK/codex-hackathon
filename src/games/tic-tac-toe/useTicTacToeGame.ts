@@ -3,41 +3,36 @@ import {
   applyTicTacToeMove,
   chooseComputerMove,
   createTicTacToeState,
-  deserializeTicTacToe,
   POSITION_NAMES,
   serializeTicTacToe,
   TIC_TAC_TOE_SAVE_KEY,
   undoTicTacToeTurn,
   type TicTacToeActionResult,
   type TicTacToeDifficulty,
+  type TicTacToeSetup,
   type TicTacToeState,
 } from "./ticTacToe";
 
 export const TIC_TAC_TOE_COMPUTER_DELAY = 650;
 
-function loadSavedGame(): TicTacToeState | null {
-  try {
-    const raw = localStorage.getItem(TIC_TAC_TOE_SAVE_KEY);
-    return raw ? deserializeTicTacToe(raw) : null;
-  } catch {
-    return null;
-  }
+function setupFromState(state: TicTacToeState): TicTacToeSetup {
+  return {
+    opponent: state.opponent,
+    difficulty: state.difficulty,
+    playerMark: state.playerMark,
+    firstTurn: state.firstTurn,
+  };
 }
 
 export function useTicTacToeGame() {
-  const [state, setState] = useState<TicTacToeState>(
-    () => loadSavedGame() ?? createTicTacToeState(),
-  );
+  const [state, setState] = useState<TicTacToeState>(() => createTicTacToeState());
   const [paused, setPaused] = useState(false);
   const [narrationBusy, setNarrationBusy] = useState(false);
-  const [awaitingStartChoice, setAwaitingStartChoice] = useState(() => {
-    const saved = loadSavedGame();
-    return Boolean(saved && saved.status === "playing" && saved.moves.length > 0);
-  });
   const stateRef = useRef(state);
-  const blockedRef = useRef(paused || awaitingStartChoice);
+  const blockedRef = useRef(paused);
+  const computerTurnRef = useRef(0);
   stateRef.current = state;
-  blockedRef.current = paused || awaitingStartChoice;
+  blockedRef.current = paused;
 
   const commit = useCallback((next: TicTacToeState) => {
     stateRef.current = next;
@@ -48,24 +43,38 @@ export function useTicTacToeGame() {
     try {
       localStorage.setItem(TIC_TAC_TOE_SAVE_KEY, serializeTicTacToe(state));
     } catch {
-      /* Continue in memory. */
+      /* Continue in memory when storage is unavailable. */
     }
   }, [state]);
 
+  const startGame = useCallback(
+    (setup: TicTacToeSetup): TicTacToeActionResult => {
+      setPaused(false);
+      commit(createTicTacToeState(setup.difficulty, stateRef.current.score, setup));
+      const other = setup.opponent === "computer" ? "The computer" : "Player two";
+      const first = setup.firstTurn === "player" ? "You move first." : `${other} moves first.`;
+      return {
+        ok: true,
+        message: `Match started. You are ${setup.playerMark}. ${first}`,
+      };
+    },
+    [commit],
+  );
+
   const playHumanMove = useCallback(
     (index: number): TicTacToeActionResult => {
-      if (awaitingStartChoice) return { ok: false, message: "Choose Resume or New Round first." };
+      const current = stateRef.current;
       if (paused) return { ok: false, message: "The game is paused. Resume it before moving." };
-      if (stateRef.current.status !== "playing")
+      if (current.status !== "playing")
         return { ok: false, message: "This round is over. Start a new round to play again." };
-      if (stateRef.current.turn !== "X")
+      if (current.opponent === "computer" && current.turn !== current.playerMark)
         return { ok: false, message: "Please wait for the computer to move." };
-      const next = structuredClone(stateRef.current);
+      const next = structuredClone(current);
       const result = applyTicTacToeMove(next, index);
       if (result.ok) commit(next);
       return result;
     },
-    [awaitingStartChoice, commit, paused],
+    [commit, paused],
   );
 
   const undo = useCallback((): TicTacToeActionResult => {
@@ -77,90 +86,101 @@ export function useTicTacToeGame() {
   }, [commit]);
 
   const newRound = useCallback((): TicTacToeActionResult => {
-    setAwaitingStartChoice(false);
     setPaused(false);
-    const next = createTicTacToeState(stateRef.current.difficulty, stateRef.current.score);
+    const current = stateRef.current;
+    const next = createTicTacToeState(current.difficulty, current.score, setupFromState(current));
     commit(next);
-    return { ok: true, message: "New round started. You are X and move first." };
+    return {
+      ok: true,
+      message: `New round started. You are ${next.playerMark}. ${next.turn === next.playerMark ? "Your turn." : next.opponent === "computer" ? "Computer thinking." : "Player two's turn."}`,
+    };
   }, [commit]);
 
   const resetMatch = useCallback((): TicTacToeActionResult => {
-    setAwaitingStartChoice(false);
     setPaused(false);
-    commit(createTicTacToeState(stateRef.current.difficulty));
-    return { ok: true, message: "The match and scoreboard were reset. You are X and move first." };
+    const current = stateRef.current;
+    commit(createTicTacToeState(current.difficulty, undefined, setupFromState(current)));
+    return { ok: true, message: "The match and scoreboard were reset." };
   }, [commit]);
 
   const resume = useCallback((): TicTacToeActionResult => {
-    setAwaitingStartChoice(false);
     setPaused(false);
-    return {
-      ok: true,
-      message: `Saved round resumed. ${stateRef.current.turn === "X" ? "Your turn." : "Computer's turn."}`,
-    };
+    return { ok: true, message: "Tic-Tac-Toe resumed." };
   }, []);
 
   const pause = useCallback((): TicTacToeActionResult => {
     setPaused(true);
-    return { ok: true, message: "Tic-Tac-Toe is paused. Your round is saved." };
+    return { ok: true, message: "Tic-Tac-Toe is paused." };
   }, []);
 
   const changeDifficulty = useCallback(
     (difficulty: TicTacToeDifficulty): TicTacToeActionResult => {
-      if (difficulty === stateRef.current.difficulty)
+      const current = stateRef.current;
+      if (difficulty === current.difficulty)
         return { ok: true, message: `${difficulty} difficulty is already selected.` };
-      const next = createTicTacToeState(difficulty, stateRef.current.score);
-      setAwaitingStartChoice(false);
+      const setup = { ...setupFromState(current), difficulty };
       setPaused(false);
-      commit(next);
+      commit(createTicTacToeState(difficulty, current.score, setup));
       return { ok: true, message: `${difficulty} difficulty selected. A new round has started.` };
     },
     [commit],
   );
 
   useEffect(() => {
+    const computerMark = state.playerMark === "X" ? "O" : "X";
+    const turnId = ++computerTurnRef.current;
     if (
       paused ||
-      awaitingStartChoice ||
       narrationBusy ||
+      state.opponent !== "computer" ||
       state.status !== "playing" ||
-      state.turn !== "O"
+      state.turn !== computerMark
     )
       return;
-    const expected = state;
     const timer = window.setTimeout(() => {
-      if (blockedRef.current || stateRef.current !== expected) return;
-      const index = chooseComputerMove(expected);
+      const current = stateRef.current;
+      if (
+        computerTurnRef.current !== turnId ||
+        blockedRef.current ||
+        current.opponent !== "computer" ||
+        current.status !== "playing" ||
+        current.turn !== computerMark
+      )
+        return;
+      const index = chooseComputerMove(current, Math.random, computerMark);
       if (index === null) return;
-      const next = structuredClone(expected);
+      const next = structuredClone(current);
       const result = applyTicTacToeMove(next, index);
       if (result.ok) commit(next);
     }, TIC_TAC_TOE_COMPUTER_DELAY);
-    return () => window.clearTimeout(timer);
-  }, [awaitingStartChoice, commit, narrationBusy, paused, state]);
+    return () => {
+      window.clearTimeout(timer);
+      if (computerTurnRef.current === turnId) computerTurnRef.current += 1;
+    };
+  }, [commit, narrationBusy, paused, state]);
 
   const latest = state.moves.at(-1);
-  const status = awaitingStartChoice
-    ? "Choose Resume Saved Round or New Round first."
-    : paused
-      ? "Paused. Your round is saved."
-      : state.status === "won"
-        ? state.winner === "X"
-          ? `You win with ${state.winningLine?.map((index) => POSITION_NAMES[index]).join(", ")}.`
-          : `The computer wins with ${state.winningLine?.map((index) => POSITION_NAMES[index]).join(", ")}.`
-        : state.status === "draw"
-          ? "The board is full. This round is a draw."
-          : latest
-            ? `${latest.mark === "X" ? "You placed X" : "The computer placed O"} in ${POSITION_NAMES[latest.index]}. ${state.turn === "X" ? "Your turn." : "Computer thinking."}`
-            : "Your turn. Choose any square from one to nine.";
+  const other = state.opponent === "computer" ? "The computer" : "Player two";
+  const status = paused
+    ? "Paused."
+    : state.status === "won"
+      ? state.winner === state.playerMark
+        ? `You win with ${state.winningLine?.map((index) => POSITION_NAMES[index]).join(", ")}.`
+        : `${other} wins with ${state.winningLine?.map((index) => POSITION_NAMES[index]).join(", ")}.`
+      : state.status === "draw"
+        ? "The board is full. This round is a draw."
+        : latest
+          ? `${latest.mark === state.playerMark ? `You placed ${latest.mark}` : `${other} placed ${latest.mark}`} in ${POSITION_NAMES[latest.index]}. ${state.turn === state.playerMark ? "Your turn." : state.opponent === "computer" ? "Computer thinking." : "Player two's turn."}`
+          : `${state.turn === state.playerMark ? "Your turn." : state.opponent === "computer" ? "Computer thinking." : "Player two's turn."}`;
 
   return {
     state,
     paused,
-    awaitingStartChoice,
+    awaitingStartChoice: false,
     narrationBusy,
     status,
     playHumanMove,
+    startGame,
     undo,
     newRound,
     resetMatch,
@@ -170,4 +190,3 @@ export function useTicTacToeGame() {
     setNarrationBusy,
   };
 }
-

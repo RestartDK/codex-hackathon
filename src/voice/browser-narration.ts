@@ -18,7 +18,13 @@ export type SpokenLine = {
    * and reads authoritative game information.
    */
   duringLive?: boolean;
+  /** Essential private guidance uses explicit audio with an ended event. */
+  privateRole?: boolean;
+  onPlaybackStarted?: () => void;
+  onPlaybackFinished?: (outcome: NarrationOutcome) => void;
 };
+
+export type NarrationOutcome = "completed" | "interrupted" | "failed";
 
 export type NarrationVoice = {
   preferredNames: string[];
@@ -49,7 +55,8 @@ export type NarrationRequest = {
   line: SpokenLine;
   voice: NarrationVoice;
   volume: number;
-  onFinished: () => void;
+  onStarted?: () => void;
+  onFinished: (outcome?: NarrationOutcome) => void;
 };
 
 /**
@@ -91,12 +98,17 @@ export function selectBrowserVoice(voiceKey: string | undefined, voices: SpeechS
 }
 
 /** Default local fallback. Replace this factory to use recorded or server-generated audio. */
-export function createBrowserNarrationBackend(): NarrationBackend {
+export function createBrowserNarrationBackend(
+  onPlaybackError?: (message: string) => void,
+): NarrationBackend {
   const isSupported = () => typeof window !== "undefined" && "speechSynthesis" in window;
   // Resolve the assistant voice once for this game. If the browser exposes an
   // empty voice list at first, retain its default choice for the whole session
   // rather than switching identity when that list later loads.
   const selectedVoices = new Map<string, SpeechSynthesisVoice | null>();
+  let cancelActive: (() => void) | undefined;
+  let pauseActive: (() => void) | undefined;
+  let resumeActive: (() => void) | undefined;
 
   const voiceFor = (voiceKey: string | undefined) => {
     const key = voiceKey ?? "default";
@@ -113,37 +125,84 @@ export function createBrowserNarrationBackend(): NarrationBackend {
 
   return {
     isSupported,
-    speak({ line, voice, volume, onFinished }) {
+    speak({ line, voice, volume, onStarted, onFinished }) {
       if (!isSupported()) {
-        onFinished();
+        onPlaybackError?.(
+          "Speech playback is unavailable in this browser. Typed commands remain available.",
+        );
+        onFinished("failed");
         return;
       }
       const utterance = new SpeechSynthesisUtterance(line.text);
       let finished = false;
-      const finish = () => {
+      let started = false;
+      let startTimer: ReturnType<typeof setTimeout>;
+      const finish = (outcome: NarrationOutcome) => {
         if (finished) return;
         finished = true;
-        onFinished();
+        clearTimeout(startTimer);
+        cancelActive = undefined;
+        pauseActive = undefined;
+        resumeActive = undefined;
+        onFinished(outcome);
       };
       utterance.volume = volume;
+      cancelActive = () => finish("interrupted");
       utterance.rate = voice.rate;
       utterance.pitch = voice.pitch;
       utterance.voice = voiceFor(line.voiceKey);
-      utterance.onend = finish;
-      utterance.onerror = finish;
+      utterance.onstart = () => {
+        if (finished) return;
+        started = true;
+        clearTimeout(startTimer);
+        onStarted?.();
+      };
+      utterance.onend = () => finish(started ? "completed" : "failed");
+      utterance.onerror = (event) => {
+        if (event.error !== "canceled" && event.error !== "interrupted") {
+          onPlaybackError?.(
+            event.error === "not-allowed"
+              ? "Your browser blocked automatic narration. Choose Start narration to continue."
+              : "Narration could not play. Choose Start narration to try again.",
+          );
+        }
+        finish(
+          event.error === "canceled" || event.error === "interrupted" ? "interrupted" : "failed",
+        );
+      };
+      // Some browser engines fail silently without firing onerror or onstart.
+      const startWatchdog = () => {
+        startTimer = setTimeout(() => {
+          if (started || finished) return;
+          onPlaybackError?.(
+            "Narration did not start. Choose Start narration to retry, or read the role explanation below.",
+          );
+          finish("failed");
+          window.speechSynthesis.cancel();
+        }, 8_000);
+      };
+      startWatchdog();
+      pauseActive = () => clearTimeout(startTimer);
+      resumeActive = () => {
+        if (!started && !finished) startWatchdog();
+      };
       try {
         window.speechSynthesis.speak(utterance);
       } catch {
-        finish();
+        onPlaybackError?.("Narration could not play. Choose Start narration to try again.");
+        finish("failed");
       }
     },
     cancel() {
+      cancelActive?.();
       if (isSupported()) window.speechSynthesis.cancel();
     },
     pause() {
+      pauseActive?.();
       if (isSupported()) window.speechSynthesis.pause();
     },
     resume() {
+      resumeActive?.();
       if (isSupported()) window.speechSynthesis.resume();
     },
   };
@@ -157,15 +216,22 @@ export function createBrowserNarrationBackend(): NarrationBackend {
 export function createOpenAINarrationBackend(
   gameId: string | undefined,
   sessionToken: string | undefined,
+  onPlaybackError?: (message: string) => void,
 ): NarrationBackend {
-  const browserFallback = createBrowserNarrationBackend();
+  const browserFallback = createBrowserNarrationBackend(onPlaybackError);
   let controller: AbortController | undefined;
   let audio: HTMLAudioElement | undefined;
   let objectUrl: string | undefined;
   let generation = 0;
-  let remoteUnavailable = false;
+  let requestTimer: ReturnType<typeof setTimeout> | undefined;
+  let paused = false;
+  let pendingFallback: (() => void) | undefined;
+  // Private audio stays in this game session's memory only. Changed ability
+  // state gets a different key, while repeats avoid another generation request.
+  const audioCache = new Map<string, Blob>();
 
   const clearPlayback = () => {
+    clearTimeout(requestTimer);
     if (audio) {
       audio.pause();
       audio.src = "";
@@ -181,52 +247,81 @@ export function createOpenAINarrationBackend(
     isSupported: () =>
       typeof window !== "undefined" && ("Audio" in window || browserFallback.isSupported()),
     speak(request) {
-      if (request.line.instant || !gameId || !sessionToken || remoteUnavailable) {
+      if (request.line.instant || !gameId || !sessionToken) {
         browserFallback.speak(request);
         return;
       }
       const current = ++generation;
       let finished = false;
       let fallbackStarted = false;
-      const finish = () => {
+      const finish = (outcome: NarrationOutcome = "completed") => {
         if (current !== generation || finished) return;
         finished = true;
         controller = undefined;
         clearPlayback();
-        request.onFinished();
+        request.onFinished(outcome);
       };
       const useBrowserFallback = () => {
         if (current !== generation || finished || fallbackStarted) return;
+        if (paused) {
+          clearTimeout(requestTimer);
+          pendingFallback = useBrowserFallback;
+          return;
+        }
         fallbackStarted = true;
         clearPlayback();
         browserFallback.speak({ ...request, onFinished: finish });
       };
       controller = new AbortController();
-      void fetch(`/api/games/${gameId}/narration`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Game-Session": sessionToken,
-        },
-        body: JSON.stringify({ text: request.line.text }),
-        signal: controller.signal,
-      })
-        .then(async (response) => {
-          if (!response.ok) {
-            remoteUnavailable = true;
-            throw new Error("Narration provider is unavailable.");
-          }
-          return response.blob();
-        })
+      requestTimer = setTimeout(() => {
+        if (current !== generation || finished || fallbackStarted) return;
+        controller?.abort();
+        useBrowserFallback();
+      }, 25_000);
+      const cached = audioCache.get(request.line.text);
+      const narration = cached
+        ? Promise.resolve(cached)
+        : fetch(`/api/games/${gameId}/narration`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "X-Game-Session": sessionToken,
+            },
+            body: JSON.stringify({ text: request.line.text }),
+            signal: controller.signal,
+          }).then(async (response) => {
+            if (!response.ok) {
+              throw new Error("Narration provider is unavailable.");
+            }
+            const blob = await response.blob();
+            if (current === generation) {
+              if (audioCache.size >= 12) audioCache.delete(audioCache.keys().next().value!);
+              audioCache.set(request.line.text, blob);
+            }
+            return blob;
+          });
+      void narration
         .then((blob) => {
-          if (current !== generation) return;
+          if (current !== generation || finished || fallbackStarted) return;
           objectUrl = URL.createObjectURL(blob);
           const playback = new Audio(objectUrl);
           audio = playback;
           playback.volume = request.volume;
           playback.playbackRate = request.voice.rate;
-          playback.onended = finish;
+          let started = false;
+          playback.onplaying = () => {
+            clearTimeout(requestTimer);
+            if (current === generation && !finished && !started) {
+              started = true;
+              request.onStarted?.();
+            }
+          };
+          playback.onended = () => finish(started ? "completed" : "failed");
           playback.onerror = useBrowserFallback;
+          if (paused) {
+            clearTimeout(requestTimer);
+            return;
+          }
           return playback.play().catch(useBrowserFallback);
         })
         .catch((cause: unknown) => {
@@ -235,7 +330,6 @@ export function createOpenAINarrationBackend(
             (cause instanceof DOMException && cause.name === "AbortError")
           )
             return;
-          remoteUnavailable = true;
           useBrowserFallback();
         });
     },
@@ -243,16 +337,75 @@ export function createOpenAINarrationBackend(
       generation += 1;
       controller?.abort();
       controller = undefined;
+      paused = false;
+      pendingFallback = undefined;
       clearPlayback();
       browserFallback.cancel();
     },
     pause() {
+      paused = true;
       if (audio) audio.pause();
       else browserFallback.pause();
     },
     resume() {
-      if (audio) void audio.play();
+      paused = false;
+      if (pendingFallback) {
+        const fallback = pendingFallback;
+        pendingFallback = undefined;
+        fallback();
+        return;
+      }
+      if (audio)
+        void audio
+          .play()
+          .catch(() =>
+            onPlaybackError?.("Narration could not resume. Choose Start narration to retry."),
+          );
       else browserFallback.resume();
+    },
+  };
+}
+
+/** Prefer free local speech. Essential guidance falls back to an explicit audio
+ * element if the local engine fails or silently refuses to start. */
+export function createRoleAwareNarrationBackend(
+  gameId: string | undefined,
+  token: string | undefined,
+  onPlaybackError?: (message: string) => void,
+): NarrationBackend {
+  const roleBrowser = createBrowserNarrationBackend();
+  const roleAudio = createOpenAINarrationBackend(gameId, token, onPlaybackError);
+  let localRoleUnavailable = false;
+  return {
+    isSupported: () => roleBrowser.isSupported() || roleAudio.isSupported(),
+    speak(request) {
+      if (localRoleUnavailable) {
+        roleAudio.speak({ ...request, line: { ...request.line, instant: false } });
+        return;
+      }
+      roleBrowser.speak({
+        ...request,
+        onFinished: (outcome = "completed") => {
+          if (outcome !== "failed") {
+            request.onFinished(outcome);
+            return;
+          }
+          localRoleUnavailable = true;
+          roleAudio.speak({ ...request, line: { ...request.line, instant: false } });
+        },
+      });
+    },
+    cancel() {
+      roleBrowser.cancel();
+      roleAudio.cancel();
+    },
+    pause() {
+      roleBrowser.pause();
+      roleAudio.pause();
+    },
+    resume() {
+      roleBrowser.resume();
+      roleAudio.resume();
     },
   };
 }
@@ -286,6 +439,10 @@ export type StoryAudioOptions = {
   onPhaseBoundaryStart?: () => void;
   /** A private guide line that needs to play before the first public story line. */
   openingLine?: SpokenLine;
+  /** Current-screen legal choices, read after the state changes that led here. */
+  closingLine?: SpokenLine;
+  onNarrationStarted?: () => void;
+  onNarrationFailed?: () => void;
   backend?: NarrationBackend;
 };
 
@@ -301,6 +458,9 @@ export function useStoryAudio({
   phase,
   onPhaseBoundaryStart,
   openingLine,
+  closingLine,
+  onNarrationStarted,
+  onNarrationFailed,
   backend,
 }: StoryAudioOptions) {
   const [autoRead, setAutoRead] = useState(true);
@@ -314,6 +474,11 @@ export function useStoryAudio({
   const seenRef = useRef(new Set<string>());
   const gameRef = useRef<string | undefined>(undefined);
   const phaseRef = useRef<string | undefined>(undefined);
+  const closingIdRef = useRef<string | undefined>(undefined);
+  const narrationCallbacks = useRef({ onNarrationStarted, onNarrationFailed });
+  useEffect(() => {
+    narrationCallbacks.current = { onNarrationStarted, onNarrationFailed };
+  }, [onNarrationStarted, onNarrationFailed]);
   const onPhaseBoundaryStartRef = useRef(onPhaseBoundaryStart);
   const speakingRef = useRef(false);
   // Browser speech can call an old completion handler just after cancel(). Keep
@@ -321,6 +486,7 @@ export function useStoryAudio({
   // a newly-started narration queue.
   const playbackGenerationRef = useRef(0);
   const activePlaybackRef = useRef<string | undefined>(undefined);
+  const activeLineRef = useRef<SpokenLine | undefined>(undefined);
   const autoReadRef = useRef(autoRead);
   const mutedRef = useRef(muted);
   const pausedRef = useRef(paused);
@@ -331,10 +497,18 @@ export function useStoryAudio({
   const backendRef = useRef<NarrationBackend>(backend ?? createBrowserNarrationBackend());
   const onVolumeChangeRef = useRef(onVolumeChange);
 
+  function interruptLines() {
+    const interrupted = [activeLineRef.current, ...queueRef.current];
+    activeLineRef.current = undefined;
+    queueRef.current = [];
+    for (const line of interrupted) line?.onPlaybackFinished?.("interrupted");
+  }
+
   useEffect(() => {
     if (!backend || backendRef.current === backend) return;
     playbackGenerationRef.current += 1;
     activePlaybackRef.current = undefined;
+    interruptLines();
     backendRef.current.cancel();
     backendRef.current = backend;
     speakingRef.current = false;
@@ -348,7 +522,7 @@ export function useStoryAudio({
   }, [onVolumeChange]);
 
   function stop() {
-    queueRef.current = [];
+    interruptLines();
     speakingRef.current = false;
     playbackGenerationRef.current += 1;
     activePlaybackRef.current = undefined;
@@ -362,13 +536,7 @@ export function useStoryAudio({
 
   const playNext = useCallback(function playNext() {
     const narration = backendRef.current;
-    if (
-      !narration.isSupported() ||
-      !autoReadRef.current ||
-      mutedRef.current ||
-      pausedRef.current ||
-      speakingRef.current
-    )
+    if (!autoReadRef.current || mutedRef.current || pausedRef.current || speakingRef.current)
       return;
     const next = queueRef.current.shift();
     if (!next) {
@@ -381,23 +549,39 @@ export function useStoryAudio({
     const playbackId = crypto.randomUUID();
     speakingRef.current = true;
     activePlaybackRef.current = playbackId;
+    activeLineRef.current = next;
     setActiveSpeaker(next.speaker);
     lastLineRef.current = next;
-    if (next.phaseBoundary) onPhaseBoundaryStartRef.current?.();
     narration.speak({
       line: next,
       voice,
       volume: volumeRef.current,
-      onFinished: () => {
+      onStarted: () => {
+        if (
+          generation === playbackGenerationRef.current &&
+          activePlaybackRef.current === playbackId
+        ) {
+          if (next.phaseBoundary) onPhaseBoundaryStartRef.current?.();
+          narrationCallbacks.current.onNarrationStarted?.();
+          next.onPlaybackStarted?.();
+        }
+      },
+      onFinished: (outcome = "completed") => {
         if (
           generation !== playbackGenerationRef.current ||
           activePlaybackRef.current !== playbackId
         )
           return;
         activePlaybackRef.current = undefined;
+        activeLineRef.current = undefined;
+        next.onPlaybackFinished?.(outcome);
         speakingRef.current = false;
         setActiveSpeaker(undefined);
         if (next.phaseBoundary) setPhaseTransitioning(false);
+        if (outcome === "failed") {
+          narrationCallbacks.current.onNarrationFailed?.();
+          return;
+        }
         // Leave just enough room for the browser to release the old utterance
         // before starting the next short response.
         window.setTimeout(playNext, 30);
@@ -414,7 +598,14 @@ export function useStoryAudio({
   function repeatLast() {
     const line = lastLineRef.current;
     if (!line) return;
-    queueRef.current.unshift({ ...line, id: crypto.randomUUID() });
+    stop();
+    queueRef.current.unshift({
+      ...line,
+      id: crypto.randomUUID(),
+      phaseBoundary: false,
+      onPlaybackStarted: undefined,
+      onPlaybackFinished: undefined,
+    });
     playNext();
   }
 
@@ -487,8 +678,9 @@ export function useStoryAudio({
     if (gameRef.current !== gameId) {
       gameRef.current = gameId;
       phaseRef.current = phase;
+      closingIdRef.current = undefined;
       seenRef.current = new Set();
-      queueRef.current = [];
+      interruptLines();
       publicLinesRef.current = [];
       speakingRef.current = false;
       playbackGenerationRef.current += 1;
@@ -499,10 +691,11 @@ export function useStoryAudio({
     }
     const phaseChanged = phaseRef.current !== undefined && phaseRef.current !== phase;
     phaseRef.current = phase;
-    if (phaseChanged) {
+    const closingChanged = Boolean(closingLine && closingLine.id !== closingIdRef.current);
+    if (phaseChanged || closingChanged) {
       // A round can advance while earlier NPC dialogue is still queued. Drop that
       // old scene so the first thing heard always describes the phase now on screen.
-      queueRef.current = [];
+      interruptLines();
       speakingRef.current = false;
       playbackGenerationRef.current += 1;
       activePlaybackRef.current = undefined;
@@ -543,6 +736,7 @@ export function useStoryAudio({
             ),
           ]
         : freshEntries;
+    const batch: SpokenLine[] = [];
     for (const entry of entriesToNarrate) {
       const isPhaseBoundary = entry.id === phaseEventId;
       const line: SpokenLine = {
@@ -560,12 +754,33 @@ export function useStoryAudio({
         ...(isPhaseBoundary ? { phaseBoundary: true } : {}),
       };
       if (entry.kind !== "private") publicLinesRef.current.push(line);
-      queueRef.current.push(line);
+      batch.push(line);
     }
+    if (closingChanged && closingLine) {
+      closingIdRef.current = closingLine.id;
+      batch.push(closingLine);
+    }
+    // One coherent scene avoids many generation requests and prevents a private
+    // finding or NPC line from being mistaken for the current action prompt.
+    if (closingLine && batch.length) {
+      let text = "";
+      let part = 0;
+      for (const line of batch) {
+        if (text.length + line.text.length > 1_900 && text) {
+          queueRef.current.push({ id: `${closingLine.id}:${part++}`, speaker: "Guide", text });
+          text = "";
+        }
+        text += `${text ? " " : ""}${line.text}`;
+      }
+      if (text)
+        queueRef.current.push({ ...closingLine, text, phaseBoundary: Boolean(phaseEventId) });
+    } else queueRef.current.push(...batch);
     playNext();
-  }, [feed, gameId, openingLine, phase, playNext]);
+  }, [feed, gameId, openingLine, closingLine, phase, playNext]);
   useEffect(
     () => () => {
+      interruptLines();
+      playbackGenerationRef.current += 1;
       backendRef.current.cancel();
     },
     [],

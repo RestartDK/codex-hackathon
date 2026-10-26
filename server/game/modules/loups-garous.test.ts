@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
-import { createGame, startGame, view } from "../engine.js";
+import { createGame, introduceStory, startGame, view } from "../engine.js";
 import { prepareGame } from "../prepare.js";
 import { loupsGarous } from "./loups-garous.js";
 
@@ -8,6 +8,95 @@ afterEach(() => {
 });
 
 describe("Loups-Garous voice-command actions", () => {
+  const wolfGame = () =>
+    createGame("You", 6, {
+      fixedRoles: ["werewolf", "villager", "seer", "witch", "hunter", "villager"],
+      roleCounts: { werewolf: 1, villager: 2, seer: 1, witch: 1, hunter: 1, cupid: 0 },
+    });
+  it("rejects Werewolf hunts outside night and after death without mutating the game", async () => {
+    for (const phase of ["prologue", "day", "vote", "over"] as const) {
+      const game = wolfGame();
+      game.phase = phase;
+      const before = structuredClone(game);
+      await expect(
+        loupsGarous.applyAction(game, "human", { type: "night", target: "npc-1" }),
+      ).rejects.toThrow("not night");
+      expect(game).toEqual(before);
+    }
+    const game = wolfGame();
+    startGame(game);
+    game.players[0]!.alive = false;
+    await expect(
+      loupsGarous.applyAction(game, "human", { type: "night", target: "npc-1" }),
+    ).rejects.toThrow("living player");
+  });
+  it("waits for the human pack choice, then applies the NPC Witch before dawn", async () => {
+    const game = wolfGame();
+    introduceStory(game);
+    await loupsGarous.applyAction(game, "human", { type: "begin-story" });
+    expect(game.phase).toBe("night");
+    expect(game.wolfVictimId).toBeUndefined();
+    expect(game.players.find((p) => p.role === "witch")!.nightAction).toBeUndefined();
+    await loupsGarous.applyAction(game, "human", { type: "night", target: "npc-1" });
+    expect(game.players[1]!.alive).toBe(true);
+    expect(game.witchHealAvailable).toBe(false);
+    expect(game.feed.some((e) => e.text === "Dawn breaks. No one died last night.")).toBe(true);
+  });
+  it("advances NPC-only nights but waits for living human private abilities", async () => {
+    const game = wolfGame();
+    [game.players[0]!.role, game.players[1]!.role] = ["villager", "werewolf"];
+    introduceStory(game);
+    await loupsGarous.applyAction(game, "human", { type: "begin-story" });
+    expect(game.phase).toBe("day");
+    expect(game.feed.some((e) => e.kind === "speech")).toBe(true);
+  });
+  it("parses Cupid self-pairing, precise combined potions and negative commands safely", async () => {
+    const game = createGame("You", 6, {
+      fixedRoles: ["cupid", "werewolf", "witch", "seer", "hunter", "villager"],
+      roleCounts: { werewolf: 1, villager: 1, seer: 1, witch: 1, hunter: 1, cupid: 1 },
+    });
+    startGame(game);
+    expect(loupsGarous.parseCommand!("pair me and Emma", game, "human")).toEqual({
+      type: "lovers",
+      first: "human",
+      second: "npc-1",
+    });
+    game.phase = "night";
+    game.players[0]!.role = "witch";
+    game.wolfVictimId = "npc-1";
+    expect(loupsGarous.parseCommand!("save Emma and poison Lucas", game, "human")).toEqual({
+      type: "night",
+      save: "npc-1",
+      poison: "npc-2",
+    });
+    expect(loupsGarous.parseCommand!("use my poison potion on Lucas", game, "human")).toEqual({
+      type: "night",
+      poison: "npc-2",
+    });
+    expect(loupsGarous.parseCommand!("poison Emma", game, "human")).toEqual({
+      type: "night",
+      poison: "npc-1",
+    });
+    expect(() => loupsGarous.parseCommand!("don't poison Lucas", game, "human")).toThrow(
+      "No action",
+    );
+    expect(() => loupsGarous.parseCommand!("save and poison me", game, "human")).toThrow(
+      "cannot poison yourself",
+    );
+    expect(loupsGarous.parseCommand!("save me and poison Lucas", game, "human")).toEqual({
+      type: "night",
+      save: "human",
+      poison: "npc-2",
+    });
+    const invalidSave = await loupsGarous.parseCommand!(
+      "save Sofia and poison Lucas",
+      game,
+      "human",
+    );
+    const before = structuredClone(game);
+    await expect(loupsGarous.applyAction(game, "human", invalidSave)).rejects.toThrow("only save");
+    expect(game).toEqual(before);
+  });
   it("maps spoken accusations, pause, and resume to validated game actions", async () => {
     vi.stubEnv("OPENAI_API_KEY", "");
     const game = createGame("Ada", 4, {
@@ -158,9 +247,7 @@ describe("Loups-Garous voice-command actions", () => {
     expect(game.witchPoisonAvailable).toBe(false);
     expect(game.phase).not.toBe("night");
     expect(
-      game.feed.some(
-        (entry) => entry.kind === "event" && entry.text.includes(poisonTarget.name),
-      ),
+      game.feed.some((entry) => entry.kind === "event" && entry.text.includes(poisonTarget.name)),
     ).toBe(true);
     expect(
       game.feed.some((entry) => entry.kind === "event" && entry.text.includes(victim.name)),

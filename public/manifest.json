@@ -1,7 +1,7 @@
 {
   "name": "Playora",
   "short_name": "Playora",
-  "description": "Voice-first games for blind and low-vision players: Chess and Loups-Garous.",
+  "description": "Voice-first games for blind and low-vision players, including Chess, Loups-Garous, and Tic-Tac-Toe.",
   "start_url": "/dashboard/",
   "display": "standalone",
   "background_color": "#ffffff",

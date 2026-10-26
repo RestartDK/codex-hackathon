@@ -184,7 +184,9 @@ if (state.phase === "day") {
   );
   state = await action({ command: "begin vote" });
   assert.equal(state.phase, "vote", "typed commands can open the village vote");
-  state = await action({ command: "vote Camille" });
+  const voteTarget = state.players.find((player) => player.alive && player.id !== state.me.id);
+  assert.ok(voteTarget, "the open vote has an eligible target");
+  state = await action({ type: "vote", target: voteTarget.id });
   assert.ok(
     ["night", "hunter", "over"].includes(state.phase),
     "typed votes resolve through the API",

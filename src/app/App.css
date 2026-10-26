@@ -738,6 +738,13 @@
 .pbv-root .voice-connected .companion-liquid-orb {
   animation: orb-breathe 4s var(--ease-in-out) infinite;
 }
+.pbv-root .voice-listening .companion-liquid-orb {
+  filter: saturate(1.06);
+}
+.pbv-root .voice-speaking .companion-liquid-orb {
+  animation: orb-speaking 900ms var(--ease-in-out) infinite alternate;
+  filter: saturate(1.14) brightness(1.04);
+}
 .pbv-root .orb-button:disabled {
   opacity: 0.7;
 }
@@ -1241,8 +1248,16 @@
   min-height: 54px;
   margin: 12px auto 0;
   display: flex;
+  flex-wrap: wrap;
   justify-content: flex-end;
   gap: 10px;
+}
+.pbv-root .setup-summary {
+  flex: 0 0 100%;
+  margin: 0 0 4px;
+  color: #4b5563;
+  line-height: 1.45;
+  text-align: center;
 }
 .pbv-root .setup-actions button {
   flex: 1;
@@ -1421,6 +1436,14 @@
     transform: scale(1.035);
   }
 }
+@keyframes orb-speaking {
+  from {
+    transform: scale(1.01);
+  }
+  to {
+    transform: scale(1.065);
+  }
+}
 @keyframes glow-drift {
   from {
     transform: translate3d(-1.5%, 2%, 0) scale(1.04);
@@ -1432,6 +1455,12 @@
 @media (hover: hover) and (pointer: fine) {
   .pbv-root .orb-button:hover .companion-liquid-orb {
     transform: scale(1.035);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pbv-root .voice-connected .companion-liquid-orb,
+  .pbv-root .voice-speaking .companion-liquid-orb {
+    animation: none;
   }
 }
 @media (min-width: 1600px) {

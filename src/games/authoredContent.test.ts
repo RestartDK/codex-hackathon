@@ -89,6 +89,17 @@ describe("authored game content", () => {
     expect(result.message).toContain("saved round is waiting");
   });
 
+  it("uses the merged game's actual mark, opponent and first turn in authored introductions", async () => {
+    const bridge = ticTacToeBridge();
+    bridge.state = { ...bridge.state, playerMark: "O", opponent: "friend", firstTurn: "opponent" };
+    const executor = createTicTacToeToolExecutor(() => bridge);
+    const result = JSON.parse(await executor.execute("get_tic_tac_toe_introduction", "{}"));
+    expect(result.message).toContain("You play O");
+    expect(result.message).toContain("player two plays X");
+    expect(result.message).toContain("player two moves first");
+    expect(result.message).not.toContain("You are X and move first");
+  });
+
   it("pages the Intercept transcript over revealed entries only", () => {
     const entries = Array.from({ length: 7 }, (_, index) => ({
       kind: index === 2 ? ("choice" as const) : ("passage" as const),

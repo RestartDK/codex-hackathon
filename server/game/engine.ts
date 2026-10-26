@@ -199,6 +199,7 @@ export function startGame(game: Game) {
     game,
     cupid ? "Cupid must choose two hearts to bind." : "Night falls. The village closes its eyes.",
   );
+  if (!cupid) checkVictory(game);
   game.updatedAt = Date.now();
 }
 
@@ -261,7 +262,7 @@ function rememberPublicSpeech(game: Game, actor: Player, text: string) {
 }
 
 export function chooseLovers(game: Game, actorId: string, firstId: string, secondId: string) {
-  if (game.phase !== "cupid" || actorId !== game.cupidPlayerId)
+  if (game.phase !== "cupid" || actorId !== game.cupidPlayerId || !player(game, actorId)?.alive)
     throw new Error("Cupid's choice is not available.");
   const first = player(game, firstId),
     second = player(game, secondId);
@@ -342,6 +343,7 @@ function kill(game: Game, target: Player, reason: string) {
   if (lover?.alive) {
     lover.alive = false;
     lover.voteId = undefined;
+    lover.nightAction = undefined;
     addEvent(game, `${lover.name} dies of a broken heart.`);
     deaths.push(lover);
   }
@@ -349,6 +351,8 @@ function kill(game: Game, target: Player, reason: string) {
 }
 
 function markHunters(game: Game, deaths: Player[]) {
+  // With no survivors there is no legal final-shot target to wait for.
+  if (!living(game).length) return;
   for (const dead of deaths) if (dead.role === "hunter") game.pendingHunters.push(dead.id);
 }
 
@@ -508,7 +512,8 @@ export function resolveVote(game: Game, random: () => number = Math.random) {
   markHunters(game, deaths);
   game.phase = game.pendingHunters.length ? "hunter" : "night";
   game.resumeAfterHunter = "night";
-  if (!checkVictory(game)) {
+  checkVictory(game);
+  if (!game.winner) {
     if (game.pendingHunters.length)
       addEvent(game, "Before night falls, the Hunter must take one final shot.");
     else
@@ -582,9 +587,13 @@ export function view(game: Game, viewerId: string): GameView {
         result: i.result,
         day: i.day,
       })),
-      witchHealAvailable: game.witchHealAvailable,
-      witchPoisonAvailable: game.witchPoisonAvailable,
-      ...(me.role === "witch" && me.alive && game.phase === "night" && game.wolfVictimId
+      witchHealAvailable: me.role === "witch" && game.witchHealAvailable,
+      witchPoisonAvailable: me.role === "witch" && game.witchPoisonAvailable,
+      ...(me.role === "witch" &&
+      me.alive &&
+      game.phase === "night" &&
+      game.witchHealAvailable &&
+      game.wolfVictimId
         ? { wolfVictim: player(game, game.wolfVictimId)?.name }
         : {}),
       hunterActionPending: game.pendingHunters[0] === me.id,

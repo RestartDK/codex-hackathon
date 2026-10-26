@@ -11,18 +11,48 @@ import {
   type VoiceControlAction,
   type VoiceControlState,
 } from "./voiceControl";
+import { hasRemoteSpeech } from "./remote-audio";
+import { LiveTranscriptBuffer } from "./live-transcript";
 
 export type VoiceToolExecutor = {
+  /** The app delivers result audio; don't invent a speaking indicator for tool work. */
+  ownsToolResponse?: boolean;
   execute: (name: string, rawArguments: string) => Promise<string>;
+  onUserTranscript?: (transcript: string, itemId: string) => void | Promise<void>;
   cancelRequests?: () => void;
   invalidatePending?: () => void;
 };
 
 export type VoiceStatus = "idle" | "connecting" | "connected" | "closing" | "error";
 
+const VOICE_ENABLED_KEY = "playora.voice-enabled";
+const MICROPHONE_MUTED_KEY = "playora.microphone-muted";
+// Live speech regularly contains pauses around 1.2 seconds between clauses.
+// Releasing sooner can treat one response as multiple responses and advance an
+// ordered narration queue before the current line is actually finished.
+const REMOTE_SPEECH_RELEASE_MS = 1_600;
+
+function readPreference(key: string, fallback: boolean): boolean {
+  if (typeof window === "undefined") return fallback;
+  const value = window.localStorage.getItem(key);
+  return value === null ? fallback : value === "true";
+}
+
+export function shouldAutoStartVoice(): boolean {
+  return readPreference(VOICE_ENABLED_KEY, true);
+}
+
 type LiveEvent =
   | { kind: "started" | "closed" | "error" }
-  | { kind: "transcript"; source: "user" | "companion"; delta: string }
+  | { kind: "instructions-appended"; clientEventId: string }
+  | {
+      kind: "transcript";
+      source: "user" | "companion";
+      delta: string;
+      itemId?: string;
+      startMs?: number;
+      endMs?: number;
+    }
   | { kind: "tool"; callId: string; name: string; arguments: string };
 
 function isObject(value: unknown): value is Record<string, unknown> {
@@ -40,6 +70,8 @@ function parseEvent(raw: string): LiveEvent | null {
   if (value.type === "session.started") return { kind: "started" };
   if (value.type === "session.closed") return { kind: "closed" };
   if (value.type === "error") return { kind: "error" };
+  if (value.type === "session.instructions.appended" && typeof value.client_event_id === "string")
+    return { kind: "instructions-appended", clientEventId: value.client_event_id };
   if (
     (value.type === "session.input_transcript.delta" ||
       value.type === "session.output_transcript.delta") &&
@@ -49,6 +81,9 @@ function parseEvent(raw: string): LiveEvent | null {
       kind: "transcript",
       source: value.type === "session.input_transcript.delta" ? "user" : "companion",
       delta: value.delta,
+      itemId: typeof value.item_id === "string" ? value.item_id : undefined,
+      startMs: typeof value.start_ms === "number" ? value.start_ms : undefined,
+      endMs: typeof value.end_ms === "number" ? value.end_ms : undefined,
     };
   }
   if (
@@ -110,17 +145,21 @@ export function useVoiceCompanion(
   const [status, setStatus] = useState<VoiceStatus>("idle");
   const [error, setError] = useState<string | null>(null);
   const [caption, setCaption] = useState("");
-  const [microphoneMuted, setMicrophoneMuted] = useState(false);
   const [commandsPaused, setCommandsPaused] = useState(false);
   const commandsPausedRef = useRef(false);
-  const microphoneMutedRef = useRef(false);
   const mountedRef = useRef(true);
   const userStoppedRef = useRef(false);
   const recoveryAttempts = useRef(0);
   const recoveryTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const startRef = useRef<() => Promise<void>>(async () => undefined);
   const stopRef = useRef<() => Promise<void>>(async () => undefined);
+  const [microphoneMuted, setMicrophoneMuted] = useState(() =>
+    readPreference(MICROPHONE_MUTED_KEY, false),
+  );
+  const [needsAudioActivation, setNeedsAudioActivation] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
+  const [sessionSequence, setSessionSequence] = useState(0);
+  const [playbackSequence, setPlaybackSequence] = useState(0);
   const speechDeadlineRef = useRef(0);
   const speechContextRef = useRef<AudioContext | null>(null);
   const speechAnalyserRef = useRef<AnalyserNode | null>(null);
@@ -128,6 +167,17 @@ export function useVoiceCompanion(
   const channelRef = useRef<RTCDataChannel | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const outputSuppressedRef = useRef(false);
+  const outputVolumeRef = useRef(volume / 100);
+  useEffect(() => {
+    outputVolumeRef.current = volume / 100;
+  }, [volume]);
+  // Authored local narration temporarily owns the speaker without closing the
+  // command session or changing the player's microphone preference.
+  const setOutputSuppressed = useCallback((suppressed: boolean) => {
+    outputSuppressedRef.current = suppressed;
+    if (audioRef.current) audioRef.current.volume = suppressed ? 0 : outputVolumeRef.current;
+  }, []);
   const requestRef = useRef<AbortController | null>(null);
   const generation = useRef(0);
   const starting = useRef(false);
@@ -136,6 +186,19 @@ export function useVoiceCompanion(
   const disconnectTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const connectionTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const transcriptSource = useRef<"user" | "companion" | null>(null);
+  const userTranscriptRef = useRef(new LiveTranscriptBuffer());
+  const commandTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const microphoneMutedRef = useRef(microphoneMuted);
+  const playbackBlockedRef = useRef(false);
+  const sessionStartedRef = useRef(false);
+  const playbackReadyRef = useRef(audioMuted);
+  const connectedOnceRef = useRef(false);
+  const recoveryPendingRef = useRef(false);
+  const playbackActiveRef = useRef(false);
+  const pendingAnnouncementRef = useRef<{
+    instructionId: string;
+    content: string;
+  } | null>(null);
 
   const currentControlState = useCallback(
     (connected: boolean): VoiceControlState => ({
@@ -148,7 +211,7 @@ export function useVoiceCompanion(
 
   const setMicrophoneEnabled = useCallback((enabled: boolean) => {
     streamRef.current?.getAudioTracks().forEach((track) => {
-      track.enabled = enabled;
+      track.enabled = enabled && !playbackBlockedRef.current;
     });
   }, []);
 
@@ -162,7 +225,10 @@ export function useVoiceCompanion(
           commandsPaused: commandsPausedRef.current,
           microphoneMuted: microphoneMutedRef.current,
         };
-      const result = applyVoiceControl(currentControlState(channelRef.current?.readyState === "open"), action);
+      const result = applyVoiceControl(
+        currentControlState(channelRef.current?.readyState === "open"),
+        action,
+      );
       if (result.effect === "pause") {
         commandsPausedRef.current = true;
         setCommandsPaused(true);
@@ -175,11 +241,13 @@ export function useVoiceCompanion(
         microphoneMutedRef.current = true;
         setMicrophoneMuted(true);
         setMicrophoneEnabled(false);
+        window.localStorage.setItem(MICROPHONE_MUTED_KEY, "true");
       }
       if (result.effect === "unmute") {
         microphoneMutedRef.current = false;
         setMicrophoneMuted(false);
         setMicrophoneEnabled(true);
+        window.localStorage.setItem(MICROPHONE_MUTED_KEY, "false");
       }
       if (result.effect === "end") {
         const endingGeneration = generation.current;
@@ -202,70 +270,107 @@ export function useVoiceCompanion(
     if (channel?.readyState === "open") channel.send(JSON.stringify(event));
   }, []);
 
+  const interrupt = useCallback(() => {
+    if (channelRef.current?.readyState !== "open") return;
+    pendingAnnouncementRef.current = null;
+    send({
+      type: "session.instructions.append",
+      event_id: crypto.randomUUID(),
+      delegation_id: null,
+      content:
+        "Stop only the current spoken response and discard queued spoken guidance. Keep listening to microphone input and immediately delegate every new player command, including short replies, through the game's tools. Do not wait for application commentary before handling the player.",
+    });
+    speechDeadlineRef.current = 0;
+    setIsSpeaking(false);
+  }, [send]);
+
   const announce = useCallback(
     (content: string) => {
-      if (channelRef.current?.readyState !== "open") return;
+      if (channelRef.current?.readyState !== "open") return false;
+      pendingAnnouncementRef.current = null;
+      const instructionId = crypto.randomUUID();
+      send({
+        type: "session.instructions.append",
+        event_id: instructionId,
+        delegation_id: null,
+        content:
+          "Stop any current spoken response and discard queued guidance. The next application commentary is authoritative. Speak it verbatim and in full, without shortening it, adding an offer of help, or replacing it with a generic welcome.",
+      });
+      pendingAnnouncementRef.current = { instructionId, content };
       setCaption("");
       transcriptSource.current = null;
-      send({
-        type: "session.commentary.append",
-        event_id: crypto.randomUUID(),
-        delegation_id: null,
-        content,
-      });
-      if (!audioMuted) {
-        speechDeadlineRef.current = Date.now() + Math.min(20_000, 1_200 + content.length * 45);
-        setIsSpeaking(true);
-      }
+      return true;
     },
-    [audioMuted, send],
+    [send],
   );
 
-  const cleanup = useCallback((controlPolicy: "reset" | "preserve" = "reset") => {
-    generation.current++;
-    starting.current = false;
-    requestRef.current?.abort();
-    requestRef.current = null;
-    streamRef.current?.getTracks().forEach((track) => track.stop());
-    streamRef.current = null;
-    channelRef.current?.close();
-    channelRef.current = null;
-    peerRef.current?.close();
-    peerRef.current = null;
-    audioRef.current?.pause();
-    if (audioRef.current) audioRef.current.srcObject = null;
-    audioRef.current = null;
-    handledCalls.current.clear();
-    setCaption("");
-    transcriptSource.current = null;
-    if (disconnectTimeout.current !== null) clearTimeout(disconnectTimeout.current);
-    disconnectTimeout.current = null;
-    if (connectionTimeout.current !== null) clearTimeout(connectionTimeout.current);
-    connectionTimeout.current = null;
-    if (recoveryTimeout.current !== null) clearTimeout(recoveryTimeout.current);
-    recoveryTimeout.current = null;
-    closeResolver.current?.();
-    closeResolver.current = null;
-    executor.cancelRequests?.();
-    executor.invalidatePending?.();
-    speechDeadlineRef.current = 0;
-    void speechContextRef.current?.close().catch(() => undefined);
-    speechContextRef.current = null;
-    speechAnalyserRef.current = null;
-    setIsSpeaking(false);
-    if (controlPolicy === "reset") {
-      setMicrophoneMuted(false);
-      setCommandsPaused(false);
-      microphoneMutedRef.current = false;
-      commandsPausedRef.current = false;
+  useEffect(() => {
+    if (status === "connected") {
+      if (connectedOnceRef.current && recoveryPendingRef.current) {
+        recoveryPendingRef.current = false;
+        announce("Voice is connected again. Say Where am I or What can I do to continue.");
+      }
+      connectedOnceRef.current = true;
+    } else if (connectedOnceRef.current && (status === "error" || status === "idle")) {
+      recoveryPendingRef.current = true;
     }
-    setStatus("idle");
-  }, [executor]);
+  }, [announce, status]);
+
+  const cleanup = useCallback(
+    (controlPolicy: "reset" | "preserve" = "reset") => {
+      generation.current++;
+      starting.current = false;
+      requestRef.current?.abort();
+      requestRef.current = null;
+      streamRef.current?.getTracks().forEach((track) => track.stop());
+      streamRef.current = null;
+      channelRef.current?.close();
+      channelRef.current = null;
+      peerRef.current?.close();
+      peerRef.current = null;
+      audioRef.current?.pause();
+      if (audioRef.current) audioRef.current.srcObject = null;
+      audioRef.current = null;
+      handledCalls.current.clear();
+      sessionStartedRef.current = false;
+      playbackActiveRef.current = false;
+      pendingAnnouncementRef.current = null;
+      playbackReadyRef.current = audioMuted;
+      setNeedsAudioActivation(false);
+      setCaption("");
+      transcriptSource.current = null;
+      userTranscriptRef.current = new LiveTranscriptBuffer();
+      clearTimeout(commandTimeoutRef.current);
+      playbackBlockedRef.current = false;
+      if (disconnectTimeout.current !== null) clearTimeout(disconnectTimeout.current);
+      disconnectTimeout.current = null;
+      if (connectionTimeout.current !== null) clearTimeout(connectionTimeout.current);
+      connectionTimeout.current = null;
+      if (recoveryTimeout.current !== null) clearTimeout(recoveryTimeout.current);
+      recoveryTimeout.current = null;
+      closeResolver.current?.();
+      closeResolver.current = null;
+      executor.cancelRequests?.();
+      executor.invalidatePending?.();
+      speechDeadlineRef.current = 0;
+      void speechContextRef.current?.close().catch(() => undefined);
+      speechContextRef.current = null;
+      speechAnalyserRef.current = null;
+      setIsSpeaking(false);
+      if (controlPolicy === "reset") {
+        setCommandsPaused(false);
+        commandsPausedRef.current = false;
+      }
+      setStatus("idle");
+    },
+    [audioMuted, executor],
+  );
 
   const stop = useCallback(async () => {
     userStoppedRef.current = true;
     if (recoveryTimeout.current !== null) clearTimeout(recoveryTimeout.current);
     recoveryTimeout.current = null;
+    window.localStorage.setItem(VOICE_ENABLED_KEY, "false");
     if (channelRef.current?.readyState !== "open") {
       cleanup();
       return;
@@ -286,26 +391,36 @@ export function useVoiceCompanion(
     cleanup();
   }, [cleanup, send]);
 
-  const scheduleRecovery = useCallback((reason: string) => {
-    if (!mountedRef.current || userStoppedRef.current) return;
-    const delay = recoveryDelay(recoveryAttempts.current);
-    if (delay === null) {
-      setStatus("error");
-      setError(
-        `${reason} Voice could not reconnect automatically. Use the Start voice companion control. Typed commands still work.`,
-      );
-      return;
-    }
-    recoveryAttempts.current += 1;
-    setStatus("connecting");
-    setError(null);
-    if (recoveryTimeout.current !== null) clearTimeout(recoveryTimeout.current);
-    recoveryTimeout.current = window.setTimeout(() => {
-      recoveryTimeout.current = null;
+  const scheduleRecovery = useCallback(
+    (reason: string) => {
       if (!mountedRef.current || userStoppedRef.current) return;
-      void startRef.current();
-    }, delay);
-  }, []);
+      if (gameId === "loups-garous") {
+        setStatus("error");
+        setError(
+          `${reason} Choose Retry voice to reconnect. Your game is saved; typed commands still work.`,
+        );
+        return;
+      }
+      const delay = recoveryDelay(recoveryAttempts.current);
+      if (delay === null) {
+        setStatus("error");
+        setError(
+          `${reason} Voice could not reconnect automatically. Use the Start voice companion control. Typed commands still work.`,
+        );
+        return;
+      }
+      recoveryAttempts.current += 1;
+      setStatus("connecting");
+      setError(null);
+      if (recoveryTimeout.current !== null) clearTimeout(recoveryTimeout.current);
+      recoveryTimeout.current = window.setTimeout(() => {
+        recoveryTimeout.current = null;
+        if (!mountedRef.current || userStoppedRef.current) return;
+        void startRef.current();
+      }, delay);
+    },
+    [gameId],
+  );
 
   const handleEvent = useCallback(
     async (message: MessageEvent<string>, channel: RTCDataChannel) => {
@@ -318,8 +433,28 @@ export function useVoiceCompanion(
           connectionTimeout.current = null;
           recoveryAttempts.current = 0;
           userStoppedRef.current = false;
-          setStatus("connected");
+          sessionStartedRef.current = true;
+          setSessionSequence((value) => value + 1);
+          if (playbackReadyRef.current) setStatus("connected");
           return;
+        case "instructions-appended": {
+          const pendingAnnouncement = pendingAnnouncementRef.current;
+          if (!pendingAnnouncement || pendingAnnouncement.instructionId !== event.clientEventId)
+            return;
+          pendingAnnouncementRef.current = null;
+          send({
+            type: "session.commentary.append",
+            event_id: crypto.randomUUID(),
+            delegation_id: null,
+            content: pendingAnnouncement.content,
+          });
+          if (!audioMuted) {
+            speechDeadlineRef.current =
+              Date.now() + Math.min(20_000, 1_200 + pendingAnnouncement.content.length * 45);
+            setIsSpeaking(true);
+          }
+          return;
+        }
         case "closed":
           if (closeResolver.current) closeResolver.current();
           else {
@@ -328,11 +463,29 @@ export function useVoiceCompanion(
           }
           return;
         case "error":
+          cleanup();
+          setStatus("error");
           setError(
-            "The voice service reported an error. End voice and try again. Your game is saved.",
+            "The voice service reported an error. Choose Retry voice to reconnect. Your game is saved.",
           );
           return;
         case "transcript": {
+          if (event.source === "user") {
+            speechDeadlineRef.current = 0;
+            setIsSpeaking(false);
+            const transcript = userTranscriptRef.current.append(event);
+            void executor.onUserTranscript?.(transcript.text, transcript.id);
+            clearTimeout(commandTimeoutRef.current);
+            setError(null);
+            if (executor.ownsToolResponse && event.delta.trim()) {
+              commandTimeoutRef.current = setTimeout(() => {
+                if (channelRef.current !== channel || microphoneMutedRef.current) return;
+                setError(
+                  "I heard speech, but no game command arrived. Please say your command again, or use Type to your companion. No extra move was taken.",
+                );
+              }, 12_000);
+            }
+          }
           const sameSource = transcriptSource.current === event.source;
           transcriptSource.current = event.source;
           setCaption((previous) =>
@@ -346,6 +499,8 @@ export function useVoiceCompanion(
         case "tool": {
           if (handledCalls.current.has(event.callId)) return;
           handledCalls.current.add(event.callId);
+          clearTimeout(commandTimeoutRef.current);
+          setError(null);
           let output: string;
           if (event.name === voiceControlTool.name) {
             const result = applyLifecycleControl(parseVoiceControlAction(event.arguments));
@@ -370,7 +525,7 @@ export function useVoiceCompanion(
               });
             }
           }
-          if (!audioMuted) {
+          if (!audioMuted && !executor.ownsToolResponse) {
             speechDeadlineRef.current = Date.now() + 8_000;
             setIsSpeaking(true);
           }
@@ -380,6 +535,8 @@ export function useVoiceCompanion(
             event_id: crypto.randomUUID(),
             item: { type: "function_call_output", call_id: event.callId, output },
           });
+          // Always release the delegated backend after tool output. Omitting
+          // continuation leaves the session waiting for results on later turns.
           send({ type: "response.create", event_id: crypto.randomUUID() });
         }
       }
@@ -404,16 +561,53 @@ export function useVoiceCompanion(
     requestRef.current = request;
     setStatus("connecting");
     setError(null);
+    setNeedsAudioActivation(false);
     setCaption("");
     transcriptSource.current = null;
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
+      });
       if (generation.current !== attempt) {
         stream.getTracks().forEach((track) => track.stop());
         return;
       }
       streamRef.current = stream;
-      setMicrophoneEnabled(!microphoneMutedRef.current);
+      stream.getAudioTracks().forEach((track) => {
+        track.enabled = !microphoneMutedRef.current;
+      });
+      const failConnection = (message: string, recover = false) => {
+        if (generation.current !== attempt || closeResolver.current) return;
+        cleanup("preserve");
+        if (recover && gameId !== "loups-garous") {
+          scheduleRecovery(message);
+          return;
+        }
+        setStatus("error");
+        setError(message);
+      };
+      stream.getAudioTracks().forEach((track) => {
+        const unavailableMessage =
+          "Your microphone input was interrupted. Check that your microphone is connected and available. You can use Type to your companion while it recovers.";
+        track.addEventListener("mute", () => {
+          if (generation.current !== attempt) return;
+          clearTimeout(commandTimeoutRef.current);
+          setError(unavailableMessage);
+        });
+        track.addEventListener("unmute", () => {
+          if (generation.current === attempt)
+            setError((current) => (current === unavailableMessage ? null : current));
+        });
+        track.addEventListener("ended", () =>
+          failConnection(
+            "The microphone stopped. Check your microphone and site permission, then choose Retry voice. Your game is saved.",
+          ),
+        );
+      });
       connectionTimeout.current = setTimeout(() => {
         if (generation.current !== attempt) return;
         cleanup();
@@ -428,9 +622,10 @@ export function useVoiceCompanion(
       const audio = new Audio();
       audio.autoplay = true;
       audio.muted = audioMuted;
-      audio.volume = volume / 100;
+      audio.volume = outputSuppressedRef.current ? 0 : volume / 100;
       audioRef.current = audio;
       peer.ontrack = (event) => {
+        if (generation.current !== attempt) return;
         audio.srcObject = event.streams[0];
         try {
           const context = new AudioContext();
@@ -443,13 +638,28 @@ export function useVoiceCompanion(
         } catch {
           /* Use the bounded timer if playback analysis is unavailable. */
         }
-        void audio
-          .play()
-          .catch(() =>
-            setError(
-              "Your browser blocked voice audio. End voice, then start it again. Captions remain available.",
-            ),
-          );
+        void audio.play().then(
+          () => {
+            if (generation.current !== attempt) return;
+            playbackBlockedRef.current = false;
+            playbackReadyRef.current = true;
+            stream.getAudioTracks().forEach((track) => {
+              track.enabled = !microphoneMutedRef.current;
+            });
+            setNeedsAudioActivation(false);
+            if (sessionStartedRef.current) setStatus("connected");
+          },
+          () => {
+            if (generation.current !== attempt) return;
+            playbackBlockedRef.current = true;
+            playbackReadyRef.current = false;
+            stream.getAudioTracks().forEach((track) => {
+              track.enabled = false;
+            });
+            setNeedsAudioActivation(true);
+            setError("Your browser blocked automatic voice audio. Choose Start voice to continue.");
+          },
+        );
       };
       peer.onconnectionstatechange = () => {
         if (peerRef.current !== peer) return;
@@ -458,15 +668,24 @@ export function useVoiceCompanion(
           disconnectTimeout.current = null;
         }
         const fail = () => {
-          cleanup("preserve");
-          scheduleRecovery("The voice connection ended.");
+          failConnection(
+            "The voice connection ended. Your game is saved. You can reconnect or use typed commands.",
+            true,
+          );
         };
-        if (peer.connectionState === "failed") fail();
+        if (peer.connectionState === "failed" || peer.connectionState === "closed") fail();
         if (peer.connectionState === "disconnected" && disconnectTimeout.current === null)
           disconnectTimeout.current = setTimeout(fail, 3000);
       };
       const channel = peer.createDataChannel("oai-events");
       channelRef.current = channel;
+      const channelFailed = () =>
+        failConnection(
+          "The voice command connection ended. Choose Retry voice to reconnect. Your game is saved; typed commands still work.",
+          true,
+        );
+      channel.addEventListener("close", channelFailed);
+      channel.addEventListener("error", channelFailed);
       channel.addEventListener("message", (event: MessageEvent<string>) => {
         void handleEvent(event, channel);
       });
@@ -488,44 +707,95 @@ export function useVoiceCompanion(
       if (generation.current !== attempt) return;
       const sdp = response.ok ? parseSession(text) : null;
       if (!sdp) {
+        let serverMessage: string | undefined;
+        try {
+          const problem = JSON.parse(text) as { error?: unknown };
+          if (typeof problem.error === "string" && problem.error.trim())
+            serverMessage = problem.error.trim().slice(0, 600);
+        } catch {
+          serverMessage = undefined;
+        }
         const messages: Record<number, string> = {
           403: "Voice is not allowed on this origin. Check the server origin settings.",
           429: "Too many voice starts. Wait a minute, then try again.",
           503: "Live voice needs OPENAI_API_KEY on the server. Typed commands still work.",
         };
         throw new Error(
-          messages[response.status] ??
+          serverMessage ??
+            messages[response.status] ??
             `Voice could not connect (${response.status}). Please try again. Typed commands still work.`,
         );
       }
       await peer.setRemoteDescription({ type: "answer", sdp });
+      window.localStorage.setItem(VOICE_ENABLED_KEY, "true");
       starting.current = false;
     } catch (cause) {
       if (generation.current !== attempt) return;
       cleanup();
       setStatus("error");
       setError(
-        cause instanceof Error
-          ? cause.message
-          : "Voice startup failed. Check microphone permission and try again.",
+        cause instanceof DOMException && cause.name === "NotAllowedError"
+          ? "Microphone access was denied. Allow microphone access for this site, then choose Retry voice."
+          : cause instanceof Error
+            ? cause.message
+            : "Voice startup failed. Check microphone permission and try again.",
       );
     }
-  }, [audioMuted, cleanup, gameId, handleEvent, scheduleRecovery, setMicrophoneEnabled, status, volume, view]);
+  }, [
+    audioMuted,
+    cleanup,
+    gameId,
+    handleEvent,
+    scheduleRecovery,
+    setMicrophoneEnabled,
+    status,
+    volume,
+    view,
+  ]);
 
   stopRef.current = stop;
   startRef.current = start;
 
+  const activateAudio = useCallback(async () => {
+    const audio = audioRef.current;
+    if (!audio) {
+      await start();
+      return;
+    }
+    try {
+      await speechContextRef.current?.resume();
+      await audio.play();
+      if (audioRef.current !== audio) return;
+      playbackBlockedRef.current = false;
+      playbackReadyRef.current = true;
+      setNeedsAudioActivation(false);
+      setError(null);
+      streamRef.current?.getAudioTracks().forEach((track) => {
+        track.enabled = !microphoneMutedRef.current;
+      });
+      if (sessionStartedRef.current) setStatus("connected");
+      window.localStorage.setItem(VOICE_ENABLED_KEY, "true");
+    } catch {
+      if (audioRef.current !== audio) return;
+      setError("Voice audio is still blocked. Check this site's audio permission and try again.");
+    }
+  }, [start]);
+
   const toggleMicrophone = useCallback(() => {
     const next = !microphoneMutedRef.current;
     microphoneMutedRef.current = next;
+    streamRef.current?.getAudioTracks().forEach((track) => {
+      track.enabled = !next && !playbackBlockedRef.current;
+    });
+    clearTimeout(commandTimeoutRef.current);
     setMicrophoneMuted(next);
-    setMicrophoneEnabled(!next);
-  }, [setMicrophoneEnabled]);
+    window.localStorage.setItem(MICROPHONE_MUTED_KEY, String(next));
+  }, []);
 
   useEffect(() => {
     if (audioRef.current) {
       audioRef.current.muted = audioMuted;
-      audioRef.current.volume = volume / 100;
+      audioRef.current.volume = outputSuppressedRef.current ? 0 : volume / 100;
     }
   }, [audioMuted, volume]);
 
@@ -545,15 +815,24 @@ export function useVoiceCompanion(
       setIsSpeaking(false);
       return;
     }
-    const samples = new Uint8Array(256);
+    const samples = new Float32Array(256);
     const timer = window.setInterval(() => {
       const analyser = speechAnalyserRef.current;
+      let hasAudio = false;
       if (analyser) {
-        analyser.getByteTimeDomainData(samples);
-        if (samples.some((sample) => Math.abs(sample - 128) > 3))
-          speechDeadlineRef.current = Date.now() + 650;
+        analyser.getFloatTimeDomainData(samples);
+        hasAudio = hasRemoteSpeech(samples);
+        if (hasAudio) {
+          speechDeadlineRef.current = Date.now() + REMOTE_SPEECH_RELEASE_MS;
+          if (!playbackActiveRef.current) {
+            playbackActiveRef.current = true;
+            setPlaybackSequence((value) => value + 1);
+          }
+        }
       }
-      setIsSpeaking(Date.now() < speechDeadlineRef.current);
+      const active = hasAudio || Date.now() < speechDeadlineRef.current;
+      if (!active) playbackActiveRef.current = false;
+      setIsSpeaking(active);
     }, 150);
     return () => window.clearInterval(timer);
   }, [audioMuted, status]);
@@ -564,11 +843,18 @@ export function useVoiceCompanion(
     caption,
     microphoneMuted,
     commandsPaused,
+    needsAudioActivation,
     isSpeaking,
+    sessionSequence,
+    playbackSequence,
     start,
     stop,
     toggleMicrophone,
+    activateAudio,
+    interrupt,
     announce,
-    runVoiceControl: (value: unknown) => applyLifecycleControl(parseVoiceControlValue(value)).message,
+    runVoiceControl: (value: unknown) =>
+      applyLifecycleControl(parseVoiceControlValue(value)).message,
+    setOutputSuppressed,
   };
 }
