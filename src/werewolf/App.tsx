@@ -6,10 +6,12 @@ import LiquidOrb from "../components/PlayByVoice/LiquidOrb";
 import { useDialogFocus } from "../hooks/useDialogFocus";
 import VillageSky from "./VillageSky";
 import { isEligibleSeerTarget } from "./targeting";
+import { buildVillageIntroduction, VillageIntroductionSequence } from "./villageIntroduction";
 import { usePresence } from "../hooks/usePresence";
 import { localIntent } from "../voice/commands";
 import { parseDestination, type AvailableDestination } from "../voice/navigation";
 import { LiveGuidanceDelivery, parseGuidanceCommand } from "../voice/guidance";
+import { isSetupStartConfirmation } from "./setupVoice";
 import { DEFAULT_ROLE_COUNTS } from "../../server/game/rules.js";
 import type {
   FeedEntry,
@@ -545,6 +547,9 @@ export default function WerewolfApp({
   const typedToggleRef = useRef<HTMLButtonElement>(null);
   const commandPanel = usePresence(typing);
   const commandInputRef = useRef<HTMLInputElement>(null);
+  const villageIntroductionRef = useRef(new VillageIntroductionSequence());
+  const introductionFeedIdsRef = useRef(new Set<string>());
+  const [introductionRevision, setIntroductionRevision] = useState(0);
 
   // Reopening during the closing animation reuses the panel, so focus the input explicitly.
   useEffect(() => {
@@ -556,8 +561,24 @@ export default function WerewolfApp({
   const voiceCommandHandlerRef = useRef<(transcript: string) => Promise<void>>(
     async () => undefined,
   );
+  const setupConfirmationRef = useRef(false);
+  useEffect(() => {
+    setupConfirmationRef.current = setupAwaitingConfirmation;
+  }, [setupAwaitingConfirmation]);
+  const directConfirmationItemsRef = useRef(new Set<string>());
   const voiceExecutor = useMemo<VoiceToolExecutor>(
     () => ({
+      onUserTranscript: (transcript, itemId) => {
+        if (
+          sessionRef.current ||
+          !setupConfirmationRef.current ||
+          directConfirmationItemsRef.current.has(itemId) ||
+          !isSetupStartConfirmation(transcript)
+        )
+          return;
+        directConfirmationItemsRef.current.add(itemId);
+        void voiceCommandHandlerRef.current(transcript);
+      },
       execute: async (name, rawArguments) => {
         if (name !== "submit_player_command")
           return JSON.stringify({ status: "error", message: "Unknown voice command." });
@@ -606,20 +627,17 @@ export default function WerewolfApp({
     presentedGameRef.current = latestGame;
     setPresentedGame(latestGame);
   }, []);
+  const storyFeed = useMemo(
+    () => session?.game.feed.filter((entry) => !introductionFeedIdsRef.current.has(entry.id)) ?? [],
+    [session?.game.feed],
+  );
   const storyAudio = useStoryAudio({
     initialVolume: narrationVolume,
     onVolumeChange: onNarrationVolumeChange,
-    feed: session?.game.feed,
+    feed: storyFeed,
     gameId: session?.game.id,
     phase: session?.game.phase,
     onPhaseBoundaryStart: revealNarratedPhase,
-    openingLine: openingAudio && {
-      id: `${openingAudio.gameId}:opening-guide`,
-      speaker: "Guide",
-      text: openingAudio.text,
-      voiceKey: "assistant",
-      instant: true,
-    },
     backend: narrationBackend,
   });
 
@@ -681,6 +699,7 @@ export default function WerewolfApp({
 
   function leaveToGamePicker() {
     cancelCreation();
+    villageIntroductionRef.current.skip();
     storyAudio.stop();
     voice.interrupt();
     onShowGamePicker();
@@ -694,6 +713,9 @@ export default function WerewolfApp({
     latestGameRef.current = undefined;
     sessionRef.current = undefined;
     setIntroStep(null);
+    villageIntroductionRef.current.skip();
+    introductionFeedIdsRef.current = new Set();
+    setIntroductionRevision((value) => value + 1);
     setError("");
     setStage("village");
   }
@@ -733,11 +755,18 @@ export default function WerewolfApp({
       if (!response.ok) throw new Error(data.error ?? "Could not create a game.");
       const game = data as GameView;
       const briefing = openingBriefing(game, explainGame);
+      const introduction = buildVillageIntroduction(game.id, game.players, game.me.id);
+      if (!introduction.length) {
+        throw new Error("The village roster is unavailable. Return to setup and try again.");
+      }
       void Promise.all(SESSION_ASSETS.map((src) => preloadImage(src, controller.signal)));
+      introductionFeedIdsRef.current = new Set(game.feed.map((entry) => entry.id));
+      villageIntroductionRef.current.start(game.id, introduction);
       commitGame(game, data.session);
       setSeenInvestigations(game.me.investigations.length);
       setVoteOutcome(undefined);
       setIntroStep(game.phase === "prologue" ? "village" : "role");
+      setIntroductionRevision((value) => value + 1);
       setSelected([]);
       setGuideMessages([
         {
@@ -897,9 +926,81 @@ export default function WerewolfApp({
     setupGuidanceDelivery.current.confirmPlayback(livePlaybackSequence);
   }, [livePlaybackSequence]);
 
+  const villageIntroductionActive = Boolean(
+    introductionRevision >= 0 &&
+    session?.game.phase === "prologue" &&
+    introStep === "village" &&
+    villageIntroductionRef.current.isActive(),
+  );
+
+  useEffect(() => {
+    if (!villageIntroductionActive || liveStatus !== "connected") return;
+    const line = villageIntroductionRef.current.request(liveSessionSequence, livePlaybackSequence);
+    if (!line) return;
+    setNarrationError("");
+    appendAssistantCaption(line.text);
+    stopStoryAudio();
+    if (!liveAnnounce(line.text)) {
+      villageIntroductionRef.current.requestFailed(liveSessionSequence);
+      setNarrationError("Character narration could not start. Choose Start narration to retry.");
+    }
+  }, [
+    introductionRevision,
+    liveAnnounce,
+    livePlaybackSequence,
+    liveSessionSequence,
+    liveStatus,
+    stopStoryAudio,
+    villageIntroductionActive,
+  ]);
+
+  useEffect(() => {
+    if (!villageIntroductionActive) return;
+    if (villageIntroductionRef.current.confirmPlayback(livePlaybackSequence))
+      setIntroductionRevision((value) => value + 1);
+  }, [livePlaybackSequence, villageIntroductionActive]);
+
+  useEffect(() => {
+    if (!villageIntroductionActive || liveStatus !== "connected") return;
+    if (villageIntroductionRef.current.finishPlayback(voice.isSpeaking))
+      setIntroductionRevision((value) => value + 1);
+  }, [liveStatus, voice.isSpeaking, villageIntroductionActive]);
+
+  function repeatVillageIntroduction(allCharacters = false) {
+    const line = allCharacters
+      ? villageIntroductionRef.current.restartCharacters()
+      : villageIntroductionRef.current.repeat();
+    if (!line) return false;
+    setIntroductionRevision((value) => value + 1);
+    return true;
+  }
+
+  function nextVillageCharacter() {
+    const line = villageIntroductionRef.current.nextCharacter();
+    if (!line) return false;
+    setIntroductionRevision((value) => value + 1);
+    return true;
+  }
+
+  function skipVillageIntroductions() {
+    if (!villageIntroductionActive) return false;
+    villageIntroductionRef.current.skip();
+    setIntroductionRevision((value) => value + 1);
+    appendAssistantCaption("Introductions skipped. Continue to reveal your role.");
+    if (!liveAnnounce("Introductions skipped. Continue to reveal your role."))
+      setNarrationError("Character narration stopped. Continue to reveal your role.");
+    return true;
+  }
+
   function recoverNarration() {
     primeBrowserNarration();
     setNarrationError("");
+    if (villageIntroductionActive) {
+      if (voice.needsAudioActivation) void voice.activateAudio();
+      else if (voice.status !== "connected") void voice.start();
+      else setIntroductionRevision((value) => value + 1);
+      return;
+    }
     storyAudio.stop();
     const currentGuidance = currentSetupGuidanceRef.current;
     if (!session && voice.status === "connected" && currentGuidance) {
@@ -1077,11 +1178,7 @@ export default function WerewolfApp({
         setSetupAwaitingConfirmation(false);
         return;
       }
-      if (
-        (guidanceCommand === "start" || /^(?:yes|start)$/iu.test(command)) &&
-        setupAwaitingConfirmation
-      ) {
-        queueAssistant("Starting a new village. I will introduce the characters first.");
+      if (isSetupStartConfirmation(command) && setupAwaitingConfirmation) {
         await create();
         return;
       }
@@ -1112,7 +1209,37 @@ export default function WerewolfApp({
     }
 
     const activeGuidanceCommand = parseGuidanceCommand(command);
+    if (
+      session.game.phase === "prologue" &&
+      introStep === "village" &&
+      /\bskip\b.*\b(?:introductions?|characters?|village)\b/iu.test(command)
+    ) {
+      skipVillageIntroductions();
+      return;
+    }
+    if (
+      session.game.phase === "prologue" &&
+      introStep === "village" &&
+      /\bnext\b.*\b(?:character|person|villager)\b/iu.test(command)
+    ) {
+      if (!nextVillageCharacter())
+        appendAssistantCaption("The character introductions are complete.");
+      return;
+    }
+    if (
+      session.game.phase === "prologue" &&
+      introStep === "village" &&
+      /\b(?:repeat|replay|restart)\b.*\b(?:introductions?|characters?|village)\b/iu.test(command)
+    ) {
+      if (!repeatVillageIntroduction(true))
+        appendAssistantCaption("There are no character introductions to repeat.");
+      return;
+    }
     if (activeGuidanceCommand === "repeat") {
+      if (villageIntroductionActive) {
+        repeatVillageIntroduction();
+        return;
+      }
       storyAudio.repeatLast();
       return;
     }
@@ -1180,6 +1307,12 @@ export default function WerewolfApp({
           command,
         );
       if (wantsToAdvance) {
+        if (villageIntroductionActive) {
+          setVoiceStatus(
+            "Character introductions are still playing. Say next character or skip introductions.",
+          );
+          return;
+        }
         const step = introStep ?? "village";
         if (step === "village") {
           setIntroStep("role");
@@ -1321,7 +1454,6 @@ export default function WerewolfApp({
       return;
     }
     if (startsNewGameNaturally(command) || /\b(?:restart|start over|new round)\b/iu.test(command)) {
-      queueAssistant("Starting a new village. I will introduce the characters first.");
       recoverExpiredSession();
       await create(undefined, /\b(quick|test)\b/iu.test(command));
       return;
@@ -1418,6 +1550,9 @@ export default function WerewolfApp({
   function recoverExpiredSession() {
     storyAudio.stop();
     cancelCreation();
+    villageIntroductionRef.current.skip();
+    introductionFeedIdsRef.current = new Set();
+    setIntroductionRevision((value) => value + 1);
     latestGameRef.current = undefined;
     presentedGameRef.current = undefined;
     sessionRef.current = undefined;
@@ -1570,9 +1705,18 @@ export default function WerewolfApp({
         </button>
       </div>
       {voice.error && (
-        <p className="voice-error" role="alert">
-          {voice.error}
-        </p>
+        <div className="voice-error" role="alert">
+          <p>{voice.error}</p>
+          {voice.needsAudioActivation ? (
+            <button type="button" onClick={() => void voice.activateAudio()}>
+              Start voice
+            </button>
+          ) : voice.status === "error" ? (
+            <button type="button" onClick={() => void voice.start()}>
+              Retry voice
+            </button>
+          ) : null}
+        </div>
       )}
       {narrationError && (
         <div className="voice-error" role="alert">
@@ -1847,9 +1991,30 @@ export default function WerewolfApp({
           >
             {storyAudio.paused ? "Resume" : "Pause"}
           </button>
-          <button className="plain-button" type="button" onClick={storyAudio.repeatLast}>
+          <button
+            className="plain-button"
+            type="button"
+            onClick={() => {
+              if (
+                session.game.phase !== "prologue" ||
+                introStep !== "village" ||
+                !repeatVillageIntroduction()
+              )
+                storyAudio.repeatLast();
+            }}
+          >
             Repeat
           </button>
+          {villageIntroductionActive && (
+            <>
+              <button className="plain-button" type="button" onClick={nextVillageCharacter}>
+                Next character
+              </button>
+              <button className="plain-button" type="button" onClick={skipVillageIntroductions}>
+                Skip introductions
+              </button>
+            </>
+          )}
           <button className="plain-button" type="button" onClick={storyAudio.stop}>
             Stop
           </button>
@@ -2320,9 +2485,19 @@ export default function WerewolfApp({
             Some may be werewolves.
           </p>
           <p className="ww-note is-dark">Their roles are hidden.</p>
-          <button className="ww-pill is-primary" type="button" onClick={() => setIntroStep("role")}>
+          <button
+            className="ww-pill is-primary"
+            type="button"
+            disabled={villageIntroductionActive}
+            onClick={() => setIntroStep("role")}
+          >
             Continue
           </button>
+          {villageIntroductionActive && (
+            <button className="ww-pill" type="button" onClick={skipVillageIntroductions}>
+              Skip introductions
+            </button>
+          )}
         </div>
       </>
     );

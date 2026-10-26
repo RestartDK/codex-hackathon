@@ -3,6 +3,7 @@ import type { AvailableDestination } from "./navigation";
 
 export type VoiceToolExecutor = {
   execute: (name: string, rawArguments: string) => Promise<string>;
+  onUserTranscript?: (transcript: string, itemId: string) => void | Promise<void>;
   cancelRequests?: () => void;
   invalidatePending?: () => void;
 };
@@ -11,6 +12,10 @@ export type VoiceStatus = "idle" | "connecting" | "connected" | "closing" | "err
 
 const VOICE_ENABLED_KEY = "playora.voice-enabled";
 const MICROPHONE_MUTED_KEY = "playora.microphone-muted";
+// Live speech regularly contains pauses around 1.2 seconds between clauses.
+// Releasing sooner can treat one response as multiple responses and advance an
+// ordered narration queue before the current line is actually finished.
+const REMOTE_SPEECH_RELEASE_MS = 1_600;
 
 function readPreference(key: string, fallback: boolean): boolean {
   if (typeof window === "undefined") return fallback;
@@ -25,7 +30,12 @@ export function shouldAutoStartVoice(): boolean {
 type LiveEvent =
   | { kind: "started" | "closed" | "error" }
   | { kind: "instructions-appended"; clientEventId: string }
-  | { kind: "transcript"; source: "user" | "companion"; delta: string }
+  | {
+      kind: "transcript";
+      source: "user" | "companion";
+      delta: string;
+      itemId: string;
+    }
   | { kind: "tool"; callId: string; name: string; arguments: string };
 
 function isObject(value: unknown): value is Record<string, unknown> {
@@ -54,6 +64,7 @@ function parseEvent(raw: string): LiveEvent | null {
       kind: "transcript",
       source: value.type === "session.input_transcript.delta" ? "user" : "companion",
       delta: value.delta,
+      itemId: typeof value.item_id === "string" ? value.item_id : "current-turn",
     };
   }
   if (
@@ -137,6 +148,7 @@ export function useVoiceCompanion(
   const disconnectTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const connectionTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const transcriptSource = useRef<"user" | "companion" | null>(null);
+  const userTranscriptItems = useRef(new Map<string, string>());
   const sessionStartedRef = useRef(false);
   const playbackReadyRef = useRef(audioMuted);
   const connectedOnceRef = useRef(false);
@@ -220,6 +232,7 @@ export function useVoiceCompanion(
     setNeedsAudioActivation(false);
     setCaption("");
     transcriptSource.current = null;
+    userTranscriptItems.current.clear();
     if (disconnectTimeout.current !== null) clearTimeout(disconnectTimeout.current);
     disconnectTimeout.current = null;
     if (connectionTimeout.current !== null) clearTimeout(connectionTimeout.current);
@@ -294,14 +307,19 @@ export function useVoiceCompanion(
           else cleanup();
           return;
         case "error":
+          cleanup();
+          setStatus("error");
           setError(
-            "The voice service reported an error. End voice and try again. Your game is saved.",
+            "The voice service reported an error. Choose Retry voice to reconnect. Your game is saved.",
           );
           return;
         case "transcript": {
           if (event.source === "user") {
             speechDeadlineRef.current = 0;
             setIsSpeaking(false);
+            const transcript = `${userTranscriptItems.current.get(event.itemId) ?? ""}${event.delta}`;
+            userTranscriptItems.current.set(event.itemId, transcript);
+            void executor.onUserTranscript?.(transcript, event.itemId);
           }
           const sameSource = transcriptSource.current === event.source;
           transcriptSource.current = event.source;
@@ -454,13 +472,22 @@ export function useVoiceCompanion(
       if (generation.current !== attempt) return;
       const sdp = response.ok ? parseSession(text) : null;
       if (!sdp) {
+        let serverMessage: string | undefined;
+        try {
+          const problem = JSON.parse(text) as { error?: unknown };
+          if (typeof problem.error === "string" && problem.error.trim())
+            serverMessage = problem.error.trim().slice(0, 600);
+        } catch {
+          serverMessage = undefined;
+        }
         const messages: Record<number, string> = {
           403: "Voice is not allowed on this origin. Check the server origin settings.",
           429: "Too many voice starts. Wait a minute, then try again.",
           503: "Live voice needs OPENAI_API_KEY on the server. Typed commands still work.",
         };
         throw new Error(
-          messages[response.status] ??
+          serverMessage ??
+            messages[response.status] ??
             `Voice could not connect (${response.status}). Please try again. Typed commands still work.`,
         );
       }
@@ -472,9 +499,11 @@ export function useVoiceCompanion(
       cleanup();
       setStatus("error");
       setError(
-        cause instanceof Error
-          ? cause.message
-          : "Voice startup failed. Check microphone permission and try again.",
+        cause instanceof DOMException && cause.name === "NotAllowedError"
+          ? "Microphone access was denied. Allow microphone access for this site, then choose Retry voice."
+          : cause instanceof Error
+            ? cause.message
+            : "Voice startup failed. Check microphone permission and try again.",
       );
     }
   }, [audioMuted, cleanup, gameId, handleEvent, microphoneMuted, status, volume, view]);
@@ -532,7 +561,7 @@ export function useVoiceCompanion(
         analyser.getByteTimeDomainData(samples);
         hasAudio = samples.some((sample) => Math.abs(sample - 128) > 3);
         if (hasAudio) {
-          speechDeadlineRef.current = Date.now() + 650;
+          speechDeadlineRef.current = Date.now() + REMOTE_SPEECH_RELEASE_MS;
           if (!playbackActiveRef.current) {
             playbackActiveRef.current = true;
             setPlaybackSequence((value) => value + 1);

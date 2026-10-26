@@ -206,12 +206,11 @@ export default function PlayByVoiceApp({
   }
 
   const startVoice = useRef(companion.voice.start);
-  startVoice.current = companion.voice.start;
-  const attemptedArrivalVoice = useRef(false);
   useEffect(() => {
-    if (attemptedArrivalVoice.current) return;
+    startVoice.current = companion.voice.start;
+  }, [companion.voice.start]);
+  useEffect(() => {
     if (autoVoice || (view.kind === "home" && shouldAutoStartVoice())) {
-      attemptedArrivalVoice.current = true;
       void startVoice.current();
     }
   }, [autoVoice, view.kind]);

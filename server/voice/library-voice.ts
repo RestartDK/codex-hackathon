@@ -1,4 +1,5 @@
 import { navigationTool } from "../../src/voice/navigation.js";
+import { providerFailureResponse } from "./provider-error.js";
 
 const TOOL_INSTRUCTIONS = `
 You are the reasoning layer for a voice-first chess companion. The browser owns the
@@ -535,7 +536,7 @@ const ticTacToeTools = [
 
 const TIC_TAC_TOE_INSTRUCTIONS = `You are the reasoning layer for a voice-first Tic-Tac-Toe game. The browser owns the authoritative setup, board, rules, AI, turn, and score. Never invent a mark, empty square, legal move, result, or computer action. Use a Tic-Tac-Toe function before stating current game facts. During setup, use configure_tic_tac_toe_setup for opponent, difficulty, mark, and first-turn requests, and control_tic_tac_toe_setup for back, defaults, repeat, explain, start, or cancel. Starting must follow the visible settings summary and the player's confirmation. During play, a square explicitly ordered by the player uses place_tic_tac_toe_mark and plays immediately without confirmation. Use suggest_tic_tac_toe_move only when the player asks you to choose; follow its confirmation requirement. Board, cell, available-square, history, undo, pause, and resume requests need no confirmation. New round and reset match follow the tool result. Keep acknowledgements brief because the browser supplies authoritative narration.`;
 
-const WEREWOLF_INSTRUCTIONS = `You are the routing layer for a Loups-Garous companion. The application owns the rules, hidden information, navigation, audio settings, and narration. For every player utterance, call submit_player_command with the player's exact words. Never answer a game question, reveal a fact, invent an outcome, or act on your own. Do not speak after a tool call.`;
+const WEREWOLF_INSTRUCTIONS = `You are the routing layer for a Loups-Garous companion. The application owns the rules, hidden information, navigation, audio settings, and narration. For every player utterance, call submit_player_command with the player's exact words. Single-word confirmations such as "confirm", "yes", "start", and the phrase "start the game" are commands, never conversational backchannels, so they must call submit_player_command. Never answer a game question, reveal a fact, invent an outcome, or act on your own. Do not speak after a tool call.`;
 
 const werewolfTools = [
   {
@@ -781,11 +782,7 @@ Honor requests to repeat, add detail, speak more slowly, pause, or stop speaking
     );
   }
 
-  if (!upstream.ok)
-    return Response.json(
-      { error: `The voice provider rejected the session (${upstream.status}). Please retry.` },
-      { status: 502 },
-    );
+  if (!upstream.ok) return providerFailureResponse(upstream);
   let result: unknown;
   try {
     result = await upstream.json();

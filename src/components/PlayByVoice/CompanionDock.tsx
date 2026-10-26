@@ -43,10 +43,9 @@ export default function CompanionDock({
       ? "listening"
       : voice.status;
   const waiting = voice.status === "connecting" || voice.status === "closing";
-  const label =
-    voice.needsAudioActivation
-      ? "Start voice"
-      : voice.status === "connecting"
+  const label = voice.needsAudioActivation
+    ? "Start voice"
+    : voice.status === "connecting"
       ? "Connecting voice"
       : voice.status === "closing"
         ? "Ending voice"
@@ -71,12 +70,12 @@ export default function CompanionDock({
             voice.needsAudioActivation
               ? "Start voice"
               : active
-              ? voice.microphoneMuted
-                ? "Unmute microphone"
-                : "Mute microphone"
-              : waiting
-                ? label
-                : "Start voice companion"
+                ? voice.microphoneMuted
+                  ? "Unmute microphone"
+                  : "Mute microphone"
+                : waiting
+                  ? label
+                  : "Start voice companion"
           }
           disabled={waiting && !voice.needsAudioActivation}
           onClick={() => {
@@ -116,9 +115,18 @@ export default function CompanionDock({
         )}
       </div>
       {voice.error && (
-        <p className="voice-error" role="alert">
-          {voice.error}
-        </p>
+        <div className="voice-error" role="alert">
+          <p>{voice.error}</p>
+          {voice.needsAudioActivation ? (
+            <button type="button" onClick={() => void voice.activateAudio()}>
+              Start voice
+            </button>
+          ) : voice.status === "error" ? (
+            <button type="button" onClick={() => void voice.start()}>
+              Retry voice
+            </button>
+          ) : null}
+        </div>
       )}
       <p
         ref={captionRef}

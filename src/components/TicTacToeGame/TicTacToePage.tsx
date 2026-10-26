@@ -295,9 +295,12 @@ function CompanionControls({
         {voice.caption || response}
       </p>
       {voice.error && (
-        <p className="ttt-voice-error" role="alert">
-          {voice.error}
-        </p>
+        <div className="ttt-voice-error" role="alert">
+          <p>{voice.error}</p>
+          <button type="button" onClick={() => void voice.start()}>
+            Retry voice
+          </button>
+        </div>
       )}
       {typing && (
         <form

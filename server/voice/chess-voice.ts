@@ -1,5 +1,6 @@
 import { navigationTool, PLAYABLE_GAMES_LABEL } from "../../src/voice/navigation.js";
 import { preferenceNames } from "../../src/lib/preferences.js";
+import { providerFailureResponse } from "./provider-error.js";
 
 const DEFAULT_ALLOWED_ORIGINS =
   "http://localhost:3000,http://127.0.0.1:3000,http://localhost:5173,http://127.0.0.1:5173";
@@ -376,21 +377,6 @@ function networkErrorCode(error: unknown): string {
     : "NETWORK_ERROR";
 }
 
-async function providerRejectionMessage(response: Response): Promise<string> {
-  const raw = await response.text().catch(() => "");
-  let detail = "";
-  try {
-    const parsed: unknown = JSON.parse(raw);
-    const error = isObject(parsed) && isObject(parsed.error) ? parsed.error : null;
-    if (error && typeof error.message === "string") detail = error.message;
-  } catch {
-    detail = "";
-  }
-  const safeDetail = detail.replace(/\bsk-[\w-]+\b/gu, "[redacted]");
-  const suffix = safeDetail ? `: ${safeDetail.slice(0, 300)}` : "";
-  return `The voice provider rejected this session (${response.status})${suffix}`;
-}
-
 function greetingFor(view: unknown): string {
   switch (view) {
     case "chess":
@@ -484,7 +470,7 @@ export async function handleChessVoiceSession(
     return problem(`The voice provider could not be reached (${code}).`, 502);
   }
 
-  if (!upstream.ok) return problem(await providerRejectionMessage(upstream), 502);
+  if (!upstream.ok) return providerFailureResponse(upstream);
 
   let session: unknown;
   try {
